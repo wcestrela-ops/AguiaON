@@ -3,6 +3,7 @@ import pool from '../shared/db';
 import { sendWhatsAppMessage, msgStatusClienteAsync } from '../shared/waSender';
 import { decrypt } from '../shared/cryptoUtil';
 import { sseEmitEvent } from './delivery';
+import { markInvoicePaid } from '../shared/platformBilling';
 
 // Cria tabela de falhas de webhook na inicialização
 (async () => {
@@ -176,6 +177,14 @@ router.post('/webhook/asaas', async (req, res) => {
     const orderId = payment.externalReference;
 
     try {
+        // Fatura de billing da plataforma (Fase 5 — o que a empresa paga a vocês)
+        if (orderId.startsWith('platform_')) {
+            const invoiceId = orderId.replace('platform_', '');
+            await markInvoicePaid(invoiceId);
+            console.log(`💰 Asaas PIX confirmado — fatura da plataforma ${invoiceId}`);
+            return;
+        }
+
         // Renovação de assinatura gym
         if (orderId.startsWith('gym_')) {
             const subId = orderId.replace('gym_', '');

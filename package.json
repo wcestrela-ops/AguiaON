@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').rmSync('dist/__tests__',{recursive:true,force:true})\"",
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts"
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "test": "tsc && node --test \"dist/__tests__/**/*.js\""
   },
   "dependencies": {
     "@socket.io/cluster-adapter": "^0.3.0",

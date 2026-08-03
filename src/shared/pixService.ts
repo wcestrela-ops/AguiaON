@@ -5,6 +5,11 @@
  *  - manual_pix   → retorna a chave cadastrada formatada (copia e cola manual)
  *  - asaas        → gera cobrança via API Asaas e retorna o Pix Copia e Cola
  *  - mercadopago  → gera pagamento PIX via API MP e retorna o qr_code
+ *
+ * Failover: o método preferido do lojista é tentado primeiro; se falhar (API fora
+ * do ar, credencial inválida, etc.) ou não estiver configurado, tenta os demais
+ * métodos configurados em ordem fixa (asaas → mercadopago → manual_pix), no mesmo
+ * espírito da cadeia de failover do smsSender.ts.
  */
 
 import pool from './db';
@@ -173,6 +178,44 @@ async function generateMercadoPagoPix(
   }
 }
 
+// ─── Cadeia de failover ─────────────────────────────────────────
+
+export type PaymentMethod = 'manual_pix' | 'asaas' | 'mercadopago';
+
+const FALLBACK_ORDER: PaymentMethod[] = ['asaas', 'mercadopago', 'manual_pix'];
+
+/**
+ * Monta a cadeia de métodos a tentar, na ordem: preferido do lojista primeiro,
+ * depois os demais configurados (ordem fixa), pulando qualquer método cuja
+ * credencial obrigatória não esteja presente. Função pura — sem I/O — para
+ * ser testável sem banco/rede (ver src/__tests__/pixService.test.ts).
+ */
+export function buildPaymentChain(cfg: {
+  preferred_payment_method?: string | null;
+  asaas_api_key?: string | null;
+  mp_access_token?: string | null;
+  pix_key_value?: string | null;
+}): PaymentMethod[] {
+  const isConfigured = (method: PaymentMethod): boolean => {
+    if (method === 'asaas') return Boolean(cfg.asaas_api_key);
+    if (method === 'mercadopago') return Boolean(cfg.mp_access_token);
+    if (method === 'manual_pix') return Boolean(cfg.pix_key_value);
+    return false;
+  };
+
+  const raw = cfg.preferred_payment_method || 'manual_pix';
+  const preferred: PaymentMethod = raw === 'mp' ? 'mercadopago' : (raw as PaymentMethod);
+
+  const chain: PaymentMethod[] = [];
+  if (isConfigured(preferred)) chain.push(preferred);
+  for (const method of FALLBACK_ORDER) {
+    if (method !== preferred && isConfigured(method) && !chain.includes(method)) {
+      chain.push(method);
+    }
+  }
+  return chain;
+}
+
 // ─── Função principal ─────────────────────────────────────────
 
 export interface PixResult {
@@ -180,7 +223,9 @@ export interface PixResult {
   code: string;
   /** Mensagem formatada pronta para enviar ao cliente */
   message: string;
-  provider: 'manual_pix' | 'asaas' | 'mercadopago';
+  provider: PaymentMethod;
+  /** true se o método preferido falhou e um método de fallback foi usado */
+  used_failover: boolean;
 }
 
 /** Gera PIX para renovação de assinatura gym. Usa prefixo `gym_` no external_reference. */
@@ -194,64 +239,67 @@ export async function generateGymPix(
   const cfg = await getEstabConfig(estId);
   if (!cfg) return null;
 
-  const method = (cfg.preferred_payment_method === 'mp' ? 'mercadopago' : cfg.preferred_payment_method) || 'manual_pix';
+  const chain = buildPaymentChain(cfg);
+  if (!chain.length) return null;
+
   const externalRef = `gym_${subId}`;
   const description = `Renovação de plano — ${cfg.name}`;
   const totalFmt = `R$ ${total.toFixed(2).replace('.', ',')}`;
 
-  if (method === 'manual_pix') {
-    if (!cfg.pix_key_value) return null;
-    const code = cfg.pix_key_value;
-    const message = [
-      `💳 *Renovação do seu plano*`,
-      ``,
-      `Valor: *${totalFmt}*`,
-      ``,
-      `Chave PIX (${cfg.pix_key_type || 'chave'}):`,
-      `\`${code}\``,
-      ``,
-      cfg.pix_receiver_name ? `Favorecido: ${cfg.pix_receiver_name}` : '',
-      ``,
-      `Após pagar, envie o comprovante aqui para confirmar a renovação.`,
-    ].filter(l => l !== undefined).join('\n');
-    return { code, message, provider: 'manual_pix' };
-  }
+  for (let i = 0; i < chain.length; i++) {
+    const method = chain[i];
+    const usedFailover = i > 0;
 
-  if (method === 'asaas') {
-    if (!cfg.asaas_api_key) return null;
-    const code = await generateAsaasPix(cfg, externalRef, total, clientName);
-    if (!code) return null;
-    const message = [
-      `💳 *Renovação do seu plano — ${cfg.name}*`,
-      ``,
-      `Valor: *${totalFmt}*`,
-      ``,
-      `Pix Copia e Cola:`,
-      `\`${code}\``,
-      ``,
-      `⏱️ Válido por 24h. Após pagar a renovação é automática!`,
-    ].join('\n');
-    return { code, message, provider: 'asaas' };
-  }
+    if (method === 'manual_pix') {
+      const code = cfg.pix_key_value;
+      const message = [
+        `💳 *Renovação do seu plano*`,
+        ``,
+        `Valor: *${totalFmt}*`,
+        ``,
+        `Chave PIX (${cfg.pix_key_type || 'chave'}):`,
+        `\`${code}\``,
+        ``,
+        cfg.pix_receiver_name ? `Favorecido: ${cfg.pix_receiver_name}` : '',
+        ``,
+        `Após pagar, envie o comprovante aqui para confirmar a renovação.`,
+      ].filter(l => l !== undefined).join('\n');
+      return { code, message, provider: 'manual_pix', used_failover: usedFailover };
+    }
 
-  if (method === 'mercadopago') {
-    if (!cfg.mp_access_token) return null;
-    // Usa email real do cliente ou email genérico
-    const email = clientEmail || `cliente_${subId.slice(0, 8)}@agonfood.com`;
-    // Override temporário do email no payload MP
-    const code = await generateMercadoPagoPixWithEmail(cfg, externalRef, total, clientName, email, description);
-    if (!code) return null;
-    const message = [
-      `💳 *Renovação do seu plano — ${cfg.name}*`,
-      ``,
-      `Valor: *${totalFmt}*`,
-      ``,
-      `Pix Copia e Cola:`,
-      `\`${code}\``,
-      ``,
-      `⏱️ Após pagar a renovação é automática!`,
-    ].join('\n');
-    return { code, message, provider: 'mercadopago' };
+    if (method === 'asaas') {
+      const code = await generateAsaasPix(cfg, externalRef, total, clientName);
+      if (!code) { console.warn(`[pixService/gym] asaas falhou (est=${estId}), tentando próximo da cadeia...`); continue; }
+      const message = [
+        `💳 *Renovação do seu plano — ${cfg.name}*`,
+        ``,
+        `Valor: *${totalFmt}*`,
+        ``,
+        `Pix Copia e Cola:`,
+        `\`${code}\``,
+        ``,
+        `⏱️ Válido por 24h. Após pagar a renovação é automática!`,
+      ].join('\n');
+      return { code, message, provider: 'asaas', used_failover: usedFailover };
+    }
+
+    if (method === 'mercadopago') {
+      // Usa email real do cliente ou email genérico
+      const email = clientEmail || `cliente_${subId.slice(0, 8)}@agonfood.com`;
+      const code = await generateMercadoPagoPixWithEmail(cfg, externalRef, total, clientName, email, description);
+      if (!code) { console.warn(`[pixService/gym] mercadopago falhou (est=${estId}), tentando próximo da cadeia...`); continue; }
+      const message = [
+        `💳 *Renovação do seu plano — ${cfg.name}*`,
+        ``,
+        `Valor: *${totalFmt}*`,
+        ``,
+        `Pix Copia e Cola:`,
+        `\`${code}\``,
+        ``,
+        `⏱️ Após pagar a renovação é automática!`,
+      ].join('\n');
+      return { code, message, provider: 'mercadopago', used_failover: usedFailover };
+    }
   }
 
   return null;
@@ -304,50 +352,53 @@ export async function generatePix(
   const cfg = await getEstabConfig(estId);
   if (!cfg) return null;
 
-  const raw = cfg.preferred_payment_method || 'manual_pix';
-  const method = raw === 'mp' ? 'mercadopago' : raw;
+  const chain = buildPaymentChain(cfg);
+  if (!chain.length) return null;
 
-  // ── Manual PIX ──
-  if (method === 'manual_pix') {
-    if (!cfg.pix_key_value) return null;
-    const message = buildManualPixMessage(cfg, total, orderNumber);
-    return { code: cfg.pix_key_value, message, provider: 'manual_pix' };
+  for (let i = 0; i < chain.length; i++) {
+    const method = chain[i];
+    const usedFailover = i > 0;
+
+    // ── Manual PIX ──
+    if (method === 'manual_pix') {
+      const message = buildManualPixMessage(cfg, total, orderNumber);
+      return { code: cfg.pix_key_value, message, provider: 'manual_pix', used_failover: usedFailover };
+    }
+
+    // ── Asaas ──
+    if (method === 'asaas') {
+      const code = await generateAsaasPix(cfg, orderId, total, customerName);
+      if (!code) { console.warn(`[pixService] asaas falhou (est=${estId}, order=${orderId}), tentando próximo da cadeia...`); continue; }
+      const message = [
+        `💳 *Pague via PIX — Pedido #${orderNumber}*`,
+        ``,
+        `Valor: *R$ ${total.toFixed(2).replace('.', ',')}*`,
+        ``,
+        `👇 Copie o código PIX na próxima mensagem e cole no app do seu banco.`,
+        `⏱️ Válido por 24 horas. Após pagar, envie o comprovante aqui.`,
+      ].join('\n');
+      return { code, message, provider: 'asaas', used_failover: usedFailover };
+    }
+
+    // ── Mercado Pago ──
+    if (method === 'mercadopago') {
+      // Busca taxa da plataforma para split
+      const feeRes = await pool.query(`SELECT value FROM global_settings WHERE key='platform_fee_percent' LIMIT 1`);
+      const feePercent = parseFloat(feeRes.rows[0]?.value || '0') || 0;
+      const code = await generateMercadoPagoPix(cfg, orderId, total, customerName, feePercent);
+      if (!code) { console.warn(`[pixService] mercadopago falhou (est=${estId}, order=${orderId}), tentando próximo da cadeia...`); continue; }
+      const message = [
+        `💳 *Pague via PIX — Pedido #${orderNumber}*`,
+        ``,
+        `Valor: *R$ ${total.toFixed(2).replace('.', ',')}*`,
+        ``,
+        `👇 Copie o código PIX na próxima mensagem e cole no app do seu banco.`,
+        `⏱️ Após pagar, envie o comprovante aqui.`,
+      ].join('\n');
+      return { code, message, provider: 'mercadopago', used_failover: usedFailover };
+    }
   }
 
-  // ── Asaas ──
-  if (method === 'asaas') {
-    if (!cfg.asaas_api_key) return null;
-    const code = await generateAsaasPix(cfg, orderId, total, customerName);
-    if (!code) return null;
-    const message = [
-      `💳 *Pague via PIX — Pedido #${orderNumber}*`,
-      ``,
-      `Valor: *R$ ${total.toFixed(2).replace('.', ',')}*`,
-      ``,
-      `👇 Copie o código PIX na próxima mensagem e cole no app do seu banco.`,
-      `⏱️ Válido por 24 horas. Após pagar, envie o comprovante aqui.`,
-    ].join('\n');
-    return { code, message, provider: 'asaas' };
-  }
-
-  // ── Mercado Pago ──
-  if (method === 'mercadopago') {
-    if (!cfg.mp_access_token) { console.error('[pixService] mp_access_token vazio'); return null; }
-    // Busca taxa da plataforma para split
-    const feeRes = await pool.query(`SELECT value FROM global_settings WHERE key='platform_fee_percent' LIMIT 1`);
-    const feePercent = parseFloat(feeRes.rows[0]?.value || '0') || 0;
-    const code = await generateMercadoPagoPix(cfg, orderId, total, customerName, feePercent);
-    if (!code) return null;
-    const message = [
-      `💳 *Pague via PIX — Pedido #${orderNumber}*`,
-      ``,
-      `Valor: *R$ ${total.toFixed(2).replace('.', ',')}*`,
-      ``,
-      `👇 Copie o código PIX na próxima mensagem e cole no app do seu banco.`,
-      `⏱️ Após pagar, envie o comprovante aqui.`,
-    ].join('\n');
-    return { code, message, provider: 'mercadopago' };
-  }
-
+  console.error(`[pixService] todos os métodos configurados falharam (est=${estId}, order=${orderId})`);
   return null;
 }

@@ -525,7 +525,10 @@ let _mapsKey = null; // null = não configurado → usa Leaflet
 // ── Inicialização ──────────────────────────────────────────────
 async function init() {
     try {
-        const resProfile = await fetch(`/public/marketplace/${slug}`);
+        // Sem slug na URL (ex: "/") → loja resolvida pelo host (white-label,
+        // subdomínio próprio ou domínio customizado). Com slug → rota de sempre.
+        const profileUrl = slug ? `/public/marketplace/${slug}` : '/public/marketplace/by-host';
+        const resProfile = await fetch(profileUrl);
         if (!resProfile.ok) {
             const errData = await resProfile.json().catch(() => ({}));
             const detail = errData.error ? `<p class="text-slate-500 text-xs mt-2">${errData.error} — slug: <code>${slug}</code></p>` : '';

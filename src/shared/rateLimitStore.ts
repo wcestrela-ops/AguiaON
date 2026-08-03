@@ -4,13 +4,27 @@ import pool from './db';
 /**
  * Store PostgreSQL para express-rate-limit.
  * Compartilha contadores entre todos os workers do cluster,
- * usando a tabela `rate_limit_store` já existente no banco.
+ * usando a tabela `rate_limit_store`.
  */
 export class PostgresRateLimitStore implements Store {
   private windowMs!: number;
 
   init(options: Options): void {
     this.windowMs = options.windowMs as number;
+
+    // A tabela nunca teve uma migration própria no repositório (só existia
+    // manualmente no banco de produção original) — banco novo/fresco quebra
+    // em TODA rota com rate limit (login, etc.) com "relation does not
+    // exist". init() roda de forma síncrona assim que o módulo é importado
+    // (bem antes do servidor aceitar tráfego), então essa criação
+    // fire-and-forget já termina a tempo do primeiro request real.
+    pool.query(`
+      CREATE TABLE IF NOT EXISTS rate_limit_store (
+        key       TEXT PRIMARY KEY,
+        hits      INTEGER NOT NULL DEFAULT 0,
+        reset_at  TIMESTAMPTZ NOT NULL
+      )
+    `).catch((err: any) => console.error('[rateLimitStore] erro ao criar tabela:', err.message));
 
     // Limpa registros expirados a cada 5 minutos
     setInterval(() => {

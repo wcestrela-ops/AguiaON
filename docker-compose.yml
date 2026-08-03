@@ -1,0 +1,48 @@
+# AguiaON — ambiente local de desenvolvimento (Fase 6)
+#
+# Sobe o app + Postgres. Só aplica database/schema.sql automaticamente na
+# primeira subida (via docker-entrypoint-initdb.d) — as migrations numeradas
+# (v2 em diante) precisam ser aplicadas manualmente (ver README) ou já são
+# criadas sob demanda em runtime pelas tabelas com ensureTables() idempotente
+# (SMS, GPSWOX, billing). Não é o mesmo setup usado em produção — em produção
+# o Postgres normalmente é um serviço gerenciado à parte.
+#
+# Uso: cp .env.example .env && docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aguiaon
+      POSTGRES_USER: aguiaon
+      POSTGRES_PASSWORD: aguiaon
+    ports:
+      - "5432:5432"
+    volumes:
+      - aguiaon_pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aguiaon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://aguiaon:aguiaon@postgres:5432/aguiaon?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_troque_em_producao}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev_encryption_key_troque_em_producao}
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-}
+      PORT: 3000
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  aguiaon_pgdata:
