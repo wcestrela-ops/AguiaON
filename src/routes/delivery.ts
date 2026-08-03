@@ -444,13 +444,25 @@ router.get('/variants/:product_id', async (req: Request, res: Response) => {
 
 // POST /delivery/variants — criar ou editar variante
 router.post('/variants', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
   const { id, product_id, type, name, price_adjustment, is_required, order_index } = req.body;
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   if (!product_id || !name) return res.status(400).json({ error: 'product_id e name obrigatórios.' });
   const validTypes = ['tamanho', 'sabor', 'adicional'];
   if (!validTypes.includes(type)) return res.status(400).json({ error: 'type deve ser: tamanho, sabor ou adicional.' });
   try {
+    // Isolamento multi-tenant: o produto (e, ao editar, a variante) precisa pertencer ao establishment do chamador
+    const productOwn = await pool.query(`SELECT 1 FROM products WHERE id=$1 AND establishment_id=$2`, [product_id, estId]);
+    if (!productOwn.rows.length) return res.status(404).json({ error: 'Produto não encontrado.' });
+
     let result;
     if (id) {
+      const variantOwn = await pool.query(
+        `SELECT 1 FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.id=$1 AND p.establishment_id=$2`,
+        [id, estId]
+      );
+      if (!variantOwn.rows.length) return res.status(404).json({ error: 'Variante não encontrada.' });
+
       result = await pool.query(
         `UPDATE product_variants
          SET type=$1, name=$2, price_adjustment=$3, is_required=$4, order_index=$5
@@ -472,17 +484,24 @@ router.post('/variants', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), asyn
 
 // DELETE /delivery/variants/:id
 router.delete('/variants/:id', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   try {
-    const varRes = await pool.query(`DELETE FROM product_variants WHERE id=$1 RETURNING product_id`, [req.params.id]);
-    if (varRes.rows.length) {
-      // Se não sobrou variante, desmarca has_variants
-      const remaining = await pool.query(
-        `SELECT 1 FROM product_variants WHERE product_id=$1 AND is_active=true LIMIT 1`,
-        [varRes.rows[0].product_id]
-      );
-      if (!remaining.rows.length) {
-        await pool.query(`UPDATE products SET has_variants=false WHERE id=$1`, [varRes.rows[0].product_id]);
-      }
+    // Isolamento multi-tenant: só apaga se a variante pertencer a um produto do establishment do chamador
+    const varRes = await pool.query(
+      `DELETE FROM product_variants v USING products p
+       WHERE v.id=$1 AND v.product_id=p.id AND p.establishment_id=$2
+       RETURNING v.product_id`,
+      [req.params.id, estId]
+    );
+    if (!varRes.rows.length) return res.status(404).json({ error: 'Variante não encontrada.' });
+    // Se não sobrou variante, desmarca has_variants
+    const remaining = await pool.query(
+      `SELECT 1 FROM product_variants WHERE product_id=$1 AND is_active=true LIMIT 1`,
+      [varRes.rows[0].product_id]
+    );
+    if (!remaining.rows.length) {
+      await pool.query(`UPDATE products SET has_variants=false WHERE id=$1`, [varRes.rows[0].product_id]);
     }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -563,11 +582,22 @@ router.get('/options/:product_id', async (req: Request, res: Response) => {
 });
 
 router.post('/options', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
   const { id, product_id, name, min_options, max_options, is_required, order_index } = req.body;
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   if (!product_id || !name) return res.status(400).json({ error: 'product_id e name obrigatórios.' });
   try {
+    const productOwn = await pool.query(`SELECT 1 FROM products WHERE id=$1 AND establishment_id=$2`, [product_id, estId]);
+    if (!productOwn.rows.length) return res.status(404).json({ error: 'Produto não encontrado.' });
+
     let result;
     if (id) {
+      const optionOwn = await pool.query(
+        `SELECT 1 FROM product_options o JOIN products p ON p.id = o.product_id WHERE o.id=$1 AND p.establishment_id=$2`,
+        [id, estId]
+      );
+      if (!optionOwn.rows.length) return res.status(404).json({ error: 'Opcional não encontrado.' });
+
       result = await pool.query(
         `UPDATE product_options SET name=$1, min_options=$2, max_options=$3, is_required=$4, order_index=$5
          WHERE id=$6 RETURNING *`,
@@ -585,18 +615,43 @@ router.post('/options', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async
 });
 
 router.delete('/options/:id', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   try {
-    await pool.query(`DELETE FROM product_options WHERE id=$1`, [req.params.id]);
+    const result = await pool.query(
+      `DELETE FROM product_options o USING products p
+       WHERE o.id=$1 AND o.product_id=p.id AND p.establishment_id=$2
+       RETURNING o.id`,
+      [req.params.id, estId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Opcional não encontrado.' });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/option-items', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
   const { id, option_id, name, additional_price, is_active, order_index } = req.body;
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   if (!option_id || !name) return res.status(400).json({ error: 'option_id e name obrigatórios.' });
   try {
+    const optionOwn = await pool.query(
+      `SELECT 1 FROM product_options o JOIN products p ON p.id = o.product_id WHERE o.id=$1 AND p.establishment_id=$2`,
+      [option_id, estId]
+    );
+    if (!optionOwn.rows.length) return res.status(404).json({ error: 'Opcional não encontrado.' });
+
     let result;
     if (id) {
+      const itemOwn = await pool.query(
+        `SELECT 1 FROM product_option_items i
+         JOIN product_options o ON o.id = i.option_id
+         JOIN products p ON p.id = o.product_id
+         WHERE i.id=$1 AND p.establishment_id=$2`,
+        [id, estId]
+      );
+      if (!itemOwn.rows.length) return res.status(404).json({ error: 'Item não encontrado.' });
+
       result = await pool.query(
         `UPDATE product_option_items SET name=$1, additional_price=$2, is_active=$3, order_index=$4
          WHERE id=$5 RETURNING *`,
@@ -614,8 +669,16 @@ router.post('/option-items', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), 
 });
 
 router.delete('/option-items/:id', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const estId = getEstId(req);
+  if (!estId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
   try {
-    await pool.query(`DELETE FROM product_option_items WHERE id=$1`, [req.params.id]);
+    const result = await pool.query(
+      `DELETE FROM product_option_items i USING product_options o, products p
+       WHERE i.id=$1 AND i.option_id=o.id AND o.product_id=p.id AND p.establishment_id=$2
+       RETURNING i.id`,
+      [req.params.id, estId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Item não encontrado.' });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

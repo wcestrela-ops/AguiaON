@@ -264,8 +264,31 @@ router.get('/public/notifications', requireAuth, requireRole('CLIENT', 'LOJISTA'
 
 // PATCH /gym/public/notifications/:id/read — marcar como lida
 router.patch('/public/notifications/:id/read', requireAuth, requireRole('CLIENT', 'LOJISTA', 'SUPERADMIN'), async (req: Request, res: Response) => {
+  const user = req.user!;
   try {
-    await pool.query(`UPDATE gym_client_notifications SET read=true WHERE id=$1`, [req.params.id]);
+    // Isolamento multi-tenant: só marca como lida se a notificação pertencer
+    // ao cliente autenticado (CLIENT) ou a um gym_client do establishment do lojista (LOJISTA)
+    let result;
+    if (user.role === 'SUPERADMIN') {
+      result = await pool.query(`UPDATE gym_client_notifications SET read=true WHERE id=$1 RETURNING id`, [req.params.id]);
+    } else if (user.role === 'LOJISTA') {
+      result = await pool.query(
+        `UPDATE gym_client_notifications n SET read=true
+         FROM gym_clients c
+         WHERE n.id=$1 AND n.client_id=c.id AND c.establishment_id=$2
+         RETURNING n.id`,
+        [req.params.id, user.establishmentId]
+      );
+    } else {
+      result = await pool.query(
+        `UPDATE gym_client_notifications n SET read=true
+         FROM gym_clients c
+         WHERE n.id=$1 AND n.client_id=c.id AND c.user_id=$2
+         RETURNING n.id`,
+        [req.params.id, user.userId]
+      );
+    }
+    if (!result.rows.length) return res.status(404).json({ error: 'Notificação não encontrada.' });
     res.json({ ok: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

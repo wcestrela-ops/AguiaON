@@ -11,6 +11,7 @@ import { startOrderTimeoutJob } from './shared/orderTimeout';
 import { startDailyReportJob } from './shared/dailyReport';
 import { startLgpdJobs } from './shared/lgpdJobs';
 import { startGymExpiryJob } from './shared/gymExpiryJob';
+import { startBillingJob } from './shared/billingJob';
 import { initIO, emitToStore } from './shared/socketio';
 import { setupPrimary } from '@socket.io/cluster-adapter';
 import authRoutes from './routes/auth';
@@ -27,6 +28,10 @@ import deliveryRoutes from './routes/delivery';
 import gymClientsRoutes from './routes/gymClients';
 import chatRoutes from './routes/chat';
 import adminSmsRoutes from './routes/adminSms';
+import vehicleRoutes from './routes/vehicles';
+import billingRoutes from './routes/billing';
+import pool from './shared/db';
+import { tenantHostContext } from './shared/tenantResolver';
 
 dotenv.config();
 
@@ -61,6 +66,25 @@ const app = express();
 // Confia em proxies (Cloudflare, Nginx, Docker, etc.) para o rate-limit funcionar corretamente
 app.set('trust proxy', 1);
 
+// ── Health checks (Fase 6) ────────────────────────────────────
+// Ficam antes de qualquer outro middleware (inclusive o redirect HTTPS) para
+// que orquestradores (Docker, Kubernetes, load balancer) consigam checar sem
+// TLS e sem depender de nenhuma dependência externa estar de pé.
+// /health/live  — o processo está de pé (não checa dependências externas)
+// /health/ready — pronto pra receber tráfego (checa conexão com o banco)
+app.get('/health/live', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/health/ready', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ status: 'ready' });
+  } catch (err: any) {
+    res.status(503).json({ status: 'not_ready', error: err.message });
+  }
+});
+
 // ── Força HTTPS em produção ──────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
@@ -81,6 +105,10 @@ app.use(cors({
   credentials: true
 }));
 app.use(cookieParser());
+
+// White-label (Fase 4): resolve req.tenant a partir do header Host — subdomínio
+// próprio (slug.PLATFORM_BASE_DOMAIN) ou domínio customizado (establishments.custom_domain)
+app.use(tenantHostContext);
 
 // Webhook MP: aceita qualquer body antes do express.json() para evitar rejeição de body vazio
 app.use('/api/payments/webhook/mercadopago', express.text({ type: '*/*' }), (req: any, _res: any, next: any) => {
@@ -144,6 +172,8 @@ app.use('/delivery', deliveryRoutes);
 app.use('/gym', gymClientsRoutes);
 app.use('/chat', chatRoutes);
 app.use('/admin/sms', adminSmsRoutes);
+app.use('/veiculos', vehicleRoutes);
+app.use('/admin/billing', billingRoutes);
 
 // ── Rota de teste Socket.io ───────────────────────────────────
 // GET /api/test-print/:store_id — dispara evento new_order fake (requer ADMIN_SECRET_KEY)
@@ -177,8 +207,9 @@ app.get('/api/test-print/:store_id', (req, res, next) => {
   res.json({ ok: true, message: `Evento new_order emitido para store:${store_id}`, order: fakeOrder });
 });
 
-// Raiz → redireciona para o Marketplace
-app.get('/', (_req, res) => {
+// Raiz → loja do tenant resolvido por host (white-label), ou Marketplace da plataforma
+app.get('/', (req, res) => {
+  if (req.tenant) return res.sendFile(path.join(__dirname, '../public/vitrine.html'));
   res.redirect(301, '/marketplace');
 });
 
@@ -279,7 +310,29 @@ httpServer.listen(PORT, () => {
     startDailyReportJob();
     startLgpdJobs();
     startGymExpiryJob();
+    startBillingJob();
   }
 });
+
+// ── Encerramento gracioso (Fase 6) ────────────────────────────
+// Docker/Kubernetes mandam SIGTERM antes de matar o processo. Sem isso, o
+// worker morre no meio de requisições em andamento e conexões de banco ficam
+// penduradas. Fecha o servidor HTTP (para de aceitar conexão nova, espera as
+// em andamento) e só depois fecha o pool do Postgres.
+function gracefulShutdown(signal: string): void {
+  console.log(`[worker ${process.pid}] recebido ${signal} — encerrando graciosamente...`);
+  httpServer.close(() => {
+    pool.end()
+      .catch((err: any) => console.error('[shutdown] erro ao fechar pool:', err.message))
+      .finally(() => process.exit(0));
+  });
+  // Failsafe: força saída se não encerrar em 10s (ex: conexão HTTP travada)
+  setTimeout(() => {
+    console.warn(`[worker ${process.pid}] encerramento forçado após timeout`);
+    process.exit(1);
+  }, 10_000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 } // fim do bloco else (worker)

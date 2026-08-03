@@ -7,6 +7,7 @@ import { decrypt, encrypt, isSensitiveKey } from '../shared/cryptoUtil';
 import { logActivity } from '../shared/activityLogger';
 import { loadAIConfig, askAI } from '../shared/aiProvider';
 import { syncAgataContext } from '../shared/syncAgata';
+import { invalidateTenantHostCache } from '../shared/tenantResolver';
 
 const router = Router();
 
@@ -395,7 +396,8 @@ router.put('/setup/settings', async (req, res) => {
     pix_key_type, pix_key_value, pix_receiver_name,
     preferred_payment_method,
     instagram_url, facebook_url, website_url, whatsapp_link,
-    logo_base64, favicon_base64, social_links
+    logo_base64, favicon_base64, social_links,
+    custom_domain
   } = req.body;
 
   // Validação rígida de tamanho de imagem no backend
@@ -439,6 +441,12 @@ router.put('/setup/settings', async (req, res) => {
     if (favicon_base64 !== undefined) { fields.push(`favicon_base64 = $${i++}`); vals.push(favicon_base64 || null); }
     if (social_links !== undefined) { fields.push(`social_links = $${i++}`); vals.push(JSON.stringify(social_links)); }
     if (business_config !== undefined) { fields.push(`business_config = $${i++}`); vals.push(JSON.stringify(business_config)); }
+    // White-label (Fase 4): domínio próprio da empresa (ex: www.lojadocliente.com.br).
+    // Normaliza pra minúsculo e sem espaços — tenantResolver.ts compara host em lowercase.
+    if (custom_domain !== undefined) {
+      fields.push(`custom_domain = $${i++}`);
+      vals.push(custom_domain ? String(custom_domain).trim().toLowerCase() : null);
+    }
 
     if (!fields.length) return res.status(400).json({ error: 'Nada para atualizar.' });
 
@@ -451,6 +459,10 @@ router.put('/setup/settings', async (req, res) => {
     );
 
     if (!result.rows.length) return res.status(404).json({ error: 'Estabelecimento não encontrado.' });
+
+    // custom_domain mudou → invalida o cache de resolução por host (senão o
+    // domínio antigo/novo pode ficar até 30s desatualizado, ver tenantResolver.ts)
+    if (custom_domain !== undefined) invalidateTenantHostCache();
 
     // Identifica o que mudou para logar de forma descritiva
     const changed: string[] = [];
@@ -478,6 +490,9 @@ router.put('/setup/settings', async (req, res) => {
 
     res.json({ success: true });
   } catch (err: any) {
+    if (err.code === '23505' && err.constraint === 'idx_establishments_custom_domain') {
+      return res.status(409).json({ error: 'Este domínio já está em uso por outra empresa.' });
+    }
     res.status(500).json({ error: err.message });
   }
 });

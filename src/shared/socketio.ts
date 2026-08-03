@@ -29,9 +29,19 @@ export function initIO(httpServer: HttpServer): Server {
   });
 
   // ── Cluster adapter (IPC entre workers) ──────────────────────
-  // Ativo sempre — em single-process não tem efeito colateral.
-  _io.adapter(createAdapter());
-  console.log(`[socket.io] cluster adapter ativo (worker ${process.pid})`);
+  // Só funciona quando este processo foi criado via cluster.fork() — nesse
+  // caso existe um canal IPC (process.send) com o primário. Rodando
+  // standalone (dev local via ts-node-dev, ou produção sem NODE_ENV=production
+  // — logo sem clustering) process.send não existe e o adapter derruba o
+  // processo ao tentar publicar. Achado durante o smoke test da Fase 6:
+  // isso quebrava qualquer subida fora do modo cluster, incluindo dev local
+  // e um possível deploy single-instance.
+  if (typeof process.send === 'function') {
+    _io.adapter(createAdapter());
+    console.log(`[socket.io] cluster adapter ativo (worker ${process.pid})`);
+  } else {
+    console.log(`[socket.io] rodando standalone (sem cluster) — adapter de IPC desativado`);
+  }
 
   // ── Middleware de autenticação ────────────────────────────────
   // O cliente envia: io(URL, { query: { store_token: '...' } })

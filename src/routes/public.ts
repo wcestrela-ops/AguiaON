@@ -332,6 +332,37 @@ router.get('/marketplace/id/:estId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GET /public/marketplace/by-host — mesmo perfil de /marketplace/:slug, mas
+// resolvido pelo header Host (subdomínio próprio ou domínio customizado —
+// Fase 4 white-label). Precisa vir ANTES de /marketplace/:slug, senão
+// "by-host" seria capturado como valor literal do parâmetro :slug.
+// ─────────────────────────────────────────────────────────────
+router.get('/marketplace/by-host', async (req, res) => {
+  if (!req.tenant) return res.status(404).json({ error: 'Nenhuma loja associada a este domínio.' });
+  try {
+    const result = await pool.query(
+      `SELECT e.id, e.name, e.slug, e.description, e.category, e.city, e.state, e.phone,
+              e.whatsapp_link, e.instagram_url, e.facebook_url, e.website_url,
+              e.logo_url, e.cover_url, e.logo_base64, e.social_links, e.settings, e.niche_data,
+              e.pix_key_type, e.pix_key_value, e.pix_receiver_name, e.preferred_payment_method,
+              e.cor_primaria, e.cor_destaque, e.vertical_slug, e.active_features,
+              e.mp_public_key, e.mp_status,
+              m.name AS module_name, m.slug AS module_slug,
+              m.icon AS module_icon, m.config_url AS module_url, m.profissional_url
+       FROM establishments e
+       LEFT JOIN modules m ON m.id = e.module_id
+       WHERE e.id = $1 AND e.is_active = true AND e.is_public = true`,
+      [req.tenant.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Loja não encontrada.' });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    console.error('[marketplace/by-host] SQL error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // GET /public/marketplace/:slug — perfil público de uma loja
 // ─────────────────────────────────────────────────────────────
 router.get('/marketplace/:slug', async (req, res) => {
@@ -487,6 +518,7 @@ router.get('/establishments/:slug', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
+
 
 // ─────────────────────────────────────────────────────────────
 // POST /public/register/client — cadastro de cliente
