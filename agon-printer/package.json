@@ -1,0 +1,62 @@
+{
+  "name": "agon-printer",
+  "version": "2.0.0",
+  "description": "AG-ON Print — Cliente de Impressão Automática de Pedidos",
+  "main": "main.js",
+  "author": {
+    "name": "AG-ON Sistemas",
+    "email": "suporte@ag-on.com.br"
+  },
+  "scripts": {
+    "start":    "electron .",
+    "dev":      "electron . --dev",
+    "prebuild": "node fix-cache.js",
+    "build":    "electron-builder"
+  },
+  "build": {
+    "appId":       "com.agon.print",
+    "productName": "AG-ON Print",
+    "copyright":   "Copyright © 2025 AG-ON Sistemas",
+    "artifactName": "AG-ON-Print-Setup-v${version}.exe",
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon":   "assets/icon.ico",
+      "executableName": "AG-ON Print",
+      "signingHashAlgorithms": null,
+      "sign": null,
+      "fileAssociations": []
+    },
+    "nsis": {
+      "oneClick":                        true,
+      "perMachine":                      false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut":           true,
+      "createStartMenuShortcut":         true,
+      "shortcutName":                    "AG-ON Print",
+      "deleteAppDataOnUninstall":        false,
+      "runAfterFinish":                  true
+    },
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "assets/**/*",
+      "node_modules/**/*",
+      "!node_modules/electron$",
+      "!node_modules/.cache"
+    ],
+    "npmRebuild": false
+  },
+  "dependencies": {
+    "socket.io-client":    "^4.8.1",
+    "node-thermal-printer": "^4.3.4"
+  },
+  "devDependencies": {
+    "electron":         "^28.3.3",
+    "electron-builder": "^24.13.3"
+  }
+}

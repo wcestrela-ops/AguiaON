@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entregador — AG-ON</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #f1f5f9; }
+    .card-order { transition: box-shadow .15s; }
+    .card-order:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+    .badge { display:inline-block; padding:2px 10px; border-radius:9999px; font-size:.72rem; font-weight:600; }
+    .badge-pending    { background:#fef3c7; color:#92400e; }
+    .badge-confirmed  { background:#dbeafe; color:#1e3a8a; }
+    .badge-preparing  { background:#ede9fe; color:#5b21b6; }
+    .badge-delivering { background:#fce7f3; color:#9d174d; }
+    .btn-primary { background:#f59e0b; color:#fff; border:none; border-radius:8px; padding:10px 20px; font-weight:600; cursor:pointer; transition:background .15s; }
+    .btn-primary:hover { background:#d97706; }
+    .btn-success { background:#10b981; color:#fff; border:none; border-radius:8px; padding:10px 20px; font-weight:600; cursor:pointer; transition:background .15s; }
+    .btn-success:hover { background:#059669; }
+    .btn-ghost { background:#fff; color:#374151; border:1px solid #e5e7eb; border-radius:8px; padding:8px 16px; cursor:pointer; }
+    .btn-gps { background:#1a73e8; color:#fff; border:none; border-radius:8px; padding:8px 14px; font-weight:600; cursor:pointer; font-size:.8rem; display:flex; align-items:center; gap:6px; }
+    .btn-gps:hover { background:#1557b0; }
+    #toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:12px 24px; border-radius:10px; font-size:.9rem; display:none; z-index:9999; }
+    .gps-menu { position:absolute; right:0; top:110%; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.15); min-width:180px; z-index:10; overflow:hidden; }
+    .gps-menu a { display:flex; align-items:center; gap:8px; padding:10px 14px; font-size:.85rem; color:#374151; text-decoration:none; transition:background .1s; }
+    .gps-menu a:hover { background:#f1f5f9; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ── TELA DE LOGIN ── -->
+<div id="screen-login" class="min-h-screen flex flex-col items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div class="flex flex-col items-center mb-6">
+      <div class="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+        <i class="fa-solid fa-motorcycle text-amber-500 text-2xl"></i>
+      </div>
+      <h1 class="text-xl font-bold text-gray-800">Área do Entregador</h1>
+      <p id="login-store-name" class="text-sm text-gray-500 mt-1"></p>
+    </div>
+
+    <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Número do celular</label>
+        <input id="login-phone" type="tel" placeholder="(11) 99999-9999"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-amber-400"
+          autocomplete="tel" />
+      </div>
+      <button onclick="doLogin()" class="btn-primary w-full text-base py-3 rounded-xl">
+        <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Entrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TELA PRINCIPAL ── -->
+<div id="screen-main" class="hidden min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-amber-500 text-white px-4 py-3 flex items-center justify-between shadow">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-motorcycle text-xl"></i>
+      <div>
+        <div class="font-bold text-base" id="header-name">Entregador</div>
+        <div class="text-xs opacity-80" id="header-store"></div>
+      </div>
+    </div>
+    <button onclick="doLogout()" class="text-white opacity-80 hover:opacity-100 text-sm">
+      <i class="fa-solid fa-right-from-bracket mr-1"></i>Sair
+    </button>
+  </header>
+
+  <!-- Filtros -->
+  <div class="bg-white border-b px-4 py-2 flex items-center gap-3">
+    <span class="text-sm text-gray-500 font-medium">Status:</span>
+    <select id="filter-status" onchange="loadOrders()" class="text-sm border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300">
+      <option value="">Todos ativos</option>
+      <option value="confirmed">Confirmados</option>
+      <option value="preparing">Em preparo</option>
+      <option value="delivering">Saiu para entrega</option>
+    </select>
+    <button onclick="loadOrders()" class="ml-auto text-amber-600 text-sm font-medium">
+      <i class="fa-solid fa-rotate-right mr-1"></i>Atualizar
+    </button>
+  </div>
+
+  <!-- Lista de pedidos -->
+  <main class="flex-1 p-3 space-y-3 overflow-y-auto pb-6">
+    <div id="orders-loading" class="text-center text-gray-400 py-12">
+      <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br/>Carregando pedidos...
+    </div>
+    <div id="orders-empty" class="hidden text-center text-gray-400 py-12">
+      <i class="fa-solid fa-box-open text-4xl mb-3 opacity-50"></i>
+      <p class="font-medium">Nenhum pedido ativo</p>
+      <p class="text-sm mt-1">Os pedidos aparecerão aqui assim que forem confirmados</p>
+    </div>
+    <div id="orders-list"></div>
+  </main>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('entregador_token') || '';
+let USER  = JSON.parse(localStorage.getItem('entregador_user') || 'null');
+let EST_ID = '';
+let pollTimer = null;
+
+// ── Init ──────────────────────────────────────────────────────
+(function init() {
+  const params = new URLSearchParams(location.search);
+  EST_ID = params.get('loja') || params.get('est') || '';
+
+  // Carrega nome da loja se possível
+  if (EST_ID) {
+    fetch(`/public/establishments/${EST_ID}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.name) document.getElementById('login-store-name').textContent = d.name;
+      }).catch(() => {});
+  }
+
+  if (TOKEN && USER) {
+    showMain();
+  }
+})();
+
+// ── Login ─────────────────────────────────────────────────────
+async function doLogin() {
+  const phone = document.getElementById('login-phone').value.trim();
+  const errEl = document.getElementById('login-error');
+  errEl.classList.add('hidden');
+
+  if (!phone) { showError(errEl, 'Informe seu número de celular.'); return; }
+  if (!EST_ID) { showError(errEl, 'Link inválido. Peça ao lojista o link correto.'); return; }
+
+  try {
+    const res = await fetch('/auth/staff-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, establishment_id: EST_ID }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(errEl, data.error || 'Erro ao entrar.'); return; }
+
+    const userRoles = data.memberRoles || [data.memberRole];
+    if (!userRoles.includes('entregador')) {
+      showError(errEl, 'Este link é exclusivo para entregadores.');
+      return;
+    }
+
+    TOKEN = data.token;
+    USER  = { name: data.userName, storeName: data.storeName, memberRole: data.memberRole };
+    localStorage.setItem('entregador_token', TOKEN);
+    localStorage.setItem('entregador_user', JSON.stringify(USER));
+    showMain();
+  } catch {
+    showError(errEl, 'Erro de conexão. Tente novamente.');
+  }
+}
+
+function showError(el, msg) {
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+// ── Main ──────────────────────────────────────────────────────
+function showMain() {
+  document.getElementById('screen-login').classList.add('hidden');
+  document.getElementById('screen-main').classList.remove('hidden');
+  document.getElementById('header-name').textContent = USER.name || 'Entregador';
+  document.getElementById('header-store').textContent = USER.storeName || '';
+  loadOrders();
+  startPolling();
+}
+
+function doLogout() {
+  TOKEN = '';
+  USER = null;
+  localStorage.removeItem('entregador_token');
+  localStorage.removeItem('entregador_user');
+  clearInterval(pollTimer);
+  document.getElementById('screen-main').classList.add('hidden');
+  document.getElementById('screen-login').classList.remove('hidden');
+}
+
+// ── Polling ───────────────────────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadOrders, 30000);
+}
+
+// ── Carregar pedidos ──────────────────────────────────────────
+async function loadOrders() {
+  const listEl    = document.getElementById('orders-list');
+  const loadingEl = document.getElementById('orders-loading');
+  const emptyEl   = document.getElementById('orders-empty');
+  const status    = document.getElementById('filter-status').value;
+
+  loadingEl.classList.remove('hidden');
+  listEl.innerHTML = '';
+  emptyEl.classList.add('hidden');
+
+  try {
+    const qs = status ? `?status=${status}` : '';
+    const res = await fetch(`/delivery/orders${qs}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+
+    if (res.status === 401) { doLogout(); return; }
+    const orders = await res.json();
+
+    loadingEl.classList.add('hidden');
+
+    if (!orders.length) {
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    listEl.innerHTML = orders.map(renderOrder).join('');
+  } catch {
+    loadingEl.classList.add('hidden');
+    listEl.innerHTML = '<p class="text-center text-red-500 py-8">Erro ao carregar pedidos.</p>';
+  }
+}
+
+// ── Render pedido ─────────────────────────────────────────────
+function renderOrder(o) {
+  const statusMap = {
+    pending:    { label: 'Pendente',           cls: 'badge-pending'    },
+    confirmed:  { label: 'Confirmado',         cls: 'badge-confirmed'  },
+    preparing:  { label: 'Em Preparo',         cls: 'badge-preparing'  },
+    delivering: { label: 'Saiu para Entrega',  cls: 'badge-delivering' },
+  };
+  const s = statusMap[o.status] || { label: o.status, cls: 'badge-pending' };
+
+  const items = (o.items || []).map(it =>
+    `<li class="text-gray-600">${it.quantity || 1}x ${it.name}${it.variant ? ` (${it.variant})` : ''}</li>`
+  ).join('');
+
+  const time = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const btnDeliver = o.status !== 'delivering'
+    ? `<button onclick="updateStatus('${o.id}', 'delivering')"
+        class="btn-primary flex-1 text-sm">
+        <i class="fa-solid fa-motorcycle mr-1"></i>Saiu para Entrega
+       </button>`
+    : '';
+
+  const btnDone = `<button onclick="updateStatus('${o.id}', 'delivered')"
+      class="btn-success flex-1 text-sm">
+      <i class="fa-solid fa-check mr-1"></i>Entregue
+     </button>`;
+
+  return `
+  <div class="card-order bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-start justify-between mb-2">
+      <div>
+        <span class="font-bold text-gray-800 text-base">#${o.daily_code || o.order_number || '—'}</span>
+        <span class="badge ${s.cls} ml-2">${s.label}</span>
+      </div>
+      <span class="text-xs text-gray-400">${time}</span>
+    </div>
+
+    <div class="mb-2">
+      <p class="font-semibold text-gray-700"><i class="fa-solid fa-user text-gray-400 mr-1"></i>${o.customer_name}</p>
+      ${o.customer_address ? `<p class="text-sm text-gray-500 mt-0.5"><i class="fa-solid fa-location-dot text-gray-400 mr-1"></i>${o.customer_address}</p>` : ''}
+      ${o.customer_phone  ? `<p class="text-sm text-gray-500 mt-0.5"><i class="fa-solid fa-phone text-gray-400 mr-1"></i><a href="tel:${o.customer_phone}" class="underline">${o.customer_phone}</a></p>` : ''}
+      ${o.lat && o.lng ? `
+      <div class="relative inline-block mt-1">
+        <button class="btn-gps" onclick="toggleGpsMenu('gps-${o.id}')">
+          <i class="fa-solid fa-route"></i>Ver Rota no GPS
+        </button>
+        <div id="gps-${o.id}" class="gps-menu hidden">
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}" target="_blank" rel="noopener">
+            <img src="https://www.google.com/favicon.ico" width="16" height="16"> Google Maps
+          </a>
+          <a href="https://waze.com/ul?ll=${o.lat},${o.lng}&navigate=yes" target="_blank" rel="noopener">
+            <i class="fa-brands fa-waze text-sky-500"></i> Waze
+          </a>
+        </div>
+      </div>` : ''}
+    </div>
+
+    <ul class="text-sm mb-3 space-y-0.5 border-t pt-2">${items}</ul>
+
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm text-gray-500">Total</span>
+      <span class="font-bold text-gray-800">R$ ${(+o.total).toFixed(2).replace('.', ',')}</span>
+    </div>
+
+    ${o.notes ? `<p class="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-1 mb-3"><i class="fa-solid fa-note-sticky mr-1"></i>${o.notes}</p>` : ''}
+
+    <div class="flex gap-2">
+      ${btnDeliver}
+      ${btnDone}
+    </div>
+  </div>`;
+}
+
+// ── Atualizar status ──────────────────────────────────────────
+async function updateStatus(orderId, status) {
+  const labels = { delivering: 'saiu para entrega', delivered: 'entregue' };
+  try {
+    const res = await fetch(`/delivery/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao atualizar.'); return; }
+    showToast(`Pedido marcado como ${labels[status] || status}!`);
+    loadOrders();
+  } catch {
+    showToast('Erro de conexão.');
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+// ── GPS Menu ──────────────────────────────────────────────────
+function toggleGpsMenu(id) {
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const isOpen = !menu.classList.contains('hidden');
+  // Fecha todos os outros menus abertos
+  document.querySelectorAll('.gps-menu').forEach(m => m.classList.add('hidden'));
+  if (!isOpen) menu.classList.remove('hidden');
+}
+
+// Fecha menus GPS ao clicar fora
+document.addEventListener('click', e => {
+  if (!e.target.closest('.btn-gps') && !e.target.closest('.gps-menu')) {
+    document.querySelectorAll('.gps-menu').forEach(m => m.classList.add('hidden'));
+  }
+});
+
+// Enter no campo de login
+document.getElementById('login-phone').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Mesa — AG-ON</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    :root {
+      --nav-h: calc(58px + env(safe-area-inset-bottom));
+      --header-h: 60px;
+    }
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f8fafc; overscroll-behavior: none; }
+    .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #e5e7eb; display:flex; z-index:100; padding-bottom:env(safe-area-inset-bottom); }
+    .bottom-nav button { flex:1; padding:10px 4px 8px; font-size:.7rem; font-weight:600; color:#9ca3af; display:flex; flex-direction:column; align-items:center; gap:3px; border:none; background:none; cursor:pointer; transition:color .15s; min-height:48px; touch-action:manipulation; }
+    .bottom-nav button.active { color:#6366f1; }
+    .bottom-nav button i { font-size:1.3rem; }
+    main.screen { display:none; padding-bottom:var(--nav-h); padding-top:var(--header-h); }
+    main.screen.active { display:block; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:flex; align-items:flex-end; justify-content:center; }
+    .modal-box { background:#fff; border-radius:20px 20px 0 0; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; padding:20px; padding-bottom:calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling:touch; }
+    .qty-btn { width:38px; height:38px; border-radius:50%; border:1.5px solid #e5e7eb; font-size:1.2rem; display:flex; align-items:center; justify-content:center; cursor:pointer; background:#f9fafb; touch-action:manipulation; }
+    .qty-btn:active { background:#e5e7eb; }
+    .btn-main { background:#6366f1; color:#fff; border:none; border-radius:14px; padding:16px; font-weight:700; cursor:pointer; width:100%; font-size:1.05rem; touch-action:manipulation; min-height:52px; }
+    .btn-main:active { background:#4f46e5; }
+    .btn-outline { background:#fff; color:#6366f1; border:2px solid #6366f1; border-radius:14px; padding:14px; font-weight:600; cursor:pointer; width:100%; font-size:.95rem; touch-action:manipulation; min-height:48px; }
+    .btn-danger { background:#ef4444; color:#fff; border:none; border-radius:14px; padding:16px; font-weight:700; cursor:pointer; width:100%; font-size:1.05rem; touch-action:manipulation; min-height:52px; }
+    .btn-danger:active { background:#dc2626; }
+    .btn-sm { padding:8px 18px; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; border:none; min-height:38px; touch-action:manipulation; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:9999px; font-size:.75rem; font-weight:600; }
+    .badge-pending   { background:#fef3c7; color:#92400e; }
+    .badge-confirmed { background:#dbeafe; color:#1e3a8a; }
+    .badge-preparing { background:#ede9fe; color:#5b21b6; }
+    .badge-delivered { background:#d1fae5; color:#065f46; }
+    input, select, textarea { outline:none; font-size:16px !important; } /* previne zoom iOS */
+    .input-field { width:100%; border:1px solid #e5e7eb; border-radius:12px; padding:12px 16px; font-size:16px !important; }
+    .input-field:focus { border-color:#a5b4fc; box-shadow: 0 0 0 2px #e0e7ff; }
+    #toast { position:fixed; bottom:calc(var(--nav-h) + 8px); left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:10px 22px; border-radius:10px; font-size:.88rem; display:none; z-index:9999; min-width:200px; text-align:center; white-space:nowrap; }
+    .product-card { cursor:pointer; transition:border-color .15s, box-shadow .15s; touch-action:manipulation; }
+    .product-card:active { border-color:#a5b4fc; box-shadow:0 2px 12px rgba(99,102,241,.1); }
+    @media (hover:hover) { .product-card:hover { border-color:#a5b4fc; box-shadow:0 2px 12px rgba(99,102,241,.1); } }
+    /* Botão pedir conta fica acima da bottom nav */
+    #bill-btn-wrap { bottom: var(--nav-h); }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+
+<!-- HEADER -->
+<header class="fixed top-0 left-0 right-0 bg-indigo-600 text-white px-4 z-50 shadow flex items-center" style="height:var(--header-h); padding-top:env(safe-area-inset-top)">
+  <div class="max-w-lg mx-auto w-full flex items-center justify-between">
+    <div>
+      <p class="font-bold text-base leading-tight" id="h-store"></p>
+      <p class="text-xs opacity-80" id="h-mesa"></p>
+    </div>
+    <div id="h-status-badge" class="text-xs font-bold px-3 py-1 rounded-full bg-white/20 shrink-0"></div>
+  </div>
+</header>
+
+<!-- TELA DE NOME (primeira vez) -->
+<div id="screen-name" class="min-h-screen flex items-center justify-center p-4" style="padding-top:calc(var(--header-h) + 16px)">
+  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div class="text-center mb-6">
+      <div class="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-3">
+        <i class="fa-solid fa-utensils text-indigo-500 text-2xl"></i>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800">Bem-vindo!</h2>
+      <p class="text-sm text-gray-500 mt-1" id="name-store-label"></p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Seu nome</label>
+        <input id="input-name" type="text" placeholder="Como posso te chamar?" class="input-field" />
+      </div>
+      <button onclick="saveName()" class="btn-main">
+        <i class="fa-solid fa-arrow-right mr-2"></i>Entrar na Mesa
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden max-w-lg mx-auto">
+
+  <!-- PEDIDOS -->
+  <main id="tab-pedidos" class="screen active px-4">
+    <div id="orders-loading" class="text-center py-12 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-2xl"></i></div>
+    <div id="orders-empty" class="hidden text-center py-12 text-gray-400">
+      <i class="fa-solid fa-receipt text-4xl mb-3 opacity-40"></i>
+      <p class="text-sm">Nenhum pedido ainda.<br>Toque em <b>Cardápio</b> para fazer seu pedido!</p>
+    </div>
+    <div id="orders-list" class="space-y-3"></div>
+
+    <!-- Botão pedir conta -->
+    <div id="bill-btn-wrap" class="hidden fixed left-0 right-0 p-4 bg-white border-t border-gray-100 z-40 max-w-lg mx-auto">
+      <button onclick="requestBill()" id="bill-btn"
+        class="btn-danger flex items-center justify-center gap-2">
+        <i class="fa-solid fa-file-invoice-dollar"></i>Pedir a Conta
+      </button>
+    </div>
+  </main>
+
+  <!-- CARDÁPIO -->
+  <main id="tab-cardapio" class="screen px-4">
+    <div class="sticky top-[56px] bg-gray-50 pt-2 pb-2 z-10">
+      <input id="card-search" type="search" placeholder="Buscar produto..."
+        oninput="filterCardapio()"
+        class="input-field text-sm" />
+      <div id="card-cats" class="flex gap-1 overflow-x-auto pb-1 mt-2 text-xs"></div>
+    </div>
+    <div id="card-products" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+      <div class="col-span-2 text-center py-8 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-xl"></i></div>
+    </div>
+  </main>
+
+  <!-- CARRINHO -->
+  <main id="tab-carrinho" class="screen px-4">
+    <h2 class="text-lg font-bold text-gray-800 mb-4">Seu Pedido</h2>
+    <div id="cart-list" class="space-y-3 mb-4"></div>
+    <div id="cart-empty" class="hidden text-center py-8 text-gray-400">
+      <i class="fa-solid fa-cart-shopping text-3xl mb-2 opacity-40"></i>
+      <p class="text-sm">Carrinho vazio</p>
+    </div>
+    <div id="cart-summary" class="hidden border-t border-gray-100 pt-4 space-y-3">
+      <div class="flex justify-between font-bold text-gray-800 text-lg">
+        <span>Total</span>
+        <span id="cart-total">R$ 0,00</span>
+      </div>
+      <select id="cart-payment" class="input-field text-sm">
+        <option value="na_entrega">Pagar na entrega</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="cartao_credito">Cartão Crédito</option>
+        <option value="cartao_debito">Cartão Débito</option>
+        <option value="pix">PIX</option>
+      </select>
+      <textarea id="cart-notes" placeholder="Observações do pedido..." rows="2"
+        class="input-field text-sm resize-none"></textarea>
+      <button onclick="submitOrder()" class="btn-main">
+        <i class="fa-solid fa-paper-plane mr-2"></i>Enviar Pedido
+      </button>
+    </div>
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button onclick="switchTab('pedidos')" id="nav-pedidos" class="active">
+      <i class="fa-solid fa-receipt"></i>Pedidos
+    </button>
+    <button onclick="switchTab('cardapio')" id="nav-cardapio">
+      <i class="fa-solid fa-utensils"></i>Cardápio
+    </button>
+    <button onclick="switchTab('carrinho')" id="nav-carrinho">
+      <i class="fa-solid fa-cart-shopping"></i>Carrinho
+      <span id="cart-badge" class="hidden bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center -mt-1">0</span>
+    </button>
+  </nav>
+</div>
+
+<!-- MODAL PIX -->
+<div id="modal-pix" class="hidden modal-overlay" onclick="if(event.target===this)document.getElementById('modal-pix').classList.add('hidden')">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800 text-lg"><i class="fa-solid fa-qrcode text-indigo-500 mr-2"></i>Pagar com PIX</h3>
+      <button onclick="document.getElementById('modal-pix').classList.add('hidden')" class="text-gray-400 text-xl"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="pix-loading" class="text-center py-8 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-2xl"></i><p class="text-sm mt-2">Gerando QR Code…</p></div>
+    <div id="pix-content" class="hidden text-center space-y-4">
+      <p class="text-sm text-gray-600">Escaneie o QR Code para pagar:</p>
+      <div class="flex justify-center">
+        <img id="pix-qr" src="" alt="QR PIX" class="w-52 h-52 rounded-xl shadow" />
+      </div>
+      <p class="font-bold text-gray-800 text-xl" id="pix-val"></p>
+      <div>
+        <p class="text-xs text-gray-500 mb-1">Código PIX:</p>
+        <div id="pix-code" class="font-mono text-xs bg-gray-100 border rounded-lg p-3 text-left break-all max-h-20 overflow-y-auto text-gray-700"></div>
+        <button onclick="copyPix()" class="btn-outline text-sm py-2 mt-2"><i class="fa-solid fa-copy mr-1"></i>Copiar</button>
+      </div>
+    </div>
+    <div id="pix-err" class="hidden text-center py-4 text-red-500 text-sm"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const params   = new URLSearchParams(location.search);
+const LOJA_ID  = params.get('loja') || params.get('est') || '';
+const MESA_ID  = params.get('mesa') || '';
+let customerName = localStorage.getItem(`mesa_name_${MESA_ID}`) || '';
+let tableData  = null;
+
+// SESSION_ID — identifica a visita do cliente. Gerado uma vez por sessão de aba.
+// Salvo em sessionStorage para não persistir entre fechamentos/reabertas do QR.
+const SESSION_KEY = `mesa_session_${MESA_ID}`;
+let SESSION_ID = sessionStorage.getItem(SESSION_KEY);
+if (!SESSION_ID) {
+  SESSION_ID = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+  sessionStorage.setItem(SESSION_KEY, SESSION_ID);
+}
+let catalog    = [];
+let products   = [];
+let categories = [];
+let activeCat  = null;
+let cart       = [];   // { product, qty }
+let pollTimer  = null;
+let pixCodeStr = '';
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+(async function init() {
+  if (!LOJA_ID || !MESA_ID) {
+    document.body.innerHTML = '<div class="min-h-screen flex items-center justify-center text-gray-500 text-center p-8"><div><i class="fa-solid fa-link-slash text-4xl mb-4 block"></i><p>Link inválido. Por favor, escaneie o QR Code da mesa novamente.</p></div></div>';
+    return;
+  }
+
+  try {
+    tableData = await fetch(`/delivery/public/tables/${MESA_ID}?establishment_id=${LOJA_ID}`).then(r => r.json());
+    document.getElementById('h-store').textContent     = tableData.store_name || 'AG-ON';
+    document.getElementById('h-mesa').textContent      = `Mesa ${tableData.table_number}`;
+    document.getElementById('name-store-label').textContent = tableData.store_name || '';
+    updateStatusBadge();
+  } catch {
+    document.body.innerHTML = '<div class="min-h-screen flex items-center justify-center text-gray-500 text-center p-8"><p>Mesa não encontrada.</p></div>';
+    return;
+  }
+
+  if (customerName) {
+    showApp();
+  } else {
+    document.getElementById('screen-name').classList.remove('hidden');
+    document.getElementById('input-name').focus();
+    document.getElementById('input-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveName(); });
+  }
+})();
+
+function updateStatusBadge() {
+  if (!tableData) return;
+  const badge = document.getElementById('h-status-badge');
+  const map = { livre:'Livre', ocupada:'Ocupada', conta_solicitada:'🔔 Conta Solicitada' };
+  badge.textContent = map[tableData.status] || tableData.status;
+  badge.className = `text-xs font-bold px-3 py-1 rounded-full ${tableData.status === 'conta_solicitada' ? 'bg-amber-400 text-amber-900' : 'bg-white/20 text-white'}`;
+}
+
+// ══════════════════════════════════════════
+// NOME
+// ══════════════════════════════════════════
+function saveName() {
+  const name = document.getElementById('input-name').value.trim();
+  if (!name) { document.getElementById('input-name').focus(); return; }
+  customerName = name;
+  localStorage.setItem(`mesa_name_${MESA_ID}`, name);
+  showApp();
+}
+
+// ══════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════
+async function showApp() {
+  document.getElementById('screen-name').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  await Promise.all([loadOrders(), loadCatalog()]);
+  startPolling();
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadOrders, 20000);
+}
+
+// ══════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('main.screen').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  if (tab === 'pedidos') loadOrders();
+}
+
+// ══════════════════════════════════════════
+// PEDIDOS
+// ══════════════════════════════════════════
+async function loadOrders() {
+  try {
+    const orders = await fetch(`/delivery/public/tables/${MESA_ID}/orders?establishment_id=${LOJA_ID}&session_id=${SESSION_ID}`).then(r => r.json());
+    renderOrders(orders);
+  } catch {}
+}
+
+function renderOrders(orders) {
+  const loadEl  = document.getElementById('orders-loading');
+  const emptyEl = document.getElementById('orders-empty');
+  const listEl  = document.getElementById('orders-list');
+  const billWrap = document.getElementById('bill-btn-wrap');
+  loadEl.classList.add('hidden');
+
+  if (!orders || !orders.length) {
+    emptyEl.classList.remove('hidden');
+    listEl.innerHTML = '';
+    billWrap.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  billWrap.classList.remove('hidden');
+
+  const sMap = { pending:{l:'Pendente',c:'badge-pending'}, confirmed:{l:'Confirmado',c:'badge-confirmed'}, preparing:{l:'Em Preparo',c:'badge-preparing'}, delivered:{l:'Entregue',c:'badge-delivered'} };
+
+  let grandTotal = 0;
+  listEl.innerHTML = orders.map(o => {
+    grandTotal += +o.total || 0;
+    const s = sMap[o.status] || { l:o.status, c:'badge-pending' };
+    const items = (o.items||[]).map(it =>
+      `<li class="text-xs text-gray-500">${it.quantity||1}x ${it.name}</li>`
+    ).join('');
+    const time = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+    const isPix = o.payment_method === 'pix';
+    return `
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-gray-800">${o.daily_code || ('#'+o.order_number)}</span>
+          <span class="badge ${s.c}">${s.l}</span>
+        </div>
+        <span class="text-xs text-gray-400">${time}</span>
+      </div>
+      <ul class="mb-2 space-y-0.5">${items}</ul>
+      <div class="flex items-center justify-between mt-3">
+        <span class="font-bold text-gray-800">R$ ${(+o.total).toFixed(2).replace('.',',')}</span>
+        ${isPix && o.status !== 'delivered' ? `<button onclick="openPixForOrder('${o.id}', ${o.total})"
+          class="btn-sm bg-indigo-500 text-white text-xs"><i class="fa-solid fa-qrcode mr-1"></i>Ver PIX</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Atualiza total no botão de conta
+  document.getElementById('bill-btn').innerHTML =
+    `<i class="fa-solid fa-file-invoice-dollar mr-2"></i>Pedir a Conta · R$ ${grandTotal.toFixed(2).replace('.',',')}`;
+}
+
+// ══════════════════════════════════════════
+// CARDÁPIO
+// ══════════════════════════════════════════
+async function loadCatalog() {
+  try {
+    const res  = await fetch(`/api/catalog/${LOJA_ID}`);
+    catalog    = await res.json();
+    products   = [];
+    const catMap = {};
+    for (const cat of catalog) {
+      for (const item of (cat.items || [])) {
+        if (item.active === false) continue;
+        products.push({ ...item, category_id: cat.id || cat.name, category_name: cat.name });
+        catMap[cat.id || cat.name] = cat.name;
+      }
+    }
+    categories = Object.entries(catMap).map(([id,name]) => ({ id, name }));
+    renderCats();
+    renderCardapio();
+  } catch {
+    document.getElementById('card-products').innerHTML =
+      '<p class="col-span-2 text-center text-red-500 py-8 text-sm">Erro ao carregar cardápio.</p>';
+  }
+}
+
+function renderCats() {
+  const el = document.getElementById('card-cats');
+  el.innerHTML = `<button onclick="filterByCat(null)"
+    class="whitespace-nowrap px-3 py-1 rounded-full border text-xs font-medium transition ${!activeCat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200'}">
+    Todos</button>` +
+  categories.map(c =>
+    `<button onclick="filterByCat('${c.id}')"
+      class="whitespace-nowrap px-3 py-1 rounded-full border text-xs font-medium transition ${activeCat===c.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200'}">
+      ${c.name}</button>`
+  ).join('');
+}
+
+function filterByCat(id) { activeCat = id; renderCats(); renderCardapio(); }
+function filterCardapio() { renderCardapio(); }
+
+function renderCardapio() {
+  const q = (document.getElementById('card-search')?.value || '').toLowerCase();
+  const list = products.filter(p =>
+    (!activeCat || p.category_id === activeCat) &&
+    (!q || p.name.toLowerCase().includes(q))
+  );
+  const el = document.getElementById('card-products');
+  if (!list.length) {
+    el.innerHTML = '<p class="col-span-2 text-center text-gray-400 py-8 text-sm">Nenhum produto encontrado.</p>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const price = +p.price > 0 ? `R$ ${(+p.price).toFixed(2).replace('.', ',')}` : 'Consulte';
+    const inCart = cart.filter(i => i.product.id === p.id).reduce((s,i) => s+i.qty, 0);
+    return `
+    <div class="product-card bg-white rounded-2xl shadow-sm border border-gray-100 p-3" onclick="addToCart('${p.id}')">
+      ${p.image_base64 ? `<img src="${p.image_base64}" class="w-full h-24 object-cover rounded-xl mb-2">` : ''}
+      <p class="font-semibold text-gray-800 text-sm leading-tight">${p.name}</p>
+      <p class="text-xs text-gray-400 mt-0.5 line-clamp-2">${p.description || ''}</p>
+      <div class="flex items-center justify-between mt-2">
+        <p class="text-indigo-600 font-bold text-sm">${price}</p>
+        ${inCart ? `<span class="bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-2">${inCart}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+// CARRINHO
+// ══════════════════════════════════════════
+function addToCart(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  const ex = cart.find(i => i.product.id === productId);
+  if (ex) ex.qty++; else cart.push({ product: p, qty: 1 });
+  updateCartUI();
+  showToast(`${p.name} adicionado!`);
+  renderCardapio();
+}
+
+function cartChangeQty(idx, delta) {
+  cart[idx].qty = Math.max(1, cart[idx].qty + delta);
+  updateCartUI();
+}
+function cartRemove(idx) { cart.splice(idx, 1); updateCartUI(); renderCardapio(); }
+
+function updateCartUI() {
+  const total = cart.reduce((s,i) => s + (+i.product.price||0)*i.qty, 0);
+  const count = cart.reduce((s,i) => s+i.qty, 0);
+
+  // Badge
+  const badge = document.getElementById('cart-badge');
+  badge.textContent = count;
+  badge.classList.toggle('hidden', count === 0);
+
+  // Cart tab
+  const listEl    = document.getElementById('cart-list');
+  const emptyEl   = document.getElementById('cart-empty');
+  const summaryEl = document.getElementById('cart-summary');
+
+  if (!cart.length) {
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    summaryEl.classList.add('hidden');
+    return;
+  }
+  emptyEl.classList.add('hidden');
+  summaryEl.classList.remove('hidden');
+  document.getElementById('cart-total').textContent = `R$ ${total.toFixed(2).replace('.',',')}`;
+
+  listEl.innerHTML = cart.map((item, idx) => `
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3">
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-gray-800 text-sm truncate">${item.product.name}</p>
+        <p class="text-xs text-indigo-600">R$ ${((+item.product.price||0)*item.qty).toFixed(2).replace('.',',')}</p>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button class="qty-btn" onclick="cartChangeQty(${idx},-1)">−</button>
+        <span class="text-sm font-bold w-5 text-center">${item.qty}</span>
+        <button class="qty-btn" onclick="cartChangeQty(${idx},+1)">+</button>
+        <button class="qty-btn border-red-200 text-red-400" onclick="cartRemove(${idx})">
+          <i class="fa-solid fa-trash text-xs"></i>
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function submitOrder() {
+  if (!cart.length) { showToast('Carrinho vazio.'); return; }
+  const payment = document.getElementById('cart-payment').value;
+  const notes   = document.getElementById('cart-notes').value.trim();
+  const items   = cart.map(i => ({
+    id: i.product.id, name: i.product.name,
+    price: +i.product.price || 0, quantity: i.qty,
+    selected_options: [],
+  }));
+
+  try {
+    const res = await fetch('/delivery/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        establishment_id: LOJA_ID,
+        customer_name:    customerName,
+        items,
+        delivery_type:    'pickup',
+        table_id:         MESA_ID,
+        payment_method:   payment,
+        notes:            notes || undefined,
+        source:           'mesa',
+        session_id:       SESSION_ID,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao criar pedido.');
+
+    cart = [];
+    updateCartUI();
+    renderCardapio();
+    document.getElementById('cart-notes').value = '';
+    showToast('Pedido enviado!');
+    switchTab('pedidos');
+
+    if (payment === 'pix' && data.id) {
+      setTimeout(() => openPixForOrder(data.id, data.total || 0), 500);
+    }
+  } catch(e) {
+    showToast(e.message);
+  }
+}
+
+// ══════════════════════════════════════════
+// PEDIR CONTA
+// ══════════════════════════════════════════
+async function requestBill() {
+  const btn = document.getElementById('bill-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Aguarde…';
+  try {
+    const res = await fetch(`/delivery/public/tables/${MESA_ID}/request-bill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ establishment_id: LOJA_ID, customer_name: customerName }),
+    });
+    if (!res.ok) throw new Error('Erro');
+    tableData.status = 'conta_solicitada';
+    updateStatusBadge();
+    showToast('Conta solicitada! O atendente virá em breve.');
+    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Conta Solicitada';
+    btn.className = btn.className.replace('btn-danger', 'btn-main') + ' opacity-60';
+    btn.disabled = true;
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-file-invoice-dollar mr-2"></i>Pedir a Conta';
+    showToast('Erro ao solicitar. Tente novamente.');
+  }
+}
+
+// ══════════════════════════════════════════
+// PIX
+// ══════════════════════════════════════════
+async function openPixForOrder(orderId, total) {
+  pixCodeStr = '';
+  document.getElementById('pix-loading').classList.remove('hidden');
+  document.getElementById('pix-content').classList.add('hidden');
+  document.getElementById('pix-err').classList.add('hidden');
+  document.getElementById('pix-val').textContent = `R$ ${(+total).toFixed(2).replace('.',',')}`;
+  document.getElementById('modal-pix').classList.remove('hidden');
+
+  try {
+    const res = await fetch('/delivery/public/pix-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId, establishment_id: LOJA_ID }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'PIX não configurado.');
+    pixCodeStr = data.code || '';
+    document.getElementById('pix-qr').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixCodeStr)}`;
+    document.getElementById('pix-code').textContent = pixCodeStr;
+    document.getElementById('pix-loading').classList.add('hidden');
+    document.getElementById('pix-content').classList.remove('hidden');
+  } catch(e) {
+    document.getElementById('pix-loading').classList.add('hidden');
+    const errEl = document.getElementById('pix-err');
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+function copyPix() {
+  if (!pixCodeStr) return;
+  navigator.clipboard.writeText(pixCodeStr)
+    .then(() => showToast('Código PIX copiado!'))
+    .catch(() => showToast('Não foi possível copiar.'));
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,2980 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Carregando Loja...</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root { --accent: #6366f1; }
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        .header-bg { background: linear-gradient(to bottom, color-mix(in srgb, var(--accent) 80%, #0f172a) 0%, #0f172a 100%); }
+        .item-card { background: #1e293b; border: 1px solid #334155; transition: transform 0.2s; }
+        .item-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+        .option-item input:checked ~ label { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+
+        /* Top bar */
+        #top-bar { position:fixed; top:0; left:0; right:0; z-index:40; height:48px;
+                   background:rgba(15,23,42,.97); backdrop-filter:blur(8px);
+                   border-bottom:1px solid #1e293b; display:flex; align-items:center; padding:0 12px; gap:8px; }
+
+        /* Category nav */
+        #cat-nav { position:sticky; top:48px; z-index:30;
+                   background:rgba(15,23,42,.97); backdrop-filter:blur(8px);
+                   border-bottom:1px solid rgba(30,41,59,.6); }
+        #cat-nav-list { display:flex; gap:8px; overflow-x:auto; padding:10px 16px;
+                        scrollbar-width:none; -ms-overflow-style:none; max-width:768px; margin:0 auto; }
+        #cat-nav-list::-webkit-scrollbar { display:none; }
+        .cat-pill { flex-shrink:0; padding:5px 14px; border-radius:20px; font-size:.78rem;
+                    font-weight:700; border:1px solid #334155; background:transparent;
+                    color:#94a3b8; cursor:pointer; transition:all .2s; white-space:nowrap; }
+        .cat-pill:hover, .cat-pill.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+        /* Destaques horizontal scroll */
+        #destaques-list { display:flex; gap:12px; overflow-x:auto;
+                          padding-bottom:4px; scrollbar-width:none; -ms-overflow-style:none; }
+        #destaques-list::-webkit-scrollbar { display:none; }
+        .dest-card { flex-shrink:0; width:140px; background:#1e293b; border:1px solid #334155;
+                     border-radius:14px; overflow:hidden; cursor:pointer; transition:transform .2s,border-color .2s; }
+        .dest-card:hover { transform:translateY(-3px); border-color:var(--accent); }
+        .dest-card img { width:100%; height:100px; object-fit:cover; }
+        .dest-card-img-placeholder { width:100%; height:100px; display:flex; align-items:center;
+                                      justify-content:center; font-size:2rem; background:#0f172a; }
+
+        /* Banner carousel */
+        #banner-track { display:flex; }
+        #banner-track > div { flex-shrink:0; width:100%; }
+        #banner-track img { width:100%; height:180px; object-fit:cover; display:block; }
+        @media (min-width:640px) { #banner-track img { height:240px; } }
+        .banner-dot { width:7px; height:7px; border-radius:50%; background:#334155;
+                      border:none; cursor:pointer; padding:0; transition:background .2s; }
+        .banner-dot.active { background:var(--accent); }
+
+        /* Section anchor offset for sticky nav */
+        .cat-section { scroll-margin-top: 100px; }
+
+        /* Promo modal slide-up */
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp .3s ease-out; }
+
+        /* Badge promoção no card */
+        .badge-promo { display:inline-flex; align-items:center; gap:3px; background:rgba(239,68,68,.15);
+                       color:#f87171; font-size:10px; font-weight:700; padding:2px 7px;
+                       border-radius:6px; border:1px solid rgba(239,68,68,.3); text-transform:uppercase; }
+
+        /* Card de promoção no modal */
+        .promo-item-card { display:flex; gap:12px; align-items:center; background:#1e293b;
+                           border:1px solid #334155; border-radius:14px; padding:10px 12px;
+                           cursor:pointer; transition:border-color .2s, background .2s; }
+        .promo-item-card:hover { border-color:var(--accent); background:#0f172a; }
+        .promo-item-img { width:64px; height:64px; border-radius:10px; object-fit:cover; flex-shrink:0; }
+        .promo-item-img-placeholder { width:64px; height:64px; border-radius:10px; background:#0f172a;
+                                       display:flex; align-items:center; justify-content:center;
+                                       font-size:1.6rem; flex-shrink:0; }
+    </style>
+  <script src="https://sdk.mercadopago.com/js/v2" defer></script>
+</head>
+<body class="min-h-screen flex flex-col pb-28 pt-12">
+
+    <!-- ── TOP BAR FIXO ─────────────────────────────────────── -->
+    <div id="top-bar">
+        <!-- Esquerda: Marketplace -->
+        <a href="/marketplace" class="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors shrink-0">
+            <i class="fa fa-store text-sm"></i>
+            <span class="hidden sm:inline text-xs font-bold tracking-wide">Marketplace</span>
+        </a>
+        <!-- Centro: nome / logo da loja -->
+        <div class="flex-1 flex justify-center min-w-0">
+            <div class="flex items-center gap-2 max-w-[200px]">
+                <div id="topbar-logo" class="w-7 h-7 rounded-full bg-slate-800 overflow-hidden flex items-center justify-center text-[10px] font-black text-slate-400 shrink-0"></div>
+                <span id="topbar-name" class="text-white text-sm font-bold truncate"></span>
+            </div>
+        </div>
+        <!-- Direita: conta -->
+        <a id="topbar-account" href="/portal" class="shrink-0 flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-bold transition-all">
+            <i class="fa fa-user-circle text-sm"></i>
+            <span class="hidden sm:inline">Entrar</span>
+        </a>
+    </div>
+
+    <!-- ── HERO / BRANDING DA LOJA ──────────────────────────── -->
+    <header class="header-bg pt-10 pb-7 px-4 text-center shadow-lg relative">
+        <div id="store-logo" class="w-24 h-24 mx-auto bg-slate-900 rounded-full border-4 border-slate-900/80 shadow-2xl overflow-hidden flex items-center justify-center text-3xl font-bold text-slate-500 mb-4">
+            <i class="fa fa-store"></i>
+        </div>
+        <h1 id="store-name" class="text-2xl font-bold text-white mb-1">...</h1>
+        <p id="store-desc" class="text-sm text-slate-300 mb-4 max-w-md mx-auto line-clamp-2"></p>
+        <div id="store-social" class="flex justify-center gap-5 text-2xl mb-1"></div>
+    </header>
+
+    <!-- ── BANNER ROTATIVO ──────────────────────────────────── -->
+    <div id="banner-carousel" class="hidden max-w-3xl mx-auto w-full px-4 pt-4">
+        <div class="relative rounded-2xl overflow-hidden border border-slate-800">
+            <div id="banner-track"></div>
+            <button onclick="bannerNav(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-all">
+                <i class="fa fa-chevron-left text-xs"></i>
+            </button>
+            <button onclick="bannerNav(1)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition-all">
+                <i class="fa fa-chevron-right text-xs"></i>
+            </button>
+            <div id="banner-dots" class="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5"></div>
+        </div>
+    </div>
+
+    <!-- ── PAINEL DE INFORMAÇÕES (horários, delivery) ───────── -->
+    <div id="store-info-panel" class="hidden max-w-3xl w-full mx-auto px-4 pt-4 space-y-3"></div>
+
+    <!-- ── NAVEGAÇÃO POR CATEGORIAS ─────────────────────────── -->
+    <div id="cat-nav" class="hidden">
+        <div id="cat-nav-list"></div>
+    </div>
+
+    <!-- ── DESTAQUES / MAIS PEDIDOS ─────────────────────────── -->
+    <div id="destaques-section" class="hidden max-w-3xl mx-auto w-full px-4 pt-6 pb-2">
+        <h2 class="text-white font-bold text-base mb-3">🔥 Mais Pedidos</h2>
+        <div id="destaques-list"></div>
+    </div>
+
+    <!-- ── CATÁLOGO PRINCIPAL ────────────────────────────────── -->
+    <main class="flex-1 max-w-3xl w-full mx-auto p-4" id="catalog-container">
+        <div class="text-center py-20 text-slate-500">
+            <i class="fa fa-spinner fa-spin text-3xl mb-4"></i>
+            <p>Carregando catálogo...</p>
+        </div>
+    </main>
+
+    <!-- ── SEÇÃO DE PLANOS (Academia e similares) ─────────────── -->
+    <section id="gym-plans-section" class="hidden max-w-3xl w-full mx-auto px-4 pb-8">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="h-px flex-1 bg-slate-800"></div>
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-widest">💳 Planos & Assinaturas</h2>
+        <div class="h-px flex-1 bg-slate-800"></div>
+      </div>
+      <div id="gym-plans-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- Modal: Assinar Plano -->
+    <div id="modal-subscribe" class="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center hidden" onclick="if(event.target===this)closeSubscribeModal()">
+      <div class="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl w-full max-w-md p-6">
+        <h3 class="font-bold text-lg mb-1" id="subscribe-plan-title"></h3>
+        <p class="text-xs text-slate-400 mb-4" id="subscribe-plan-desc"></p>
+        <div class="bg-slate-800 rounded-xl p-4 mb-4 space-y-1 text-sm">
+          <div class="flex justify-between"><span class="text-slate-400">Valor</span><span class="font-bold text-[var(--accent)]" id="subscribe-plan-price"></span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Ciclo</span><span id="subscribe-plan-cycle"></span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Início</span><span id="subscribe-plan-start"></span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Vencimento</span><span id="subscribe-plan-expiry"></span></div>
+        </div>
+        <div id="subscribe-login-warn" class="hidden mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300">
+          <i class="fa fa-triangle-exclamation mr-1"></i>
+          Você precisa estar logado para assinar. <a id="subscribe-login-link" href="#" class="font-bold underline">Entrar / Criar conta</a>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="closeSubscribeModal()" class="flex-1 py-3 rounded-xl border border-slate-600 text-slate-300 text-sm font-semibold hover:bg-slate-800 transition-colors">Cancelar</button>
+          <button id="subscribe-confirm-btn" onclick="confirmSubscribe()" class="flex-1 py-3 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+            <i class="fa fa-check mr-1"></i>Confirmar Assinatura
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BARRA FLUTUANTE (CARRINHO) -->
+    <div id="cart-bar" class="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] transform translate-y-full transition-transform duration-300 z-50">
+        <div class="max-w-3xl mx-auto flex items-center justify-between p-3 gap-3">
+            <!-- Clique na área esquerda abre o drawer do carrinho -->
+            <button onclick="openCartDrawer()" class="flex-1 flex items-center gap-3 min-w-0">
+                <div class="relative shrink-0">
+                    <i class="fa fa-shopping-bag text-xl" style="color:var(--accent)"></i>
+                    <span id="cart-badge" class="absolute -top-2 -right-2 bg-[var(--accent)] text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center">0</span>
+                </div>
+                <div class="text-left min-w-0">
+                    <p class="text-xs text-slate-400 truncate" id="cart-summary">Nenhum item</p>
+                    <p class="text-base font-black text-emerald-400" id="cart-total-price">R$ 0,00</p>
+                </div>
+            </button>
+            <button onclick="goToCheckout()" class="shrink-0 bg-[var(--accent)] hover:opacity-90 text-white font-bold py-3 px-5 rounded-xl shadow-lg flex items-center gap-2 text-sm">
+                <i class="fa fa-lock"></i> Finalizar
+            </button>
+        </div>
+    </div>
+
+    <!-- DRAWER DO CARRINHO -->
+    <div id="cart-drawer-overlay" class="fixed inset-0 bg-black/60 z-[90] hidden" onclick="closeCartDrawer()"></div>
+    <div id="cart-drawer" class="fixed top-0 right-0 h-full w-full max-w-sm bg-slate-900 border-l border-slate-800 shadow-2xl z-[95] flex flex-col transform translate-x-full transition-transform duration-300">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa fa-shopping-bag" style="color:var(--accent)"></i>
+                <h3 class="font-bold text-white">Meu Carrinho</h3>
+                <span id="drawer-badge" class="bg-[var(--accent)]/20 text-[var(--accent)] text-xs font-bold px-2 py-0.5 rounded-full">0 itens</span>
+            </div>
+            <button onclick="closeCartDrawer()" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Lista de itens -->
+        <div id="cart-drawer-items" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+
+        <!-- Resumo + botão -->
+        <div class="border-t border-slate-800 p-4 space-y-3 shrink-0 bg-slate-900">
+            <div id="cart-drawer-summary" class="space-y-1 text-sm"></div>
+            <button onclick="goToCheckout()" class="w-full bg-[var(--accent)] hover:opacity-90 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 text-base">
+                <i class="fa fa-lock"></i> Finalizar Pedido
+            </button>
+            <button onclick="clearCart()" class="w-full text-slate-500 hover:text-red-400 text-xs py-1 transition-colors">
+                <i class="fa fa-trash mr-1"></i>Limpar carrinho
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL DE UP-SELLING -->
+    <div id="upsell-modal" class="fixed inset-0 bg-black/80 z-[150] hidden items-end justify-center">
+        <div class="bg-slate-900 rounded-t-3xl w-full max-w-lg shadow-2xl border-t border-slate-800 pb-safe">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-white text-base">Vai querer mais alguma coisa? 🤩</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Sugestões especiais para complementar seu pedido</p>
+                </div>
+                <button onclick="skipUpsell()" class="text-slate-500 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div id="upsell-items" class="flex gap-3 p-4 overflow-x-auto scrollbar-hide"></div>
+            <div class="px-4 pb-4 pt-1 flex gap-3">
+                <button onclick="skipUpsell()"
+                    class="flex-1 border border-slate-700 text-slate-400 hover:text-white font-semibold py-3 rounded-xl text-sm transition-colors">
+                    Não, obrigado
+                </button>
+                <button onclick="confirmUpsell()"
+                    class="flex-1 bg-[var(--accent)] hover:opacity-90 text-white font-bold py-3 rounded-xl text-sm transition-opacity">
+                    <i class="fa fa-shopping-bag mr-1"></i> Adicionar e Finalizar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE PROMOÇÕES -->
+    <div id="promo-modal" class="fixed inset-0 bg-black/85 z-[300] hidden items-end justify-center" onclick="closePromoModal(event)">
+        <div class="bg-slate-900 rounded-t-3xl w-full max-w-lg shadow-2xl border-t border-slate-700 animate-slide-up" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-red-500 text-lg">🔥</span>
+                    <h3 class="font-bold text-white text-base">Promoções Imperdíveis</h3>
+                </div>
+                <button onclick="closePromoModal()" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            <p class="text-xs text-slate-400 px-5 pt-2">Aproveite nossas ofertas especiais de hoje!</p>
+            <div id="promo-modal-list" class="px-4 py-3 space-y-3 max-h-[60vh] overflow-y-auto"></div>
+            <div class="p-4 border-t border-slate-800">
+                <button onclick="closePromoModal()" class="w-full py-2.5 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold hover:bg-slate-700 transition-colors">Ver cardápio completo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE OPCIONAIS (DELIVERY) -->
+    <div id="options-modal" class="fixed inset-0 bg-black/80 z-[200] hidden items-start justify-center p-4 overflow-y-auto">
+        <div class="bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-800 my-6">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 rounded-t-2xl">
+                <h3 id="options-modal-title" class="font-bold text-white">Personalizar Item</h3>
+                <button onclick="closeOptionsModal()" class="text-slate-400 hover:text-white"><i class="fa fa-times"></i></button>
+            </div>
+            <div id="options-modal-body" class="p-4 space-y-5"></div>
+            <div class="p-4 border-t border-slate-800">
+                <div class="flex items-center gap-3 mb-3">
+                    <button onclick="changeQty(-1)" class="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center font-bold text-lg">−</button>
+                    <span id="item-qty-display" class="text-white font-bold text-lg w-6 text-center">1</span>
+                    <button onclick="changeQty(1)" class="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 text-white flex items-center justify-center font-bold text-lg">+</button>
+                    <div class="flex-1 text-right">
+                        <span class="text-xs text-slate-400">Subtotal</span>
+                        <p id="item-options-price" class="text-emerald-400 font-black text-lg">R$ 0,00</p>
+                    </div>
+                </div>
+                <button onclick="addToCart()" class="w-full bg-[var(--accent)] hover:opacity-90 text-white font-bold py-3 rounded-xl transition-opacity">
+                    Adicionar ao pedido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CHECKOUT -->
+    <div id="checkout-modal" class="fixed inset-0 bg-black/80 z-[100] hidden items-start justify-center p-4 overflow-y-auto">
+        <div class="bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl border border-slate-800 my-6">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 rounded-t-2xl">
+                <h3 class="font-bold text-white">Finalizar Pedido</h3>
+                <button onclick="closeCheckout()" class="text-slate-400 hover:text-white"><i class="fa fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-6" id="checkout-content"></div>
+        </div>
+    </div>
+
+<script>
+// ── Estado global ──────────────────────────────────────────────
+let storeData = null;
+let deliveryConfig = null;   // só para lojas de delivery
+let isDelivery = false;
+
+/**
+ * Verifica se a loja está aberta no momento:
+ *  1. Toggle manual settings.is_open deve ser != false
+ *  2. Se houver business_hours, o horário atual deve estar dentro do intervalo
+ */
+function isStoreCurrentlyOpen() {
+    if (!storeData) return true;
+    // Toggle manual
+    if (storeData.settings?.is_open === false) return false;
+    // Horários definidos em deliveryConfig
+    const hours = deliveryConfig?.business_hours || [];
+    if (!hours.length) return true;
+    const todayIdx = new Date().getDay();
+    const today = hours.find(h => h.day_of_week === todayIdx);
+    if (!today) return true;
+    if (today.is_closed) return false;
+    const now  = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const openMin  = timeToMin(today.open_time);
+    const closeMin = timeToMin(today.close_time, true);
+    return nowMin >= openMin && nowMin <= closeMin;
+}
+
+function getStoreClosedMessage() {
+    if (!storeData) return 'Loja indisponível no momento.';
+    if (storeData.settings?.is_open === false) return 'A loja está fechada no momento.';
+    const hours = deliveryConfig?.business_hours || [];
+    const todayIdx = new Date().getDay();
+    const today = hours.find(h => h.day_of_week === todayIdx);
+    if (today?.is_closed) return 'A loja está fechada hoje.';
+    if (today) {
+        const now  = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        if (nowMin < timeToMin(today.open_time)) return `A loja ainda não abriu. Abrimos às ${today.open_time?.slice(0,5)}.`;
+        if (nowMin > timeToMin(today.close_time, true)) return `A loja já encerrou. Voltamos amanhã!`;
+    }
+    return 'A loja está fechada no momento.';
+}
+
+// Carrinho: array de { item, quantity, selected_options[] }
+let cart = [];
+
+// Item sendo configurado no modal de opcionais
+let pendingItem = null;
+let pendingQty = 1;
+let pendingOptions = {};     // { option_id: [{ id, name, additional_price }] }
+let pendingOptionGroups = []; // grupos vindos da API
+
+const slug = window.location.pathname.replace(/^\/|\/$/g, '');
+
+// ── Utilitários ────────────────────────────────────────────────
+function fmtMoney(v) { return 'R$ ' + (+v || 0).toFixed(2).replace('.', ','); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+// "00:00" como fechamento = 1440 min (meia-noite = fim do dia)
+function timeToMin(t, isClose = false) {
+    if (!t) return isClose ? 1440 : 0;
+    const [h, m] = t.split(':').map(Number);
+    const total = h * 60 + (m || 0);
+    return isClose && total === 0 ? 1440 : total;
+}
+
+// ── Banner carousel ────────────────────────────────────────────
+let _bannerIdx = 0;
+let _bannerTotal = 0;
+let _bannerTimer = null;
+
+function bannerNav(dir) {
+    _bannerIdx = (_bannerIdx + dir + _bannerTotal) % _bannerTotal;
+    bannerGoto(_bannerIdx);
+}
+
+function bannerGoto(idx) {
+    _bannerIdx = idx;
+    document.getElementById('banner-track').style.transform = `translateX(-${idx * 100}%)`;
+    document.querySelectorAll('.banner-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+}
+
+function initBanners(banners) {
+    if (!banners?.length) return;
+    _bannerTotal = banners.length;
+    const track = document.getElementById('banner-track');
+    const dots  = document.getElementById('banner-dots');
+    track.innerHTML = banners.map(src =>
+        `<div style="flex-shrink:0;width:100%"><img src="${esc(src)}" alt="Banner" loading="lazy"></div>`
+    ).join('');
+    if (banners.length > 1) {
+        dots.innerHTML = banners.map((_, i) =>
+            `<button class="banner-dot${i===0?' active':''}" onclick="bannerGoto(${i})"></button>`
+        ).join('');
+        _bannerTimer = setInterval(() => bannerNav(1), 4000);
+    }
+    document.getElementById('banner-carousel').classList.remove('hidden');
+}
+
+// ── Navegação de categorias ────────────────────────────────────
+function initCatNav(categories) {
+    if (categories.length < 2) return;
+    const list = document.getElementById('cat-nav-list');
+    list.innerHTML = categories.map((cat, i) =>
+        `<button class="cat-pill${i===0?' active':''}" data-cat-idx="${i}"
+                 onclick="scrollToCategory('cat-${i}', this)">${esc(cat.name)}</button>`
+    ).join('');
+    document.getElementById('cat-nav').classList.remove('hidden');
+
+    // Destaca pill conforme scroll
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+            if (e.isIntersecting) {
+                const idx = e.target.dataset.catIdx;
+                document.querySelectorAll('.cat-pill').forEach(p =>
+                    p.classList.toggle('active', p.dataset.catIdx === idx)
+                );
+            }
+        });
+    }, { rootMargin: '-50% 0px -45% 0px' });
+
+    categories.forEach((_, i) => {
+        const el = document.getElementById(`cat-${i}`);
+        if (el) { el.dataset.catIdx = String(i); observer.observe(el); }
+    });
+}
+
+function scrollToCategory(id, pill) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+    pill?.classList.add('active');
+}
+
+// ── Destaques ──────────────────────────────────────────────────
+function renderDestaques(categories) {
+    // Coleta itens com imagem de todas as categorias (máx 6)
+    const featured = [];
+    for (const cat of categories) {
+        for (const item of (cat.items || [])) {
+            if (item.image_base64 && featured.length < 6) featured.push(item);
+        }
+        if (featured.length >= 6) break;
+    }
+    if (!featured.length) return;
+
+    const list = document.getElementById('destaques-list');
+    list.innerHTML = featured.map(item => {
+        const enc = encodeURIComponent(JSON.stringify(item));
+        return `
+        <div class="dest-card" onclick="selectItem('${enc}')">
+            <img src="${item.image_base64}" alt="${esc(item.name)}" loading="lazy">
+            <div style="padding:8px 10px">
+                <p style="font-weight:700;font-size:.8rem;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.name)}</p>
+                <p style="font-weight:900;font-size:.85rem;color:var(--accent);margin-top:2px">${fmtMoney(item.price)}</p>
+            </div>
+        </div>`;
+    }).join('');
+    document.getElementById('destaques-section').classList.remove('hidden');
+}
+
+// ── Pop-up de Promoções ────────────────────────────────────────
+function showPromoModal(categories) {
+    const promos = [];
+    for (const cat of categories) {
+        for (const item of (cat.items || [])) {
+            if (item.settings?.is_promo === true) promos.push(item);
+        }
+    }
+    if (!promos.length) return;
+
+    const list = document.getElementById('promo-modal-list');
+    list.innerHTML = promos.map(item => {
+        const enc = encodeURIComponent(JSON.stringify(item));
+        const imgHtml = item.image_base64
+            ? `<img src="${item.image_base64}" class="promo-item-img" alt="${esc(item.name)}">`
+            : `<div class="promo-item-img-placeholder">🔥</div>`;
+        const hasAddons = (item.addon_groups?.length || item.options?.length || item.variants?.length) > 0;
+        const addonBadge = hasAddons ? `<span class="text-[10px] text-slate-400 mt-0.5"><i class="fa fa-plus-circle mr-1"></i>Personalizável</span>` : '';
+        return `
+        <div class="promo-item-card" onclick="selectPromoItem('${enc}')">
+            ${imgHtml}
+            <div class="flex-1 min-w-0">
+                <p class="font-bold text-white text-sm truncate">${esc(item.name)}</p>
+                ${item.description ? `<p class="text-xs text-slate-400 line-clamp-1 mt-0.5">${esc(item.description)}</p>` : ''}
+                ${addonBadge}
+            </div>
+            <div class="text-right flex-shrink-0">
+                <p class="font-black text-[var(--accent)] text-base">${fmtMoney(item.price)}</p>
+                <span class="badge-promo">🔥 promo</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    const modal = document.getElementById('promo-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closePromoModal(e) {
+    const modal = document.getElementById('promo-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function selectPromoItem(encodedItem) {
+    closePromoModal();
+    // Pequeno delay para o modal fechar antes de abrir o de opcionais
+    setTimeout(() => selectItem(encodedItem), 120);
+}
+
+// ── Chave do Google Maps (carregada na init) ───────────────────
+let _mapsKey = null; // null = não configurado → usa Leaflet
+
+// ── Inicialização ──────────────────────────────────────────────
+async function init() {
+    try {
+        const resProfile = await fetch(`/public/marketplace/${slug}`);
+        if (!resProfile.ok) {
+            const errData = await resProfile.json().catch(() => ({}));
+            const detail = errData.error ? `<p class="text-slate-500 text-xs mt-2">${errData.error} — slug: <code>${slug}</code></p>` : '';
+            document.body.innerHTML = `<div class="text-center p-10"><h1 class="text-2xl font-bold text-white">Loja não encontrada</h1><p class="text-slate-400 mt-2">Verifique o link acessado.</p>${detail}</div>`;
+            return;
+        }
+        storeData = await resProfile.json();
+        isDelivery = storeData.vertical_slug === 'delivery';
+
+        // Carrega chave do Google Maps (sem bloquear a init se falhar)
+        fetch('/public/settings').then(r => r.json()).then(s => {
+            _mapsKey = s.maps_key || null;
+            if (!_mapsKey) console.info('[AG-ON Maps] Chave do Google Maps não configurada — usando OpenStreetMap como fallback.');
+        }).catch(() => {});
+
+        const themeColor = storeData.cor_destaque || storeData.settings?.theme?.primary_color || '#6366f1';
+        document.documentElement.style.setProperty('--accent', themeColor);
+        document.title = `${storeData.name} | ${isDelivery ? 'Cardápio' : 'Catálogo'}`;
+
+        // Favicon dinâmico da loja
+        if (storeData.favicon_base64) {
+            let faviconLink = document.querySelector("link[rel~='icon']");
+            if (!faviconLink) { faviconLink = document.createElement('link'); faviconLink.rel = 'icon'; document.head.appendChild(faviconLink); }
+            faviconLink.href = storeData.favicon_base64;
+            let appleIcon = document.querySelector("link[rel='apple-touch-icon']");
+            if (!appleIcon) { appleIcon = document.createElement('link'); appleIcon.rel = 'apple-touch-icon'; document.head.appendChild(appleIcon); }
+            appleIcon.href = storeData.favicon_base64;
+        }
+
+        // ── Top bar ──
+        document.getElementById('topbar-name').textContent = storeData.name;
+        const topLogo = document.getElementById('topbar-logo');
+        if (storeData.logo_base64) topLogo.innerHTML = `<img src="${storeData.logo_base64}" class="w-full h-full object-cover">`;
+        else topLogo.textContent = storeData.name.charAt(0).toUpperCase();
+
+        // Link "Entrar" aponta para portal-cliente da loja
+        document.getElementById('topbar-account').href = `/portal-cliente?est=${storeData.id}&slug=${slug}`;
+
+        // ── Hero ──
+        document.getElementById('store-name').textContent = storeData.name;
+        document.getElementById('store-desc').textContent = storeData.description || '';
+
+        if (storeData.logo_base64) {
+            document.getElementById('store-logo').innerHTML = `<img src="${storeData.logo_base64}" class="w-full h-full object-cover">`;
+        } else if (storeData.logo_url) {
+            document.getElementById('store-logo').innerHTML = `<img src="${storeData.logo_url}" class="w-full h-full object-cover">`;
+        } else {
+            document.getElementById('store-logo').innerHTML = esc(storeData.name.charAt(0).toUpperCase());
+        }
+
+        let socialHtml = '';
+        if (storeData.whatsapp_link) socialHtml += `<a href="https://wa.me/55${storeData.whatsapp_link.replace(/\D/g,'')}" target="_blank" class="text-emerald-400 hover:scale-110 transition-transform"><i class="fa-brands fa-whatsapp"></i></a>`;
+        if (storeData.instagram_url) socialHtml += `<a href="${esc(storeData.instagram_url)}" target="_blank" class="text-pink-500 hover:scale-110 transition-transform"><i class="fa-brands fa-instagram"></i></a>`;
+        if (storeData.facebook_url) socialHtml += `<a href="${esc(storeData.facebook_url)}" target="_blank" class="text-blue-500 hover:scale-110 transition-transform"><i class="fa-brands fa-facebook"></i></a>`;
+        if (storeData.website_url) socialHtml += `<a href="${esc(storeData.website_url)}" target="_blank" class="text-slate-300 hover:scale-110 transition-transform"><i class="fa fa-globe"></i></a>`;
+        document.getElementById('store-social').innerHTML = socialHtml;
+
+        // ── Banners ──
+        const banners = storeData.settings?.banners;
+        if (banners?.length) initBanners(banners);
+
+        // Carrega catálogo e config de delivery em paralelo
+        const fetches = [fetch(`/public/catalog/${storeData.id}`)];
+        if (isDelivery) fetches.push(fetch(`/delivery/public-config/${storeData.id}`));
+
+        const results = await Promise.all(fetches);
+        const catalogData = await results[0].json();
+        if (isDelivery && results[1].ok) deliveryConfig = await results[1].json();
+
+        renderStoreInfo();
+        renderDestaques(catalogData);
+        renderCatalog(catalogData);
+        initCatNav(catalogData);
+        showPromoModal(catalogData);
+
+        // Academia: carrega planos de assinatura
+        if (storeData.vertical_slug === 'academia' || storeData.active_features?.includes('clientes')) {
+          loadGymPlans();
+        }
+
+        // Verifica se veio de um portal com pedido para repetir (prioridade sobre cache)
+        const repeatRaw = sessionStorage.getItem('ag_repeat_order');
+        if (repeatRaw) {
+            sessionStorage.removeItem('ag_repeat_order');
+            try {
+                const repeatData = JSON.parse(repeatRaw);
+                if (repeatData.establishment_id === storeData.id && repeatData.items?.length) {
+                    loadRepeatOrder(repeatData.items, true);
+                    return;
+                }
+            } catch {}
+        }
+
+        cartRestore();
+        if (isDelivery && !cart.length) showRepeatBanner();
+    } catch (err) {
+        console.error(err);
+        document.getElementById('catalog-container').innerHTML = `<div class="text-center p-10 text-red-400"><i class="fa fa-exclamation-triangle text-3xl mb-3"></i><p>Erro ao carregar catálogo.</p></div>`;
+    }
+}
+
+// ── Informações da Loja ────────────────────────────────────────
+function renderStoreInfo() {
+    const panel = document.getElementById('store-info-panel');
+    const cfg   = deliveryConfig || {};
+    const cards = [];
+
+    // ── Horários de funcionamento ──────────────────────────────
+    const hours = cfg.business_hours || [];
+    const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const todayIdx  = new Date().getDay();
+
+    // Toggle manual sem horários cadastrados: mostra badge simples
+    if (!hours.length && isDelivery && storeData?.settings?.is_open === false) {
+        cards.push(`
+        <div class="bg-slate-800/60 rounded-2xl p-4 flex items-center gap-2">
+            <i class="fa fa-clock text-[var(--accent)]"></i>
+            <span class="font-semibold text-white">Status</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">● Fechado</span>
+        </div>`);
+    }
+
+    if (hours.length) {
+        // Agrupa dias consecutivos com mesmo horário
+        const groups = [];
+        hours.forEach(h => {
+            const label = h.is_closed ? 'Fechado' : `${h.open_time?.slice(0,5)} – ${h.close_time?.slice(0,5)}`;
+            const last  = groups[groups.length - 1];
+            if (last && last.label === label) { last.days.push(h.day_of_week); }
+            else groups.push({ label, days: [h.day_of_week] });
+        });
+
+        const isOpenNow = isStoreCurrentlyOpen();
+
+        const statusBadge = isOpenNow
+            ? `<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">● Aberto agora</span>`
+            : `<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">● Fechado</span>`;
+
+        const rowsHtml = groups.map(g => {
+            const dayLabel = g.days.length === 1
+                ? DAY_NAMES[g.days[0]]
+                : `${DAY_NAMES[g.days[0]]} – ${DAY_NAMES[g.days[g.days.length-1]]}`;
+            const isToday = g.days.includes(todayIdx);
+            return `<div class="flex justify-between text-sm ${isToday ? 'text-white font-semibold' : 'text-slate-400'}">
+                <span>${dayLabel}</span>
+                <span class="${g.label === 'Fechado' ? 'text-red-400' : ''}">${g.label}</span>
+            </div>`;
+        }).join('');
+
+        cards.push(`
+        <div class="bg-slate-800/60 rounded-2xl overflow-hidden">
+            <button onclick="toggleInfoSection('hours-body')" class="w-full flex items-center justify-between p-4">
+                <div class="flex items-center gap-2 font-semibold text-white">
+                    <i class="fa fa-clock text-[var(--accent)]"></i> Horários
+                    <span class="ml-1">${statusBadge}</span>
+                </div>
+                <i class="fa fa-chevron-down text-slate-500 text-xs transition-transform" id="hours-chevron"></i>
+            </button>
+            <div id="hours-body" class="hidden px-4 pb-4 space-y-1">${rowsHtml}</div>
+        </div>`);
+    }
+
+    // ── Delivery info ──────────────────────────────────────────
+    if (isDelivery) {
+        const dtype     = cfg.delivery_type || 'both';
+        const minOrder  = +cfg.min_order || 0;
+        const tax       = +cfg.delivery_tax || 0;
+        const freeOver  = +cfg.free_delivery_over || 0;
+        const eta       = cfg.estimated_time || '';
+
+        // Tipos de entrega
+        const types = [];
+        if (dtype === 'both' || dtype === 'delivery') types.push(`<span class="flex items-center gap-1 text-sm text-slate-300"><i class="fa fa-motorcycle text-[var(--accent)]"></i> Entrega</span>`);
+        if (dtype === 'both' || dtype === 'pickup')   types.push(`<span class="flex items-center gap-1 text-sm text-slate-300"><i class="fa fa-store text-[var(--accent)]"></i> Retirada na loja</span>`);
+
+        // Zonas de entrega
+        const zones = cfg.zones || [];
+        const zonesHtml = zones.length
+            ? zones.map(z => `
+                <div class="flex justify-between text-sm text-slate-400 py-1 border-b border-slate-700/50 last:border-0">
+                    <span>${esc(z.name)}</span>
+                    <span class="text-slate-300">${+z.delivery_tax > 0 ? `R$ ${(+z.delivery_tax).toFixed(2).replace('.',',')}` : 'Grátis'}${z.estimated_time ? ` · ${esc(z.estimated_time)}` : ''}</span>
+                </div>`).join('')
+            : '';
+
+        const infoItems = [];
+        if (minOrder > 0) infoItems.push(`<div class="flex items-center gap-2 text-sm text-slate-300"><i class="fa fa-tag text-[var(--accent)]"></i> Pedido mínimo: <strong>R$ ${minOrder.toFixed(2).replace('.',',')}</strong></div>`);
+        if (tax > 0 && !zones.length) infoItems.push(`<div class="flex items-center gap-2 text-sm text-slate-300"><i class="fa fa-truck text-[var(--accent)]"></i> Taxa de entrega: <strong>R$ ${tax.toFixed(2).replace('.',',')}</strong></div>`);
+        if (freeOver > 0) infoItems.push(`<div class="flex items-center gap-2 text-sm text-emerald-400"><i class="fa fa-gift"></i> Frete grátis acima de R$ ${freeOver.toFixed(2).replace('.',',')}</div>`);
+        if (eta) infoItems.push(`<div class="flex items-center gap-2 text-sm text-slate-300"><i class="fa fa-hourglass-half text-[var(--accent)]"></i> Tempo estimado: <strong>${esc(eta)}</strong></div>`);
+
+        if (types.length || infoItems.length || zonesHtml) {
+            cards.push(`
+            <div class="bg-slate-800/60 rounded-2xl overflow-hidden">
+                <button onclick="toggleInfoSection('delivery-body')" class="w-full flex items-center justify-between p-4">
+                    <div class="flex items-center gap-2 font-semibold text-white">
+                        <i class="fa fa-motorcycle text-[var(--accent)]"></i> Entrega & Retirada
+                    </div>
+                    <i class="fa fa-chevron-down text-slate-500 text-xs transition-transform" id="delivery-chevron"></i>
+                </button>
+                <div id="delivery-body" class="hidden px-4 pb-4 space-y-3">
+                    ${types.length ? `<div class="flex gap-4 flex-wrap">${types.join('')}</div>` : ''}
+                    ${infoItems.join('')}
+                    ${zonesHtml ? `<div class="mt-2"><p class="text-xs text-slate-500 uppercase font-bold mb-2">Bairros / Regiões</p>${zonesHtml}</div>` : ''}
+                </div>
+            </div>`);
+        }
+    }
+
+    if (!cards.length) return;
+    panel.innerHTML = cards.join('');
+    panel.classList.remove('hidden');
+}
+
+function toggleInfoSection(id) {
+    const body    = document.getElementById(id);
+    const chevron = document.getElementById(id.replace('-body', '-chevron'));
+    const open    = body.classList.toggle('hidden');
+    if (chevron) chevron.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+// ── Renderização do catálogo ───────────────────────────────────
+function renderCatalog(categories) {
+    const container = document.getElementById('catalog-container');
+    if (!categories.length) {
+        container.innerHTML = `<div class="text-center py-20 text-slate-500"><i class="fa fa-box-open text-4xl mb-4"></i><p>Esta loja ainda não possui itens disponíveis.</p></div>`;
+        return;
+    }
+
+    let html = '';
+    categories.forEach((cat, i) => {
+        html += `
+        <div id="cat-${i}" class="cat-section mb-8">
+            <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                <span class="w-1 h-5 rounded-full inline-block" style="background:var(--accent)"></span>
+                ${esc(cat.name)}
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${cat.items.map(item => renderItemCard(item)).join('')}
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function renderItemCard(item) {
+    let media = '';
+    if (item.image_base64) {
+        media = `<div class="w-24 h-24 flex-shrink-0"><img src="${item.image_base64}" class="w-full h-full object-cover rounded-lg"></div>`;
+    }
+
+    let badge = '';
+    if (item.settings?.is_promo) badge = `<span class="badge-promo">🔥 Promo</span>`;
+    else if (item.type === 'plan') badge = `<span class="bg-yellow-500/20 text-yellow-500 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Assinatura</span>`;
+    else if (item.type === 'service') badge = `<span class="bg-blue-500/20 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase"><i class="fa fa-clock mr-1"></i>${item.duration_minutes || '--'} min</span>`;
+
+    const encodedItem = encodeURIComponent(JSON.stringify(item));
+
+    return `
+    <div onclick="selectItem('${encodedItem}')" class="item-card p-3 rounded-xl flex gap-4 cursor-pointer">
+        ${media}
+        <div class="flex-1 min-w-0 flex flex-col justify-between">
+            <div>
+                <div class="flex justify-between items-start gap-2 mb-1">
+                    <h3 class="font-bold text-white truncate">${esc(item.name)}</h3>
+                    ${badge}
+                </div>
+                <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">${esc(item.description || '')}</p>
+            </div>
+            <div class="font-black text-[var(--accent)] mt-2">
+                ${fmtMoney(item.price)}
+                ${item.type === 'plan' ? `<span class="text-[10px] text-slate-500 font-normal">/${item.recurrence === 'monthly' ? 'mês' : esc(item.recurrence)}</span>` : ''}
+            </div>
+        </div>
+    </div>`;
+}
+
+// ── Seleção de item ────────────────────────────────────────────
+async function selectItem(encodedItem) {
+    const item = JSON.parse(decodeURIComponent(encodedItem));
+
+    if (isDelivery) {
+        // Abre modal de opcionais (mesmo que não haja opcionais, permite ajustar qty)
+        pendingItem = item;
+        pendingQty = 1;
+        pendingOptions = {};
+        pendingOptionGroups = [];
+
+        document.getElementById('options-modal-title').textContent = item.name;
+        document.getElementById('item-qty-display').textContent = '1';
+        document.getElementById('options-modal-body').innerHTML = `<div class="text-center py-4 text-slate-500"><i class="fa fa-spinner fa-spin"></i></div>`;
+        document.getElementById('options-modal').classList.remove('hidden');
+        document.getElementById('options-modal').classList.add('flex');
+        updateOptionsPrice();
+
+        try {
+            // Busca product_options (sistema legado) e addon_groups já vêm no item do catálogo
+            const res = await fetch(`/delivery/options/${item.id}`);
+            const legacyGroups = res.ok ? await res.json() : [];
+
+            // addon_groups já estão normalizados no item (vindos do catálogo público)
+            // Remove duplicatas: addon_groups que o endpoint também retornou
+            const addonGroupIds = new Set((item.addon_groups || []).map((g) => g.id));
+            const legacyOnly = legacyGroups.filter((g) => !addonGroupIds.has(g.id));
+
+            const groups = [...legacyOnly, ...(item.addon_groups || [])];
+            pendingOptionGroups = groups;
+            renderOptionGroups(groups, item);
+        } catch {
+            // Fallback: usa só addon_groups do catálogo se o fetch falhar
+            const groups = item.addon_groups || [];
+            pendingOptionGroups = groups;
+            renderOptionGroups(groups, item);
+        }
+    } else {
+        // Modo catálogo simples: seleciona item direto
+        cart = [{ item, quantity: 1, selected_options: [] }];
+        updateCartBar();
+    }
+}
+
+function renderOptionGroups(groups, item) {
+    const body = document.getElementById('options-modal-body');
+    let html = '';
+
+    // Imagem + descrição do item
+    if (item.image_base64) {
+        html += `<img src="${item.image_base64}" class="w-full h-40 object-cover rounded-xl mb-2">`;
+    }
+    if (item.description) {
+        html += `<p class="text-sm text-slate-400 mb-4">${esc(item.description)}</p>`;
+    }
+
+    if (!groups.length) {
+        html += `<p class="text-sm text-slate-500 text-center py-2">Sem opcionais para este item.</p>`;
+        body.innerHTML = html;
+        updateOptionsPrice();
+        return;
+    }
+
+    groups.forEach(group => {
+        const isMulti = group.max_options > 1;
+        html += `
+        <div>
+            <div class="flex justify-between items-baseline mb-2">
+                <h4 class="font-bold text-white text-sm">${esc(group.name)}</h4>
+                <span class="text-[10px] text-slate-500 uppercase">${group.is_required ? 'Obrigatório' : 'Opcional'} · Até ${group.max_options}</span>
+            </div>
+            <div class="space-y-2 opt-group" data-group-id="${group.id}" data-max="${group.max_options}">`;
+
+        (group.items || []).forEach(optItem => {
+            html += `
+            <div class="opt-item flex items-center gap-3 bg-slate-800 rounded-xl p-3 cursor-pointer border-2 border-transparent transition-all select-none"
+                 data-item-id="${optItem.id}"
+                 data-item-name="${optItem.name.replace(/"/g, '&quot;')}"
+                 data-item-price="${optItem.additional_price}"
+                 data-group-id="${group.id}"
+                 data-max="${group.max_options}">
+                <div class="w-5 h-5 rounded-${isMulti ? 'md' : 'full'} border-2 border-slate-600 flex items-center justify-center flex-shrink-0 opt-check">
+                    <i class="fa fa-check text-[10px] hidden opt-icon" style="color:var(--accent)"></i>
+                </div>
+                <span class="flex-1 text-sm text-white">${esc(optItem.name)}</span>
+                ${+optItem.additional_price > 0 ? `<span class="text-emerald-400 text-sm font-bold">+${fmtMoney(optItem.additional_price)}</span>` : ''}
+            </div>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    body.innerHTML = html;
+
+    // Event delegation — sem onclick inline, sem risco de quebrar com nomes especiais
+    body.querySelectorAll('.opt-item').forEach(el => {
+        el.addEventListener('click', () => toggleOption(el));
+    });
+
+    updateOptionsPrice();
+}
+
+function toggleOption(el) {
+    const groupId   = el.dataset.groupId;
+    const itemId    = el.dataset.itemId;
+    const itemName  = el.dataset.itemName;
+    const price     = +el.dataset.itemPrice || 0;
+    const maxOpts   = +el.dataset.max || 1;
+
+    if (!pendingOptions[groupId]) pendingOptions[groupId] = [];
+    const group = pendingOptions[groupId];
+    const idx = group.findIndex(o => o.id === itemId);
+
+    const check = el.querySelector('.opt-check');
+    const icon  = el.querySelector('.opt-icon');
+
+    if (idx >= 0) {
+        // Desmarca
+        group.splice(idx, 1);
+        el.style.borderColor = 'transparent';
+        el.style.backgroundColor = '';
+        check.style.borderColor = '';
+        icon.classList.add('hidden');
+    } else {
+        if (maxOpts === 1) {
+            // Radio: desmarca os outros do mesmo grupo
+            document.querySelectorAll(`.opt-item[data-group-id="${groupId}"]`).forEach(other => {
+                const otherId = other.dataset.itemId;
+                pendingOptions[groupId] = pendingOptions[groupId].filter(o => o.id !== otherId);
+                other.style.borderColor = 'transparent';
+                other.style.backgroundColor = '';
+                other.querySelector('.opt-check').style.borderColor = '';
+                other.querySelector('.opt-icon').classList.add('hidden');
+            });
+            pendingOptions[groupId] = [];
+        } else if (group.length >= maxOpts) {
+            return; // limite atingido
+        }
+        pendingOptions[groupId].push({ id: itemId, name: itemName, additional_price: price });
+        el.style.borderColor = 'var(--accent)';
+        el.style.backgroundColor = 'color-mix(in srgb, var(--accent) 10%, transparent)';
+        check.style.borderColor = 'var(--accent)';
+        icon.classList.remove('hidden');
+    }
+    updateOptionsPrice();
+}
+
+function changeQty(delta) {
+    pendingQty = Math.max(1, pendingQty + delta);
+    document.getElementById('item-qty-display').textContent = pendingQty;
+    updateOptionsPrice();
+}
+
+function updateOptionsPrice() {
+    if (!pendingItem) return;
+    const extras = Object.values(pendingOptions).flat().reduce((s, o) => s + o.additional_price, 0);
+    const total = (+pendingItem.price + extras) * pendingQty;
+    document.getElementById('item-options-price').textContent = fmtMoney(total);
+}
+
+function closeOptionsModal() {
+    document.getElementById('options-modal').classList.add('hidden');
+    document.getElementById('options-modal').classList.remove('flex');
+}
+
+// ── Carrinho ───────────────────────────────────────────────────
+function cartSubtotal() {
+    return cart.reduce((acc, entry) => {
+        const extras = entry.selected_options.reduce((s, o) => s + o.additional_price, 0);
+        return acc + (+entry.item.price + extras) * entry.quantity;
+    }, 0);
+}
+
+// ── Persistência do carrinho ──────────────────────────────────
+function cartSave() {
+    if (!storeData?.id) return;
+    try {
+        localStorage.setItem(
+            `ag_cart_${storeData.id}`,
+            JSON.stringify({ cart, ts: Date.now() })
+        );
+    } catch {}
+}
+
+function cartRestore() {
+    if (!storeData?.id) return;
+    try {
+        const raw = localStorage.getItem(`ag_cart_${storeData.id}`);
+        if (!raw) return;
+        const { cart: saved, ts } = JSON.parse(raw);
+        // Expira após 2 horas
+        if (!saved?.length || Date.now() - ts > 2 * 60 * 60 * 1000) {
+            localStorage.removeItem(`ag_cart_${storeData.id}`);
+            return;
+        }
+        cart = saved;
+        updateCartBar();
+        // Mostra aviso discreto
+        const bar = document.getElementById('cart-bar');
+        if (bar) {
+            const tip = document.createElement('p');
+            tip.className = 'text-[10px] text-white/60 text-center -mt-1 mb-1';
+            tip.textContent = '🛒 Seu carrinho foi restaurado';
+            bar.prepend(tip);
+            setTimeout(() => tip.remove(), 4000);
+        }
+    } catch {}
+}
+
+function cartClear() {
+    if (!storeData?.id) return;
+    try { localStorage.removeItem(`ag_cart_${storeData.id}`); } catch {}
+}
+// ─────────────────────────────────────────────────────────────
+
+function updateCartBar() {
+    cartSave();
+    const bar = document.getElementById('cart-bar');
+    if (!cart.length) {
+        bar.classList.add('translate-y-full');
+        closeCartDrawer();
+        return;
+    }
+
+    const subtotal = cartSubtotal();
+    const totalQty = cart.reduce((s, c) => s + c.quantity, 0);
+    const label = isDelivery
+        ? `${totalQty} ${totalQty === 1 ? 'item' : 'itens'} no pedido`
+        : cart[0].item.name;
+
+    document.getElementById('cart-summary').textContent = label;
+    document.getElementById('cart-total-price').textContent = fmtMoney(subtotal);
+    document.getElementById('cart-badge').textContent = totalQty;
+
+    bar.classList.remove('translate-y-full');
+
+    // Atualiza drawer se estiver aberto
+    if (!document.getElementById('cart-drawer').classList.contains('translate-x-full')) {
+        renderCartDrawer();
+    }
+}
+
+// ── Alerta de loja fechada ─────────────────────────────────────
+function showStoreClosedAlert() {
+    const existing = document.getElementById('store-closed-alert');
+    if (existing) existing.remove();
+    const msg = getStoreClosedMessage();
+    const el = document.createElement('div');
+    el.id = 'store-closed-alert';
+    el.className = 'fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4';
+    el.innerHTML = `
+        <div class="bg-slate-900 border border-red-500/40 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+            <div class="text-4xl mb-3">🔒</div>
+            <h3 class="text-white font-bold text-lg mb-2">Loja Fechada</h3>
+            <p class="text-slate-400 text-sm mb-5">${msg}</p>
+            <button onclick="document.getElementById('store-closed-alert').remove()"
+                class="w-full py-2.5 rounded-xl bg-[var(--accent)] text-white font-bold text-sm">
+                Entendi
+            </button>
+        </div>`;
+    document.body.appendChild(el);
+}
+
+// ── Drawer do Carrinho ─────────────────────────────────────────
+function openCartDrawer() {
+    if (!cart.length) return;
+    renderCartDrawer();
+    document.getElementById('cart-drawer').classList.remove('translate-x-full');
+    document.getElementById('cart-drawer-overlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCartDrawer() {
+    document.getElementById('cart-drawer').classList.add('translate-x-full');
+    document.getElementById('cart-drawer-overlay').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+function renderCartDrawer() {
+    const totalQty = cart.reduce((s, c) => s + c.quantity, 0);
+    document.getElementById('drawer-badge').textContent = `${totalQty} ${totalQty === 1 ? 'item' : 'itens'}`;
+
+    const itemsEl = document.getElementById('cart-drawer-items');
+    const cfg = deliveryConfig || {};
+    // Taxa base (sem zona selecionada ainda — o checkout finaliza o cálculo)
+    const tax = isDelivery ? (+cfg.delivery_tax || 0) : 0;
+    const subtotal = cartSubtotal();
+    const total = subtotal + tax;
+
+    if (!cart.length) {
+        itemsEl.innerHTML = `<p class="text-slate-500 text-center py-10">Carrinho vazio</p>`;
+        document.getElementById('cart-drawer-summary').innerHTML = '';
+        return;
+    }
+
+    itemsEl.innerHTML = cart.map((entry, idx) => {
+        const addonNames = (entry.selected_options || []).map(o => o.name).filter(Boolean);
+        const linePrice = (+entry.item.price + (entry.selected_options || []).reduce((s, o) => s + o.additional_price, 0)) * entry.quantity;
+        return `
+        <div class="bg-slate-800/60 rounded-xl p-3 flex gap-3">
+            ${entry.item.image_base64
+                ? `<img src="${entry.item.image_base64}" class="w-14 h-14 rounded-lg object-cover shrink-0">`
+                : `<div class="w-14 h-14 rounded-lg bg-slate-700 flex items-center justify-center shrink-0 text-2xl text-slate-500"><i class="fa fa-burger"></i></div>`}
+            <div class="flex-1 min-w-0">
+                <p class="text-white font-semibold text-sm leading-tight">${esc(entry.item.name)}</p>
+                ${addonNames.length ? `<p class="text-slate-400 text-xs mt-0.5">${addonNames.map(n => `+ ${esc(n)}`).join(' · ')}</p>` : ''}
+                <p class="text-emerald-400 font-bold text-sm mt-1">${fmtMoney(linePrice)}</p>
+                <div class="flex items-center gap-2 mt-2">
+                    <button onclick="cartChangeQty(${idx},-1)" class="w-6 h-6 rounded-full bg-slate-700 hover:bg-red-500/40 text-white text-xs flex items-center justify-center font-bold">−</button>
+                    <span class="text-white text-sm font-bold w-5 text-center">${entry.quantity}</span>
+                    <button onclick="cartChangeQty(${idx},1)"  class="w-6 h-6 rounded-full bg-slate-700 hover:bg-emerald-500/40 text-white text-xs flex items-center justify-center font-bold">+</button>
+                    <button onclick="cartChangeQty(${idx},-999)" class="ml-auto text-slate-600 hover:text-red-400 text-xs transition-colors">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // Resumo de valores
+    let summaryHtml = `<div class="flex justify-between text-slate-400"><span>Subtotal</span><span>${fmtMoney(subtotal)}</span></div>`;
+    if (isDelivery && tax > 0) {
+        summaryHtml += `<div class="flex justify-between text-slate-400 text-xs"><span>Taxa de entrega (estimada)</span><span>${fmtMoney(tax)}</span></div>`;
+    }
+    summaryHtml += `<div class="flex justify-between font-black text-white border-t border-slate-700 pt-2 mt-1 text-base">
+        <span>Total</span><span class="text-emerald-400">${fmtMoney(total)}</span>
+    </div>`;
+    document.getElementById('cart-drawer-summary').innerHTML = summaryHtml;
+}
+
+function cartChangeQty(idx, delta) {
+    if (!cart[idx]) return;
+    if (delta <= -999) {
+        cart.splice(idx, 1);
+    } else {
+        cart[idx].quantity += delta;
+        if (cart[idx].quantity <= 0) cart.splice(idx, 1);
+    }
+    updateCartBar();
+    if (cart.length) renderCartDrawer();
+}
+
+function clearCart() {
+    if (!confirm('Limpar todos os itens do carrinho?')) return;
+    cart = [];
+    updateCartBar();
+}
+
+// ── Up-Selling ────────────────────────────────────────────────
+let upsellSelected = {}; // { product_id: { item, qty } }
+
+/** Verifica se todos os itens do carrinho têm available_24h = true */
+function cartAllItems24h() {
+    return cart.length > 0 && cart.every(e => e.item.settings?.available_24h === true);
+}
+
+function goToCheckout() {
+    if (!cart.length || !storeData) return;
+    if (isDelivery && !isStoreCurrentlyOpen()) {
+        if (!cartAllItems24h()) {
+            closeCartDrawer();
+            showStoreClosedAlert();
+            return;
+        }
+        // Todos os itens são 24h → permite retirada agendada
+    }
+    closeCartDrawer();
+    const upsellList = Array.isArray(deliveryConfig?.upsell) ? deliveryConfig.upsell : [];
+    if (isDelivery && upsellList.length > 0) {
+        openUpsellModal();
+    } else {
+        goToCheckoutDirect();
+    }
+}
+
+// Mapa id → objeto produto (evita JSON no atributo HTML)
+let _upsellItemMap = {};
+
+function openUpsellModal() {
+    const upsell = Array.isArray(deliveryConfig?.upsell) ? deliveryConfig.upsell : [];
+    if (!upsell.length) { goToCheckoutDirect(); return; }
+    upsellSelected = {};
+    _upsellItemMap = {};
+    upsell.forEach(p => { _upsellItemMap[p.id] = p; });
+    _reopenUpsell();
+}
+
+// Abre modal de opcionais para produto upsell com adicionais
+async function openOptionsModalForUpsell(item) {
+    pendingItem = item;
+    pendingQty  = 1;
+    pendingOptions = {};
+    pendingOptionGroups = [];
+    _fromUpsell = true; // sinaliza que ao confirmar deve voltar ao upsell
+
+    document.getElementById('options-modal-title').textContent = item.name;
+    document.getElementById('item-qty-display').textContent = '1';
+    document.getElementById('options-modal-body').innerHTML = `<div class="text-center py-4 text-slate-500"><i class="fa fa-spinner fa-spin"></i></div>`;
+    document.getElementById('options-modal').classList.remove('hidden');
+    document.getElementById('options-modal').classList.add('flex');
+    updateOptionsPrice();
+
+    try {
+        const res = await fetch(`/delivery/options/${item.id}`);
+        const legacyGroups = res.ok ? await res.json() : [];
+        const addonGroupIds = new Set((item.addon_groups || []).map(g => g.id));
+        const legacyOnly = legacyGroups.filter(g => !addonGroupIds.has(g.id));
+        const groups = [...legacyOnly, ...(item.addon_groups || [])];
+        pendingOptionGroups = groups;
+        renderOptionGroups(groups, item);
+    } catch {
+        pendingOptionGroups = item.addon_groups || [];
+        renderOptionGroups(pendingOptionGroups, item);
+    }
+}
+
+let _fromUpsell = false; // true quando modal de opcionais foi aberto pelo upsell
+
+function addToCart() {
+    // Valida obrigatórios
+    for (const group of pendingOptionGroups) {
+        const required = group.is_required;
+        const minNeeded = required ? Math.max(group.min_options || 0, 1) : (group.min_options || 0);
+        if (minNeeded > 0 && (pendingOptions[group.id] || []).length < minNeeded) {
+            alert(`Selecione pelo menos 1 opção em "${group.name}"`);
+            return;
+        }
+    }
+
+    const selected_options = Object.values(pendingOptions).flat();
+
+    // Adiciona ao carrinho (igual para upsell e fluxo normal)
+    const existing = cart.find(c =>
+        c.item.id === pendingItem.id &&
+        JSON.stringify(c.selected_options) === JSON.stringify(selected_options)
+    );
+    if (existing) existing.quantity += pendingQty;
+    else cart.push({ item: pendingItem, quantity: pendingQty, selected_options });
+
+    updateCartBar();
+    closeOptionsModal();
+
+    if (_fromUpsell) {
+        // Marca no mapa de selecionados e reabre upsell para escolher mais
+        _fromUpsell = false;
+        upsellSelected[pendingItem.id] = true; // marca como já adicionado
+        _reopenUpsell();
+        return;
+    }
+}
+
+function _reopenUpsell() {
+    // Reabre o modal upsell sem resetar upsellSelected
+    const upsell = Array.isArray(deliveryConfig?.upsell) ? deliveryConfig.upsell : [];
+    const container = document.getElementById('upsell-items');
+    container.innerHTML = upsell.map(p => {
+        const added = !!upsellSelected[p.id];
+        return `
+        <div class="upsell-card shrink-0 w-40 bg-slate-800 rounded-2xl overflow-hidden border-2 cursor-pointer transition-all"
+             id="upc-${p.id}"
+             style="border-color:${added ? 'var(--accent)' : 'transparent'};${added ? 'background:color-mix(in srgb,var(--accent) 10%,transparent)' : ''}">
+            ${p.image_base64
+                ? `<img src="${p.image_base64}" class="w-full h-28 object-cover">`
+                : `<div class="w-full h-28 bg-slate-700 flex items-center justify-center text-3xl text-slate-500"><i class="fa fa-burger"></i></div>`}
+            <div class="p-2">
+                <p class="text-white font-semibold text-xs leading-tight line-clamp-2">${esc(p.name)}</p>
+                <p class="text-emerald-400 font-black text-sm mt-1">${fmtMoney(p.price)}</p>
+                <p class="text-center text-[10px] mt-1" style="color:${added ? 'var(--accent)' : '#64748b'}">
+                    ${added ? '✓ Adicionado' : 'Toque para adicionar'}
+                </p>
+            </div>
+        </div>`;
+    }).join('');
+
+    upsell.forEach(p => {
+        const el = document.getElementById(`upc-${p.id}`);
+        if (!el) return;
+        el.addEventListener('click', () => {
+            if (upsellSelected[p.id]) return; // já adicionado, ignora
+            const modal = document.getElementById('upsell-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            openOptionsModalForUpsell(p);
+        });
+    });
+
+    const modal = document.getElementById('upsell-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function confirmUpsell() {
+    // Itens já foram adicionados ao carrinho via addToCart individualmente
+    closeUpsellModal();
+    goToCheckoutDirect();
+}
+
+function skipUpsell() {
+    closeUpsellModal();
+    goToCheckoutDirect();
+}
+
+function closeUpsellModal() {
+    const modal = document.getElementById('upsell-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// ── Checkout ───────────────────────────────────────────────────
+function closeCheckout() {
+    document.getElementById('checkout-modal').classList.remove('flex');
+    document.getElementById('checkout-modal').classList.add('hidden');
+}
+
+function goToCheckoutDirect() {
+    const modal = document.getElementById('checkout-modal');
+    const content = document.getElementById('checkout-content');
+
+    if (isDelivery) {
+        content.innerHTML = renderDeliveryCheckout();
+        recalcDeliveryTotal();
+    } else {
+        content.innerHTML = renderSimpleCheckout(cart[0].item);
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// ── Checkout simples (não-delivery) ───────────────────────────
+function renderSimpleCheckout(item) {
+    const method = storeData.preferred_payment_method || 'manual_pix';
+    let html = `
+        <div class="flex gap-4 items-center mb-2 bg-slate-800/50 p-3 rounded-xl">
+            ${item.image_base64 ? `<img src="${item.image_base64}" class="w-12 h-12 rounded object-cover">` : ''}
+            <div>
+                <p class="font-bold text-white">${esc(item.name)}</p>
+                <p class="text-sm text-emerald-400 font-black">${fmtMoney(item.price)}</p>
+            </div>
+        </div>`;
+
+    if (method === 'manual_pix') {
+        const pixType = storeData.pix_key_type || 'Chave Pix';
+        const pixVal = storeData.pix_key_value || 'Não informada';
+        const pixName = storeData.pix_receiver_name || storeData.name;
+        const msg = encodeURIComponent(`Olá! Gostaria de pagar via Pix pelo item: *${item.name}* (${fmtMoney(item.price)}). Segue o comprovante!`);
+        const waLink = storeData.whatsapp_link ? `https://wa.me/55${storeData.whatsapp_link.replace(/\D/g,'')}?text=${msg}` : '#';
+
+        html += `
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 mb-4 text-3xl"><i class="fa-brands fa-pix"></i></div>
+                <h4 class="text-lg font-bold text-white mb-2">Pagamento via Pix</h4>
+                <p class="text-xs text-slate-400 mb-6">Copie a chave, faça a transferência e envie o comprovante no WhatsApp.</p>
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-left mb-6 relative">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">${esc(pixType)}</p>
+                    <p class="text-white font-mono font-bold text-lg select-all" id="pix-copy-val">${esc(pixVal)}</p>
+                    <p class="text-xs text-slate-400 mt-2">Nome: <span class="text-slate-300">${esc(pixName)}</span></p>
+                    <button onclick="copyPix()" class="absolute top-4 right-4 text-slate-500 hover:text-emerald-400 p-2"><i class="fa fa-copy text-xl"></i></button>
+                </div>
+                <a href="${waLink}" target="_blank" class="block w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors">
+                    <i class="fa-brands fa-whatsapp mr-2"></i> Enviar Comprovante
+                </a>
+            </div>`;
+    } else if (method === 'mp') {
+        html += `<div class="text-center py-4">
+            <i class="fa-solid fa-hand-holding-dollar text-4xl text-blue-500 mb-4"></i>
+            <h4 class="text-lg font-bold text-white mb-2">Checkout Mercado Pago</h4>
+            <p class="text-xs text-slate-400 mb-6">Pague com segurança via Cartão de Crédito ou Pix.</p>
+            <button onclick="alert('Em breve!')" class="w-full bg-[#009ee3] hover:bg-[#008ed0] text-white font-bold py-3 rounded-xl">Ir para o Pagamento</button>
+        </div>`;
+    } else if (method === 'asaas') {
+        html += `<div class="text-center py-4">
+            <i class="fa-solid fa-file-invoice-dollar text-4xl text-emerald-500 mb-4"></i>
+            <h4 class="text-lg font-bold text-white mb-2">Assinatura Asaas</h4>
+            <p class="text-xs text-slate-400 mb-6">Gere boletos automáticos ou pague no cartão.</p>
+            <button onclick="alert('Em breve!')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl">Assinar Agora</button>
+        </div>`;
+    }
+
+    return html;
+}
+
+// ── Checkout delivery ──────────────────────────────────────────
+function renderDeliveryCheckout() {
+    const cfg = deliveryConfig || {};
+    const hasZones = cfg.zones && cfg.zones.length > 0;
+    const dtype = cfg.delivery_type || 'both';
+
+    // Lista de itens
+    let itemsHtml = cart.map(entry => {
+        const extras = entry.selected_options.map(o => `+ ${esc(o.name)}`).join(', ');
+        const linePrice = (+entry.item.price + entry.selected_options.reduce((s, o) => s + o.additional_price, 0)) * entry.quantity;
+        return `<div class="flex justify-between items-start py-1">
+            <div>
+                <span class="text-white text-sm font-medium">${esc(entry.item.name)}</span>
+                ${extras ? `<p class="text-xs text-slate-400">${extras}</p>` : ''}
+                <p class="text-xs text-slate-500">× ${entry.quantity}</p>
+            </div>
+            <span class="text-emerald-400 font-bold text-sm">${fmtMoney(linePrice)}</span>
+        </div>`;
+    }).join('');
+
+    // Tipo de entrega
+    const storeClosed = !isStoreCurrentlyOpen();
+    const is24hCart   = cartAllItems24h();
+    let typeHtml = '';
+    if (storeClosed && is24hCart) {
+        // Loja fechada mas todos os itens são 24h → retirada agendada obrigatória
+        currentDeliveryType = 'scheduled_pickup';
+        const minPickupTime = (() => {
+            const d = new Date(); d.setMinutes(d.getMinutes() + 30);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        })();
+        typeHtml = `
+        <div class="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3 space-y-3">
+            <div class="flex items-center gap-2">
+                <i class="fa fa-clock text-orange-400"></i>
+                <p class="text-sm font-bold text-orange-300">Retirada Agendada</p>
+            </div>
+            <p class="text-xs text-slate-400">A loja está fechada agora. Agende o horário que você virá retirar.</p>
+            <div>
+                <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Horário de Retirada <span class="text-red-400">*</span></label>
+                <input type="datetime-local" id="dl-pickup-time" min="${minPickupTime}"
+                    class="w-full bg-slate-800 border border-orange-500/40 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-orange-400">
+            </div>
+        </div>`;
+    } else if (dtype === 'both') {
+        typeHtml = `
+        <div>
+            <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Tipo de Entrega</label>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="btn-delivery" onclick="setDeliveryType('delivery')"
+                    class="py-2 rounded-xl border-2 border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-white font-bold text-sm transition-all">
+                    <i class="fa fa-motorcycle mr-1"></i> Entrega
+                </button>
+                <button id="btn-pickup" onclick="setDeliveryType('pickup')"
+                    class="py-2 rounded-xl border-2 border-slate-700 text-slate-400 font-bold text-sm transition-all">
+                    <i class="fa fa-store mr-1"></i> Retirada
+                </button>
+            </div>
+        </div>`;
+    }
+
+    // Cidades / Bairros
+    let zonesHtml = '';
+    if (hasZones) {
+        const zoneMode = cfg.zone_type || 'neighborhood';
+
+        if (zoneMode === 'city') {
+            // Por cidade — select simples
+            const opts = cfg.zones.map(z =>
+                `<option value="${z.id}" data-tax="${z.delivery_tax}" data-time="${esc(z.estimated_time || '')}" data-name="${esc(z.name)}">${esc(z.name)} — ${fmtMoney(z.delivery_tax)}</option>`
+            ).join('');
+            zonesHtml = `
+            <div id="zone-section">
+                <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Cidade <span class="text-red-400">*</span></label>
+                <select id="zone-select" onchange="recalcDeliveryTotal(); onZoneSelect(this)"
+                    class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+                    <option value="">— Selecione sua cidade —</option>
+                    ${opts}
+                </select>
+            </div>`;
+        } else {
+            // Por bairro — agrupa por cidade
+            const cities = [...new Set(cfg.zones.map(z => z.city || 'Outras regiões'))];
+            const groups = cities.map(city => {
+                const items = cfg.zones.filter(z => (z.city || 'Outras regiões') === city);
+                const opts  = items.map(z =>
+                    `<option value="${z.id}" data-tax="${z.delivery_tax}" data-time="${esc(z.estimated_time || '')}" data-name="${esc(z.name)}">${esc(z.name)} — ${fmtMoney(z.delivery_tax)}</option>`
+                ).join('');
+                return `<optgroup label="${esc(city)}">${opts}</optgroup>`;
+            }).join('');
+            zonesHtml = `
+            <div id="zone-section">
+                <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Bairro <span class="text-red-400">*</span></label>
+                <select id="zone-select" onchange="recalcDeliveryTotal(); onZoneSelect(this)"
+                    class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+                    <option value="">— Selecione seu bairro —</option>
+                    ${groups}
+                </select>
+            </div>`;
+        }
+    }
+
+    return `
+    <!-- Resumo do pedido -->
+    <div>
+        <p class="text-xs text-slate-400 font-bold uppercase mb-2">Resumo do Pedido</p>
+        <div class="bg-slate-800/50 rounded-xl p-3 space-y-1 divide-y divide-slate-700/50">
+            ${itemsHtml}
+        </div>
+    </div>
+
+    <!-- WhatsApp primeiro — dispara auto-fill enquanto o cliente preenche o resto -->
+    <div>
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-2">WhatsApp <span class="text-red-400">*</span></label>
+        <input id="dl-phone" type="tel" placeholder="(99) 99999-9999" oninput="onPhoneInput(this)"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+        <p id="dl-phone-hint" class="text-xs text-emerald-400 mt-1 hidden"><i class="fa fa-check mr-1"></i>Dados preenchidos automaticamente</p>
+    </div>
+
+    <!-- Endereços salvos do cliente (aparece após digitar celular) -->
+    <div id="saved-addresses-bar" class="hidden">
+      <p class="text-xs text-slate-400 font-bold uppercase mb-1">Seus endereços salvos</p>
+      <div id="saved-addresses-list" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    ${typeHtml}
+    ${zonesHtml}
+
+    <!-- Endereço (só para delivery — esconde em retirada agendada) -->
+    <div id="address-section" class="space-y-2${currentDeliveryType === 'scheduled_pickup' ? ' hidden' : ''}">
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-1">Endereço de Entrega</label>
+        <input id="dl-cidade" type="text" placeholder="Cidade *"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]"
+            oninput="onAddressFieldChange()">
+        <input id="dl-bairro" type="text" placeholder="Bairro *"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]"
+            oninput="onAddressFieldChange()">
+        <input id="dl-rua" type="text" placeholder="Rua / Avenida *"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]"
+            oninput="onAddressFieldChange()">
+        <div class="flex gap-2">
+            <input id="dl-numero" type="text" placeholder="Número *"
+                class="w-28 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]"
+                oninput="toggleSemNumero(this);onAddressFieldChange()">
+            <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer select-none">
+                <input type="checkbox" id="dl-sem-numero" onchange="toggleNumeroField(this)" class="accent-[var(--accent)] w-4 h-4"> Sem número
+            </label>
+        </div>
+        <input id="dl-referencia" type="text" placeholder="Ponto de referência (opcional)"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+        <!-- campo oculto que agrega o endereço completo -->
+        <input id="dl-address" type="hidden">
+
+        <!-- Botão GPS -->
+        <button type="button" onclick="useGPS()"
+            class="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-sm font-semibold border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors">
+            <i class="fa-solid fa-location-crosshairs"></i> Usar minha localização atual
+        </button>
+
+        <!-- Mapa de localização -->
+        <div id="map-section" style="display:none">
+            <div class="flex items-center justify-between mb-1">
+                <p class="text-xs text-slate-400 font-bold uppercase">Ajuste no Mapa <span class="text-slate-500 font-normal normal-case">(arraste o pino se necessário)</span></p>
+                <span id="map-status" class="text-[10px] text-slate-500"></span>
+            </div>
+            <div id="dl-map" style="height:220px;border-radius:12px;overflow:hidden;border:1px solid #334155"></div>
+            <button type="button" onclick="confirmLocation()" id="btn-confirm-location"
+                class="mt-2 w-full py-2 rounded-xl text-sm font-bold bg-green-600 hover:bg-green-500 text-white transition-colors">
+                <i class="fa-solid fa-check"></i> Confirmar Localização aqui
+            </button>
+        </div>
+    </div>
+
+    <!-- Nome -->
+    <div>
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Seu Nome <span class="text-red-400">*</span></label>
+        <input id="dl-name" type="text" placeholder="Nome completo"
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+    </div>
+
+    <!-- Observações -->
+    <div>
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Observações (opcional)</label>
+        <textarea id="dl-notes" rows="2" placeholder="Ex: sem cebola, ponto da carne..."
+            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)] resize-none"></textarea>
+    </div>
+
+    <!-- Cupom -->
+    <div>
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Cupom de Desconto</label>
+        <div class="flex gap-2">
+            <input id="dl-coupon" type="text" placeholder="Código do cupom (opcional)"
+                   style="text-transform:uppercase"
+                   class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
+            <button onclick="vitrineCouponApply()" class="bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold px-4 rounded-xl transition-colors flex-shrink-0">Aplicar</button>
+        </div>
+        <p id="dl-coupon-msg" class="text-xs mt-1 hidden"></p>
+    </div>
+
+    <!-- Forma de Pagamento -->
+    <div>
+        <label class="block text-xs text-slate-400 font-bold uppercase mb-2">Forma de Pagamento</label>
+        <div class="grid grid-cols-2 gap-2" id="payment-options">
+            <button type="button" class="pay-btn py-3 px-2 rounded-xl border-2 border-slate-700 text-slate-400 font-semibold text-sm transition-all flex flex-col items-center gap-1"
+                    data-method="pix" onclick="selectPayment('pix')">
+                <i class="fa-brands fa-pix text-lg"></i> PIX
+            </button>
+            <button type="button" class="pay-btn py-3 px-2 rounded-xl border-2 border-slate-700 text-slate-400 font-semibold text-sm transition-all flex flex-col items-center gap-1"
+                    data-method="cartao_credito" onclick="selectPayment('cartao_credito')">
+                <i class="fa fa-credit-card text-lg"></i> Cartão
+            </button>
+            <button type="button" class="pay-btn py-3 px-2 rounded-xl border-2 border-slate-700 text-slate-400 font-semibold text-sm transition-all flex flex-col items-center gap-1"
+                    data-method="dinheiro" onclick="selectPayment('dinheiro')">
+                <i class="fa fa-money-bill-wave text-lg"></i> Dinheiro
+            </button>
+            <button type="button" class="pay-btn py-3 px-2 rounded-xl border-2 border-slate-700 text-slate-400 font-semibold text-sm transition-all flex flex-col items-center gap-1"
+                    data-method="na_entrega" onclick="selectPayment('na_entrega')">
+                <i class="fa fa-truck text-lg"></i> Na Entrega
+            </button>
+        </div>
+        <!-- Formulário de Cartão MP SDK V2 (Secure Fields) -->
+        <div id="card-section" class="hidden mt-3 space-y-3">
+          <div class="bg-slate-800/60 border border-slate-700 rounded-2xl p-4 space-y-3">
+            <div>
+              <label class="text-xs text-slate-400 font-bold uppercase block mb-1">Número do Cartão</label>
+              <div id="mp-cardNumber" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm min-h-[44px]"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-400 font-bold uppercase block mb-1">Validade</label>
+                <div id="mp-expirationDate" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm min-h-[44px]"></div>
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 font-bold uppercase block mb-1">CVV</label>
+                <div id="mp-securityCode" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm min-h-[44px]"></div>
+              </div>
+            </div>
+            <div>
+              <label class="text-xs text-slate-400 font-bold uppercase block mb-1">Nome no Cartão</label>
+              <input id="mp-cardholderName" type="text" placeholder="Como está no cartão" autocomplete="cc-name"
+                     class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-400 font-bold uppercase block mb-1">CPF do titular</label>
+                <input id="mp-docNumber" type="text" placeholder="000.000.000-00" maxlength="14" oninput="maskCPF(this)"
+                       class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-400">
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 font-bold uppercase block mb-1">Parcelas</label>
+                <select id="mp-installments" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-emerald-400">
+                  <option value="1">1x sem juros</option>
+                </select>
+              </div>
+            </div>
+            <div id="mp-card-error" class="hidden text-xs text-red-400 text-center font-semibold"></div>
+          </div>
+        </div>
+
+        <!-- Troco (só dinheiro) -->
+        <div id="troco-section" class="hidden mt-3 space-y-2">
+            <label class="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" id="needs-change" onchange="toggleTroco()" class="accent-emerald-400"> Precisa de troco?
+            </label>
+            <div id="troco-input-area" class="hidden space-y-2">
+                <input id="troco-value" type="number" min="0" step="1" placeholder="Troco para quanto? (ex: 50)"
+                       oninput="calcTroco()"
+                       class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-400">
+                <div id="troco-resultado" class="hidden bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2 text-sm flex justify-between items-center">
+                    <span class="text-slate-300">Troco a devolver:</span>
+                    <span id="troco-valor-calculado" class="text-emerald-400 font-bold text-base"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Totais -->
+    <div class="bg-slate-800 rounded-xl p-4 space-y-1 text-sm">
+        <div class="flex justify-between text-slate-300"><span>Subtotal</span><span id="dl-subtotal">${fmtMoney(cartSubtotal())}</span></div>
+        <div class="flex justify-between text-slate-300" id="dl-tax-row"><span>Taxa de entrega</span><span id="dl-tax">—</span></div>
+        <div id="dl-disc-row" class="flex justify-between text-emerald-400 hidden"><span>Desconto</span><span id="dl-disc-val"></span></div>
+        <div class="flex justify-between text-white font-bold text-base border-t border-slate-700 pt-2 mt-1"><span>Total</span><span id="dl-total" class="text-emerald-400">—</span></div>
+        <p id="dl-free-badge" class="text-emerald-400 text-xs text-center hidden"><i class="fa fa-check-circle mr-1"></i>Frete grátis aplicado!</p>
+    </div>
+
+    <!-- LGPD: aviso de consentimento no checkout -->
+    <p class="text-slate-500 text-[11px] text-center leading-relaxed">
+        Ao confirmar, você concorda com nossa
+        <a href="/privacidade" target="_blank" class="underline hover:text-slate-300">Política de Privacidade</a>
+        e autoriza o uso dos seus dados para processamento deste pedido (LGPD, Art. 7º).
+    </p>
+
+    <!-- Botão confirmar -->
+    <button onclick="submitDeliveryOrder()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors" id="btn-confirm-order">
+        <i class="fa fa-lock mr-2"></i>Confirmar Pedido
+    </button>`;
+}
+
+// Estado do checkout
+let currentDeliveryType = 'delivery';
+let vitrineDiscount     = 0;
+let vitrineCouponCode   = null;
+let selectedPayment     = null; // 'pix'|'cartao_credito'|'dinheiro'|'na_entrega'
+
+// Estado do mapa de endereço
+let _map = null, _marker = null;
+let checkoutLat = null, checkoutLng = null;
+let _geocodeTimer = null;
+
+// ── Mercado Pago SDK V2 — Cartão de Crédito ──────────────────
+let _mp = null;
+let _mpCardNumberEl = null, _mpExpirationEl = null, _mpSecurityEl = null;
+let _mpPaymentMethodId = null, _mpIssuerId = null;
+
+async function initMPCardFields() {
+    if (_mpCardNumberEl) return; // já inicializado
+    const pubKey = storeData?.mp_public_key || null;
+    if (!pubKey || !window.MercadoPago) {
+        document.getElementById('mp-card-error').textContent = 'Pagamento por cartão indisponível nesta loja.';
+        document.getElementById('mp-card-error').classList.remove('hidden');
+        return;
+    }
+    try {
+        _mp = new MercadoPago(pubKey, { locale: 'pt-BR' });
+
+        _mpCardNumberEl = _mp.fields.create('cardNumber', { placeholder: '0000 0000 0000 0000' }).mount('mp-cardNumber');
+        _mpExpirationEl = _mp.fields.create('expirationDate', { placeholder: 'MM/AA' }).mount('mp-expirationDate');
+        _mpSecurityEl   = _mp.fields.create('securityCode', { placeholder: 'CVV' }).mount('mp-securityCode');
+
+        // Detecta bandeira e carrega parcelas ao digitar o cartão
+        _mpCardNumberEl.on('binChange', async ({ bin }) => {
+            if (!bin) return;
+            try {
+                const { results } = await _mp.getPaymentMethods({ bin });
+                if (results?.length) {
+                    _mpPaymentMethodId = results[0].id;
+                    const total = calcTotalDelivery();
+                    const installmentsData = await _mp.getInstallments({
+                        amount: String(total),
+                        bin,
+                        paymentTypeId: 'credit_card',
+                    });
+                    const select = document.getElementById('mp-installments');
+                    select.innerHTML = '';
+                    const options = installmentsData[0]?.payer_costs || [{ installments: 1, recommended_message: '1x sem juros' }];
+                    options.forEach(opt => {
+                        const o = document.createElement('option');
+                        o.value = opt.installments;
+                        o.textContent = opt.recommended_message;
+                        select.appendChild(o);
+                    });
+                    const issuers = await _mp.getIssuers({ paymentMethodId: _mpPaymentMethodId, bin });
+                    _mpIssuerId = issuers[0]?.id || null;
+                }
+            } catch {}
+        });
+    } catch (e) {
+        console.error('[MP SDK]', e);
+    }
+}
+
+function maskCPF(el) {
+    let v = el.value.replace(/\D/g, '').slice(0, 11);
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    el.value = v;
+}
+
+function calcTotalDelivery() {
+    const totalEl = document.getElementById('dl-total');
+    if (!totalEl) return 0;
+    const txt = totalEl.textContent.replace(/[^\d,]/g, '').replace(',', '.');
+    return parseFloat(txt) || 0;
+}
+
+function selectPayment(method) {
+    selectedPayment = method;
+    document.querySelectorAll('.pay-btn').forEach(btn => {
+        const active = btn.dataset.method === method;
+        btn.style.borderColor      = active ? 'var(--accent)' : '';
+        btn.style.backgroundColor  = active ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : '';
+        btn.style.color            = active ? 'white' : '';
+    });
+    document.getElementById('troco-section').classList.toggle('hidden', method !== 'dinheiro');
+    document.getElementById('card-section').classList.toggle('hidden', method !== 'cartao_credito');
+    if (method === 'cartao_credito') initMPCardFields();
+    if (method !== 'dinheiro') {
+        const cb = document.getElementById('needs-change');
+        if (cb) cb.checked = false;
+        const tv = document.getElementById('troco-value');
+        if (tv) tv.value = '';
+        document.getElementById('troco-input-area')?.classList.add('hidden');
+        document.getElementById('troco-resultado')?.classList.add('hidden');
+    }
+}
+
+function toggleTroco() {
+    const checked = document.getElementById('needs-change').checked;
+    document.getElementById('troco-input-area').classList.toggle('hidden', !checked);
+    if (!checked) {
+        document.getElementById('troco-value').value = '';
+        document.getElementById('troco-resultado').classList.add('hidden');
+    } else {
+        document.getElementById('troco-value').focus();
+    }
+}
+
+function calcTroco() {
+    const valorPago = parseFloat(document.getElementById('troco-value').value) || 0;
+    const total = parseFloat(document.getElementById('dl-total')?.textContent?.replace('R$','').replace(',','.')) || 0;
+    const resultado = document.getElementById('troco-resultado');
+    const valorEl   = document.getElementById('troco-valor-calculado');
+
+    if (valorPago > 0 && valorPago >= total) {
+        const troco = valorPago - total;
+        valorEl.textContent = fmtMoney(troco);
+        resultado.classList.remove('hidden');
+    } else {
+        resultado.classList.add('hidden');
+    }
+}
+
+function setDeliveryType(type) {
+    currentDeliveryType = type;
+    const isPickup = type === 'pickup';
+
+    ['delivery', 'pickup'].forEach(t => {
+        const btn = document.getElementById(`btn-${t}`);
+        if (!btn) return;
+        if (t === type) {
+            btn.classList.add('border-[var(--accent)]', 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]', 'text-white');
+            btn.classList.remove('border-slate-700', 'text-slate-400');
+        } else {
+            btn.classList.remove('border-[var(--accent)]', 'bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]', 'text-white');
+            btn.classList.add('border-slate-700', 'text-slate-400');
+        }
+    });
+
+    const addrSection = document.getElementById('address-section');
+    const zoneSection = document.getElementById('zone-section');
+    if (addrSection) addrSection.style.display = isPickup ? 'none' : '';
+    if (zoneSection) zoneSection.style.display = isPickup ? 'none' : '';
+
+    recalcDeliveryTotal();
+}
+
+async function vitrineCouponApply() {
+    const code = document.getElementById('dl-coupon')?.value.trim().toUpperCase();
+    const msg  = document.getElementById('dl-coupon-msg');
+    if (!code) return;
+    msg.className = 'text-xs mt-1 text-slate-400'; msg.textContent = 'Verificando...'; msg.classList.remove('hidden');
+    try {
+        const res  = await fetch('/delivery/coupons/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ establishment_id: storeData.id, code, subtotal: cartSubtotal() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            msg.className = 'text-xs mt-1 text-red-400';
+            msg.textContent = data.error || 'Cupom inválido.';
+            vitrineDiscount = 0; vitrineCouponCode = null;
+        } else {
+            vitrineDiscount   = data.discount || 0;
+            vitrineCouponCode = code;
+            msg.className = 'text-xs mt-1 text-emerald-400';
+            msg.textContent   = `✓ Desconto de R$ ${vitrineDiscount.toFixed(2).replace('.',',')} aplicado!`;
+        }
+    } catch {
+        msg.className = 'text-xs mt-1 text-red-400'; msg.textContent = 'Erro ao verificar.';
+    }
+    recalcDeliveryTotal();
+}
+
+function recalcDeliveryTotal() {
+    const cfg = deliveryConfig || {};
+    const subtotal = cartSubtotal();
+    const isPickup = currentDeliveryType === 'pickup';
+
+    let tax = 0;
+    let freeDelivery = false;
+
+    if (!isPickup) {
+        const zoneSelect = document.getElementById('zone-select');
+        if (zoneSelect && zoneSelect.value) {
+            const opt = zoneSelect.selectedOptions[0];
+            tax = +(opt.dataset.tax || 0);
+        } else {
+            tax = +(cfg.delivery_tax || 0);
+        }
+        // Frete grátis
+        if (+cfg.free_delivery_over > 0 && subtotal >= +cfg.free_delivery_over) {
+            tax = 0;
+            freeDelivery = true;
+        }
+    }
+
+    const disc  = vitrineDiscount;
+    const total = Math.max(0, subtotal + tax - disc);
+
+    const taxRow  = document.getElementById('dl-tax-row');
+    const taxEl   = document.getElementById('dl-tax');
+    const totalEl = document.getElementById('dl-total');
+    const freeBadge = document.getElementById('dl-free-badge');
+    const discRow = document.getElementById('dl-disc-row');
+    const discVal = document.getElementById('dl-disc-val');
+
+    if (taxRow)  taxRow.style.display  = isPickup ? 'none' : '';
+    if (taxEl)   taxEl.textContent     = freeDelivery ? 'Grátis' : fmtMoney(tax);
+    if (totalEl) totalEl.textContent   = fmtMoney(total);
+    if (freeBadge) freeBadge.classList.toggle('hidden', !freeDelivery);
+    if (discRow)   discRow.classList.toggle('hidden', disc <= 0);
+    if (discVal)   discVal.textContent = `-${fmtMoney(disc)}`;
+}
+
+async function submitDeliveryOrder() {
+    const name    = document.getElementById('dl-name')?.value.trim();
+    const phone   = document.getElementById('dl-phone')?.value.trim();
+    const notes   = document.getElementById('dl-notes')?.value.trim();
+    const zoneSelect = document.getElementById('zone-select');
+    const zoneId  = zoneSelect?.value || null;
+
+    // Valida seleção de zona quando a loja usa zonas
+    if (currentDeliveryType === 'delivery' && zoneSelect && !zoneId) {
+        const zMode = deliveryConfig?.zone_type || 'neighborhood';
+        alert(zMode === 'city' ? 'Selecione sua cidade.' : 'Selecione seu bairro.');
+        zoneSelect.focus();
+        return;
+    }
+
+    // Monta endereço estruturado
+    let address = '';
+    if (currentDeliveryType === 'delivery') {
+        const cidade    = document.getElementById('dl-cidade')?.value.trim();
+        const bairro    = document.getElementById('dl-bairro')?.value.trim();
+        const rua       = document.getElementById('dl-rua')?.value.trim();
+        const semNumero = document.getElementById('dl-sem-numero')?.checked;
+        const numero    = semNumero ? 'S/N' : (document.getElementById('dl-numero')?.value.trim() || '');
+        const ref       = document.getElementById('dl-referencia')?.value.trim();
+
+        if (!cidade) { alert('Informe a cidade.'); document.getElementById('dl-cidade')?.focus(); return; }
+        if (!bairro) { alert('Informe o bairro.'); document.getElementById('dl-bairro')?.focus(); return; }
+        if (!rua)    { alert('Informe a rua.'); document.getElementById('dl-rua')?.focus(); return; }
+        if (!semNumero && !numero) { alert('Informe o número ou marque "Sem número".'); document.getElementById('dl-numero')?.focus(); return; }
+
+        address = `${rua}, ${numero} — ${bairro}, ${cidade}`;
+        if (ref) address += ` (Ref: ${ref})`;
+        document.getElementById('dl-address').value = address;
+    }
+
+    // Validação de retirada agendada
+    let scheduledPickupTime = null;
+    if (currentDeliveryType === 'scheduled_pickup') {
+        scheduledPickupTime = document.getElementById('dl-pickup-time')?.value;
+        if (!scheduledPickupTime) { alert('Selecione o horário de retirada.'); document.getElementById('dl-pickup-time')?.focus(); return; }
+    }
+
+    if (!phone)  { alert('Informe seu WhatsApp. É obrigatório para acompanhar o pedido.'); document.getElementById('dl-phone')?.focus(); return; }
+    if (!name)   { alert('Informe seu nome.'); return; }
+    if (!selectedPayment) { alert('Escolha a forma de pagamento.'); return; }
+
+    const cfg      = deliveryConfig || {};
+    const subtotal = cartSubtotal();
+    if (+cfg.min_order > 0 && subtotal < +cfg.min_order) {
+        alert(`Pedido mínimo de ${fmtMoney(cfg.min_order)} não atingido.`);
+        return;
+    }
+
+    // Troco
+    let changeFor = null;
+    if (selectedPayment === 'dinheiro') {
+        const needsChange = document.getElementById('needs-change')?.checked;
+        if (needsChange) {
+            changeFor = parseFloat(document.getElementById('troco-value')?.value) || null;
+            if (!changeFor) { alert('Informe para quanto precisa de troco.'); return; }
+        }
+    }
+
+    const items = cart.map(entry => ({
+        id: entry.item.id, name: entry.item.name,
+        price: +entry.item.price, quantity: entry.quantity,
+        selected_options: entry.selected_options,
+    }));
+
+    const btn = document.getElementById('btn-confirm-order');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>Aguarde...'; }
+
+    try {
+        const res = await fetch('/delivery/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                establishment_id: storeData.id,
+                customer_name:    name,
+                customer_phone:   phone || null,
+                customer_address: currentDeliveryType === 'delivery' ? address
+                                : currentDeliveryType === 'scheduled_pickup' ? 'Retirada Agendada'
+                                : 'Retirada na loja',
+                delivery_type:    currentDeliveryType,
+                payment_method:   selectedPayment,
+                items, notes: notes || null,
+                zone_id: zoneId || null,
+                coupon_code: vitrineCouponCode || undefined,
+                change_for: changeFor || undefined,
+                scheduled_pickup_time: scheduledPickupTime || undefined,
+                lat: (currentDeliveryType === 'delivery' && checkoutLat) ? checkoutLat : undefined,
+                lng: (currentDeliveryType === 'delivery' && checkoutLng) ? checkoutLng : undefined,
+            }),
+        });
+
+        const order = await res.json();
+        if (!res.ok) {
+            alert(order.error || 'Erro ao enviar pedido.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-lock mr-2"></i>Confirmar Pedido'; }
+            return;
+        }
+
+        // Salva endereço no banco (fire-and-forget, só para delivery com coordenadas)
+        if (currentDeliveryType === 'delivery' && phone && checkoutLat && checkoutLng) {
+            const rua    = document.getElementById('dl-rua')?.value?.trim() || '';
+            const num    = document.getElementById('dl-numero')?.value?.trim() || '';
+            const bairro = document.getElementById('dl-bairro')?.value?.trim() || '';
+            const cidade = document.getElementById('dl-cidade')?.value?.trim() || '';
+            const ref    = document.getElementById('dl-referencia')?.value?.trim() || '';
+            fetch('/delivery/public/save-address', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    phone, order_id: order.id, label: 'Casa',
+                    address, street: rua, number: num,
+                    neighborhood: bairro, city: cidade, reference: ref || null,
+                    lat: checkoutLat, lng: checkoutLng,
+                }),
+            }).catch(() => {});
+        }
+
+        // Registra consentimento LGPD do checkout (sem bloquear fluxo)
+        fetch('/auth/lgpd-consent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: phone || name || 'anonimo', event: 'CHECKOUT', version: '1.0' }),
+        }).catch(() => {});
+
+        // Gera PIX se necessário
+        let pixCode = null;
+        if (selectedPayment === 'pix') {
+            const pixRes = await fetch('/delivery/public/pix-generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: order.id, establishment_id: storeData.id }),
+            });
+            if (pixRes.ok) {
+                const pixData = await pixRes.json();
+                pixCode = pixData.code || null;
+            }
+        }
+
+        // Pagamento com cartão via MP SDK V2
+        if (selectedPayment === 'cartao_credito') {
+            const errEl = document.getElementById('mp-card-error');
+            errEl.classList.add('hidden');
+            try {
+                if (!_mp) throw new Error('SDK do Mercado Pago não inicializado.');
+                const cardholderName = document.getElementById('mp-cardholderName').value.trim();
+                const docNumber      = document.getElementById('mp-docNumber').value.replace(/\D/g, '');
+                const installments   = parseInt(document.getElementById('mp-installments').value) || 1;
+                if (!cardholderName) throw new Error('Informe o nome do titular do cartão.');
+
+                const cardToken = await _mp.fields.createCardToken({
+                    cardholderName,
+                    identificationType: 'CPF',
+                    identificationNumber: docNumber,
+                });
+
+                const cardRes = await fetch('/delivery/public/card-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: order.id,
+                        establishment_id: storeData.id,
+                        token: cardToken.id,
+                        installments,
+                        payment_method_id: _mpPaymentMethodId,
+                        issuer_id: _mpIssuerId,
+                        payer: { email: `${phone}@cliente.agonfood.com`, identification: { type: 'CPF', number: docNumber } },
+                    }),
+                });
+                const cardData = await cardRes.json();
+                if (!cardRes.ok) throw new Error(cardData.error || 'Pagamento recusado.');
+                if (cardData.status === 'pending') {
+                    // Pagamento em análise — pedido confirmado mesmo assim
+                }
+            } catch (cardErr) {
+                errEl.textContent = cardErr.message || 'Erro ao processar cartão.';
+                errEl.classList.remove('hidden');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-lock mr-2"></i>Confirmar Pedido'; }
+                return;
+            }
+        }
+
+        // Tela de confirmação
+        renderOrderSuccess(order, { name, phone, address, notes, changeFor, pixCode });
+
+        // Salva último pedido no localStorage para o banner "repetir"
+        try {
+            localStorage.setItem('ag_last_order_' + storeData.id, JSON.stringify({
+                items: cart.map(e => ({ item: e.item, quantity: e.quantity, selected_options: e.selected_options })),
+                phone, name,
+            }));
+        } catch {}
+
+        // Limpa carrinho
+        cart = [];
+        selectedPayment = null;
+        vitrineDiscount = 0;
+        vitrineCouponCode = null;
+        updateCartBar();
+
+    } catch (err) {
+        alert('Erro de conexão. Tente novamente.');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-lock mr-2"></i>Confirmar Pedido'; }
+    }
+}
+
+const TRACK_STEPS = [
+    { key: 'pending',    icon: '🕐', label: 'Aguardando confirmação', desc: 'Seu pedido chegou e aguarda aprovação' },
+    { key: 'confirmed',  icon: '✅', label: 'Confirmado',             desc: 'O restaurante confirmou seu pedido' },
+    { key: 'preparing',  icon: '👨‍🍳', label: 'Preparando',            desc: 'Seu pedido está sendo preparado' },
+    { key: 'delivering', icon: '🛵', label: 'Saiu para entrega',      desc: 'O entregador está a caminho' },
+    { key: 'delivered',  icon: '🎉', label: 'Entregue',               desc: 'Bom apetite!' },
+];
+const TRACK_STEPS_PICKUP = [
+    { key: 'pending',    icon: '🕐', label: 'Aguardando confirmação', desc: 'Seu pedido chegou e aguarda aprovação' },
+    { key: 'confirmed',  icon: '✅', label: 'Confirmado',             desc: 'O restaurante confirmou seu pedido' },
+    { key: 'preparing',  icon: '👨‍🍳', label: 'Preparando',            desc: 'Seu pedido está sendo preparado' },
+    { key: 'delivered',  icon: '🎉', label: 'Pronto para retirada',   desc: 'Pode vir buscar!' },
+];
+
+let _trackInterval = null;
+let _trackLastStatus = null;
+
+function buildTrackTimeline(order) {
+    const steps = order.delivery_type === 'pickup' ? TRACK_STEPS_PICKUP : TRACK_STEPS;
+    if (order.status === 'cancelled') {
+        return `<div class="flex items-start gap-3">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center text-lg shrink-0" style="background:#7f1d1d;color:#f87171">❌</div>
+            <div class="pt-1"><p class="font-semibold text-red-400">Pedido cancelado</p><p class="text-xs text-slate-500 mt-0.5">Entre em contato com a loja</p></div>
+        </div>`;
+    }
+    const activeIdx = steps.findIndex(s => s.key === order.status);
+    return steps.map((step, i) => {
+        const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'pending';
+        const iconBg   = state === 'done' ? '#166534' : state === 'active' ? 'var(--accent)' : '#1e293b';
+        const iconClr  = state === 'done' ? '#4ade80' : state === 'active' ? '#fff' : '#475569';
+        const lblClr   = state === 'done' ? '#4ade80' : state === 'active' ? 'var(--accent)' : '#475569';
+        const pulse    = state === 'active' ? 'style="animation:trackPulse 1.5s infinite"' : '';
+        const isLast   = i === steps.length - 1;
+        return `
+        <div class="flex items-start gap-3 relative ${isLast ? '' : 'pb-4'}">
+            ${!isLast ? `<div class="absolute left-4 top-9 bottom-0 w-0.5" style="background:${state === 'done' ? '#22c55e' : '#1e293b'}"></div>` : ''}
+            <div class="w-9 h-9 rounded-full flex items-center justify-center text-base shrink-0 z-10" style="background:${iconBg};color:${iconClr}" ${pulse}>${step.icon}</div>
+            <div class="pt-1 min-w-0">
+                <p class="font-semibold text-sm" style="color:${lblClr}">${step.label}</p>
+                <p class="text-xs text-slate-500 mt-0.5">${step.desc}</p>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function pollTrackStatus(orderId) {
+    try {
+        const res = await fetch(`/delivery/orders/${orderId}/track`);
+        if (!res.ok) return;
+        const order = await res.json();
+        if (order.status === _trackLastStatus) return;
+        _trackLastStatus = order.status;
+        const el = document.getElementById('track-timeline');
+        if (el) el.innerHTML = buildTrackTimeline(order);
+        // Para de atualizar se o pedido finalizou
+        if (order.status === 'delivered' || order.status === 'cancelled') {
+            clearInterval(_trackInterval);
+            _trackInterval = null;
+        }
+    } catch {}
+}
+
+function renderOrderSuccess(order, { name, phone, address, notes, changeFor, pixCode }) {
+    const waNumber  = storeData.whatsapp_link?.replace(/\D/g, '');
+    const waMsg     = buildWhatsAppMessage(order, name, phone, address, notes, selectedPayment || order.payment_method, changeFor, pixCode);
+    const waLink    = waNumber ? `https://wa.me/55${waNumber}?text=${encodeURIComponent(waMsg)}` : null;
+
+    const PAY_LABELS = {
+        pix: 'PIX', cartao_credito: 'Cartão de Crédito', cartao_debito: 'Cartão de Débito',
+        dinheiro: 'Dinheiro', na_entrega: 'Pagar na entrega',
+    };
+    const pm = order.payment_method;
+
+    // Bloco de pagamento
+    let payBlock = '';
+    if (pm === 'pix' && pixCode) {
+        payBlock = `
+        <div class="bg-slate-800 rounded-2xl p-4 text-left space-y-3">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold"><i class="fa-brands fa-pix text-xl"></i> Pague via PIX</div>
+            <p class="text-slate-400 text-xs">Copie o código abaixo e cole no app do seu banco:</p>
+            <div class="bg-slate-950 rounded-xl p-3 flex items-center gap-2">
+                <p class="text-white text-xs font-mono flex-1 break-all select-all" id="pix-code-txt">${esc(pixCode)}</p>
+                <button onclick="copyPixCode()" class="shrink-0 text-slate-400 hover:text-emerald-400 p-2"><i class="fa fa-copy" id="pix-copy-icon"></i></button>
+            </div>
+            <p class="text-slate-500 text-xs">Valor: <strong class="text-white">${fmtMoney(order.total)}</strong> · Válido por 24h</p>
+        </div>`;
+    } else if (pm === 'pix' && !pixCode) {
+        const pixKey  = storeData.pix_key_value  || '—';
+        const pixType = storeData.pix_key_type   || 'Chave PIX';
+        const pixName = storeData.pix_receiver_name || storeData.name;
+        payBlock = `
+        <div class="bg-slate-800 rounded-2xl p-4 text-left space-y-2">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold"><i class="fa-brands fa-pix text-xl"></i> Pague via PIX</div>
+            <p class="text-xs text-slate-400">Faça a transferência para a chave abaixo e envie o comprovante pelo WhatsApp.</p>
+            <div class="bg-slate-950 rounded-xl p-3">
+                <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">${esc(pixType)}</p>
+                <p class="text-white font-mono font-bold select-all" id="pix-code-txt">${esc(pixKey)}</p>
+                <p class="text-xs text-slate-400 mt-1">Favorecido: ${esc(pixName)}</p>
+            </div>
+            <p class="text-slate-500 text-xs">Valor: <strong class="text-white">${fmtMoney(order.total)}</strong></p>
+            <button onclick="copyPixCode()" class="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-bold py-2 rounded-xl text-sm transition">
+                <i class="fa fa-copy mr-1"></i> Copiar Chave
+            </button>
+        </div>`;
+    } else if (pm === 'cartao_credito' || pm === 'cartao_debito') {
+        payBlock = `
+        <div class="bg-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <i class="fa fa-credit-card text-3xl text-blue-400"></i>
+            <div><p class="text-white font-bold">Pagamento no Cartão</p>
+            <p class="text-slate-400 text-sm">Deixe a maquininha em mãos na hora da entrega / retirada.</p>
+            <p class="text-slate-500 text-xs mt-1">Total: <strong class="text-white">${fmtMoney(order.total)}</strong></p></div>
+        </div>`;
+    } else if (pm === 'dinheiro') {
+        const troco = changeFor ? (changeFor - +order.total) : 0;
+        const trocoHtml = changeFor
+            ? `<p class="text-slate-400 text-sm">Levar troco para <strong class="text-white">${fmtMoney(changeFor)}</strong></p>
+               <p class="text-emerald-400 text-sm font-bold">Troco a devolver: ${fmtMoney(Math.max(0, troco))}</p>`
+            : `<p class="text-slate-400 text-sm">Sem troco necessário</p>`;
+        payBlock = `
+        <div class="bg-slate-800 rounded-2xl p-4 flex items-start gap-3">
+            <i class="fa fa-money-bill-wave text-3xl text-emerald-400 mt-0.5"></i>
+            <div><p class="text-white font-bold">Pagamento em Dinheiro</p>
+            ${trocoHtml}
+            <p class="text-slate-500 text-xs mt-1">Total do pedido: <strong class="text-white">${fmtMoney(order.total)}</strong></p></div>
+        </div>`;
+    } else {
+        payBlock = `
+        <div class="bg-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <i class="fa fa-truck text-3xl text-slate-400"></i>
+            <div><p class="text-white font-bold">${esc(PAY_LABELS[pm] || pm)}</p>
+            <p class="text-slate-400 text-sm">Combine o pagamento com o entregador.</p>
+            <p class="text-slate-500 text-xs mt-1">Total: <strong class="text-white">${fmtMoney(order.total)}</strong></p></div>
+        </div>`;
+    }
+
+    // Inicia tracking inline
+    _trackLastStatus = order.status;
+    clearInterval(_trackInterval);
+    _trackInterval = setInterval(() => pollTrackStatus(order.id), 30_000);
+
+    document.getElementById('checkout-content').innerHTML = `
+        <style>@keyframes trackPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 40%,transparent)}50%{box-shadow:0 0 0 8px transparent}}</style>
+
+        <!-- Cabeçalho -->
+        <div class="text-center">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 mb-2 text-3xl">
+                <i class="fa fa-check-circle"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-0.5">Pedido Confirmado!</h3>
+            <p class="text-slate-400 text-sm">Código: <span class="font-mono text-slate-200 font-bold">#${(order.daily_code||order.id.slice(-8)).toUpperCase()}</span></p>
+        </div>
+
+        <!-- Pagamento -->
+        ${payBlock}
+
+        <!-- Progresso do pedido -->
+        <div class="bg-slate-800/60 rounded-2xl p-4">
+            <p class="text-xs text-slate-500 uppercase font-bold tracking-wider mb-4">Progresso do Pedido</p>
+            <div id="track-timeline">${buildTrackTimeline(order)}</div>
+            <p class="text-xs text-slate-600 mt-4 text-center">Atualiza automaticamente a cada 30s</p>
+        </div>
+
+        <!-- Ações -->
+        <div class="space-y-2">
+            ${waLink ? `
+            <a href="${waLink}" target="_blank"
+               class="flex items-center justify-center gap-2 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl transition-colors">
+                <i class="fa-brands fa-whatsapp text-xl"></i> Enviar pedido pelo WhatsApp
+            </a>` : ''}
+            <button onclick="voltarAoCardapio()"
+                    class="w-full text-slate-400 hover:text-slate-200 py-2.5 text-sm transition-colors border border-slate-700 rounded-xl">
+                Voltar ao Cardápio
+            </button>
+        </div>`;
+}
+
+function voltarAoCardapio() {
+    clearInterval(_trackInterval);
+    _trackInterval = null;
+    closeCheckout();
+    // Toast informando onde acompanhar
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(10px);
+        opacity:0;transition:opacity .3s,transform .3s;z-index:200;
+        background:#1e293b;border:1px solid #334155;border-radius:14px;
+        padding:12px 16px;max-width:320px;width:calc(100% - 32px);
+        box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px;color:#cbd5e1;text-align:center;
+    `;
+    toast.innerHTML = `<i class="fa fa-circle-info mr-2" style="color:var(--accent)"></i>
+        Acompanhe seu pedido em <strong class="text-white">Minha Conta & Pedidos</strong>`;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity='1'; toast.style.transform='translateX(-50%) translateY(0)'; });
+    setTimeout(() => {
+        toast.style.opacity='0'; toast.style.transform='translateX(-50%) translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+function copyPixCode() {
+    const txt = document.getElementById('pix-code-txt')?.textContent;
+    if (!txt) return;
+    navigator.clipboard.writeText(txt).then(() => {
+        const icon = document.getElementById('pix-copy-icon');
+        if (icon) { icon.className = 'fa fa-check'; setTimeout(() => icon.className = 'fa fa-copy', 2000); }
+    });
+}
+
+function buildWhatsAppMessage(order, name, phone, address, notes, paymentMethod, changeFor, pixCode) {
+    const PAY_LABELS = {
+        pix: 'PIX', cartao_credito: 'Cartão de Crédito', cartao_debito: 'Cartão de Débito',
+        dinheiro: 'Dinheiro', na_entrega: 'Pagar na entrega',
+    };
+    const lines = [];
+    lines.push('🛍️ *Novo Pedido!*');
+    lines.push(`\n*Cliente:* ${name}`);
+    if (phone) lines.push(`*WhatsApp:* ${phone}`);
+    lines.push(`\n*Itens:*`);
+
+    cart.forEach(entry => {
+        const extras = entry.selected_options.map(o => `  ↳ ${o.name}${+o.additional_price > 0 ? ` (+${fmtMoney(o.additional_price)})` : ''}`).join('\n');
+        const linePrice = (+entry.item.price + entry.selected_options.reduce((s, o) => s + o.additional_price, 0)) * entry.quantity;
+        lines.push(`• ${entry.quantity}× ${entry.item.name} — ${fmtMoney(linePrice)}`);
+        if (extras) lines.push(extras);
+    });
+
+    lines.push(`\n*Subtotal:* ${fmtMoney(order.subtotal)}`);
+    if (+order.delivery_tax > 0) lines.push(`*Taxa de Entrega:* ${fmtMoney(order.delivery_tax)}`);
+    else if (order.delivery_type !== 'pickup') lines.push(`*Taxa de Entrega:* Grátis`);
+    lines.push(`*Total:* ${fmtMoney(order.total)}`);
+
+    lines.push(`\n*Tipo:* ${order.delivery_type === 'pickup' ? 'Retirada na loja' : 'Entrega'}`);
+    if (address && order.delivery_type !== 'pickup') lines.push(`*Endereço:* ${address}`);
+
+    // Pagamento
+    const pm = paymentMethod || order.payment_method;
+    lines.push(`\n*Pagamento:* ${PAY_LABELS[pm] || pm}`);
+    if (pm === 'dinheiro' && changeFor) {
+        const troco = Math.max(0, changeFor - +order.total);
+        lines.push(`*Levar troco para:* ${fmtMoney(changeFor)}`);
+        lines.push(`*Troco a devolver:* ${fmtMoney(troco)}`);
+    } else if (pm === 'dinheiro') {
+        lines.push(`*Troco:* Sem troco necessário`);
+    }
+    if (pm === 'pix' && pixCode) lines.push(`\n💳 *Código PIX:*\n${pixCode}`);
+
+    if (notes) lines.push(`\n*Obs:* ${notes}`);
+    lines.push(`\n🔎 Acompanhe: ${window.location.origin}/track/${order.id}`);
+    lines.push(`_Pedido #${(order.daily_code||order.id.slice(-8)).toUpperCase()}_`);
+
+    return lines.join('\n');
+}
+
+// ── Repetir pedido ────────────────────────────────────────────
+function loadRepeatOrder(items, openDrawer = false) {
+    cart = [];
+    items.forEach(entry => {
+        if (!entry.item || !entry.item.id) return;
+        cart.push({
+            item: entry.item,
+            quantity: entry.quantity || 1,
+            selected_options: entry.selected_options || [],
+        });
+    });
+    updateCartBar();
+    if (openDrawer && cart.length) openCartDrawer();
+}
+
+let _repeatBannerTimer = null;
+function showRepeatBanner() {
+    try {
+        const raw = localStorage.getItem('ag_last_order_' + storeData?.id);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (!data.items?.length) return;
+
+        const names = data.items.slice(0, 2).map(e => e.item?.name).filter(Boolean);
+        const label = names.join(', ') + (data.items.length > 2 ? ` +${data.items.length - 2}` : '');
+
+        const banner = document.createElement('div');
+        banner.id = 'repeat-banner';
+        banner.style.cssText = `
+            position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px);
+            opacity:0; transition:opacity .3s,transform .3s; z-index:60;
+            background:#1e293b; border:1px solid #334155; border-radius:16px;
+            box-shadow:0 8px 32px rgba(0,0,0,.6); padding:12px 16px;
+            display:flex; align-items:center; gap:12px; max-width:340px; width:calc(100% - 32px);
+        `;
+        banner.innerHTML = `
+            <div style="flex:1;min-width:0">
+                <p style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Repetir último pedido</p>
+                <p style="font-size:13px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(label)}</p>
+            </div>
+            <button id="repeat-btn" style="background:var(--accent);color:#fff;font-weight:700;font-size:13px;border:none;border-radius:10px;padding:8px 14px;cursor:pointer;white-space:nowrap;flex-shrink:0">
+                <i class="fa fa-rotate-right" style="margin-right:4px"></i>Repetir
+            </button>
+            <button onclick="dismissRepeatBanner()" style="color:#64748b;background:none;border:none;cursor:pointer;padding:4px;font-size:16px;flex-shrink:0">
+                <i class="fa fa-times"></i>
+            </button>`;
+
+        document.body.appendChild(banner);
+        requestAnimationFrame(() => {
+            banner.style.opacity = '1';
+            banner.style.transform = 'translateX(-50%) translateY(0)';
+        });
+
+        document.getElementById('repeat-btn').addEventListener('click', () => {
+            dismissRepeatBanner();
+            loadRepeatOrder(data.items, true);
+        });
+
+        _repeatBannerTimer = setTimeout(dismissRepeatBanner, 20000);
+    } catch {}
+}
+
+function dismissRepeatBanner() {
+    clearTimeout(_repeatBannerTimer);
+    const banner = document.getElementById('repeat-banner');
+    if (!banner) return;
+    banner.style.opacity = '0';
+    banner.style.transform = 'translateX(-50%) translateY(20px)';
+    setTimeout(() => banner.remove(), 300);
+}
+
+// ── Auto-preenchimento por telefone ───────────────────────────
+let _lookupTimer = null;
+function onPhoneInput(el) {
+    clearTimeout(_lookupTimer);
+    const raw = el.value.replace(/\D/g, '');
+    if (raw.length < 10) return;
+    _lookupTimer = setTimeout(() => lookupCustomer(raw), 600);
+}
+
+function onZoneSelect(select) {
+    if (!select.value) return;
+    const opt = select.selectedOptions[0];
+    const zoneName = opt?.dataset?.name || opt?.text?.split(' — ')[0]?.trim() || '';
+    const zoneMode = deliveryConfig?.zone_type || 'neighborhood';
+
+    if (zoneMode === 'city') {
+        // Preenche cidade automaticamente
+        const cidadeEl = document.getElementById('dl-cidade');
+        if (cidadeEl && zoneName) cidadeEl.value = zoneName;
+    } else {
+        // Preenche bairro; cidade vem do optgroup
+        const bairroEl = document.getElementById('dl-bairro');
+        if (bairroEl && zoneName) bairroEl.value = zoneName;
+        const cidadeEl = document.getElementById('dl-cidade');
+        if (cidadeEl && !cidadeEl.value) {
+            const groupLabel = opt?.closest('optgroup')?.label || '';
+            if (groupLabel && groupLabel !== 'Outras regiões') cidadeEl.value = groupLabel;
+        }
+    }
+}
+
+function toggleNumeroField(cb) {
+    const numEl = document.getElementById('dl-numero');
+    if (!numEl) return;
+    numEl.disabled = cb.checked;
+    numEl.value = cb.checked ? '' : numEl.value;
+    numEl.placeholder = cb.checked ? 'S/N' : 'Número *';
+    numEl.style.opacity = cb.checked ? '0.4' : '1';
+}
+
+function toggleSemNumero(input) {
+    // Se o user digita um número, desmarca "sem número"
+    const cb = document.getElementById('dl-sem-numero');
+    if (cb && input.value.trim()) cb.checked = false;
+}
+
+async function lookupCustomer(phone) {
+    if (!storeData) return;
+    try {
+        // Lookup do cliente na loja (nome, último endereço, último pagamento)
+        const res = await fetch('/delivery/public/customer-lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, establishment_id: storeData.id }),
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.found) {
+                // Preenche nome
+                const nameEl = document.getElementById('dl-name');
+                if (nameEl && !nameEl.value && data.name) nameEl.value = data.name;
+
+                // Preenche endereço do último pedido (só se não tiver endereços salvos ainda)
+                if (data.last_address) {
+                    fillAddressFields(data.last_address);
+                }
+
+                // Seleciona último pagamento
+                if (data.last_payment) selectPayment(data.last_payment);
+
+                const hint = document.getElementById('dl-phone-hint');
+                if (hint) hint.classList.remove('hidden');
+            }
+        }
+
+        // Busca endereços salvos do usuário (cadastro AG-ON)
+        const addrRes = await fetch(`/delivery/public/customer-addresses?phone=${encodeURIComponent(phone)}`);
+        if (addrRes.ok) {
+            const addresses = await addrRes.json();
+            renderSavedAddresses(addresses);
+        }
+    } catch { /* silencioso */ }
+}
+
+function fillAddressFields(address) {
+    const cidadeEl = document.getElementById('dl-cidade');
+    const ruaEl    = document.getElementById('dl-rua');
+    const match = address.match(/^(.+?),\s*(\S+)\s*—\s*(.+?),\s*(.+?)(?:\s*\(Ref:\s*(.+)\))?$/);
+    if (match) {
+        if (ruaEl    && !ruaEl.value)    ruaEl.value    = match[1].trim();
+        const numEl = document.getElementById('dl-numero');
+        if (numEl   && !numEl.value)     numEl.value    = match[2].trim();
+        const bairroEl = document.getElementById('dl-bairro');
+        if (bairroEl && !bairroEl.value) bairroEl.value = match[3].trim();
+        if (cidadeEl && !cidadeEl.value) cidadeEl.value = match[4].trim();
+        const refEl = document.getElementById('dl-referencia');
+        if (refEl && !refEl.value && match[5]) refEl.value = match[5].trim();
+    } else if (ruaEl && !ruaEl.value) {
+        ruaEl.value = address;
+    }
+}
+
+function renderSavedAddresses(addresses) {
+    const bar  = document.getElementById('saved-addresses-bar');
+    const list = document.getElementById('saved-addresses-list');
+    if (!bar || !list || !addresses.length) return;
+
+    list.innerHTML = addresses.map(a => `
+        <button type="button"
+            onclick="applySavedAddressWithMap(${JSON.stringify(a).replace(/'/g,'&apos;').replace(/"/g,'&quot;')})"
+            style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;border-radius:20px;
+                   padding:5px 14px;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .15s"
+            onmouseover="this.style.borderColor='#6366f1';this.style.color='#a5b4fc'"
+            onmouseout="this.style.borderColor='#334155';this.style.color='#cbd5e1'">
+            <i class="fa fa-location-dot mr-1" style="color:#6366f1"></i>${a.label}
+        </button>`).join('');
+
+    bar.classList.remove('hidden');
+}
+
+function applySavedAddress(a) {
+    const ruaEl    = document.getElementById('dl-rua');
+    const numEl    = document.getElementById('dl-numero');
+    const bairroEl = document.getElementById('dl-bairro');
+    const cidadeEl = document.getElementById('dl-cidade');
+    const refEl    = document.getElementById('dl-referencia');
+
+    if (ruaEl)    ruaEl.value    = a.street       || '';
+    if (numEl)    numEl.value    = a.number        || '';
+    if (bairroEl) bairroEl.value = a.neighborhood  || '';
+    if (cidadeEl) cidadeEl.value = a.city          || '';
+    if (refEl)    refEl.value    = a.reference     || '';
+
+    // Se os campos estruturados vazios, usa o endereço completo
+    if (!a.street && a.address && ruaEl && !ruaEl.value) {
+        fillAddressFields(a.address);
+    }
+
+    const hint = document.getElementById('dl-phone-hint');
+    if (hint) hint.classList.remove('hidden');
+}
+
+// ── Mapa de endereço (Google Maps ou Leaflet+OpenStreetMap) ─────
+
+// Reverse geocode centralizado: usa Google se _mapsKey, Nominatim como fallback
+async function reverseGeocode(lat, lng) {
+    if (_mapsKey && window.google?.maps) {
+        return new Promise((resolve) => {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ location: { lat, lng }, language: 'pt-BR' }, (results, status) => {
+                if (status !== 'OK' || !results[0]) { resolve({}); return; }
+                const comps = results[0].address_components;
+                const get = (type) => comps.find(c => c.types.includes(type))?.long_name || '';
+                resolve({
+                    road: get('route'),
+                    house_number: get('street_number'),
+                    suburb: get('sublocality_level_1') || get('sublocality'),
+                    city: get('locality') || get('administrative_area_level_2'),
+                });
+            });
+        });
+    }
+    // Fallback Nominatim
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`, {
+        headers: { 'Accept-Language': 'pt-BR' }
+    });
+    const d = await r.json();
+    return d.address || {};
+}
+
+function fillAddressFromGeocode(ad) {
+    const ruaEl    = document.getElementById('dl-rua');
+    const numEl    = document.getElementById('dl-numero');
+    const bairroEl = document.getElementById('dl-bairro');
+    const cidadeEl = document.getElementById('dl-cidade');
+    if (ruaEl)    ruaEl.value    = ad.road || ad.pedestrian || ruaEl?.value || '';
+    if (numEl && !numEl.value) numEl.value = ad.house_number || '';
+    if (bairroEl) bairroEl.value = ad.suburb || ad.neighbourhood || ad.quarter || bairroEl?.value || '';
+    if (cidadeEl) cidadeEl.value = ad.city || ad.town || ad.village || cidadeEl?.value || '';
+}
+
+function initMap(lat, lng) {
+    const mapEl = document.getElementById('dl-map');
+    if (!mapEl) return;
+
+    if (_mapsKey && window.google?.maps) {
+        _initGoogleMap(lat, lng, mapEl);
+    } else if (typeof L !== 'undefined') {
+        _initLeafletMap(lat, lng);
+    }
+}
+
+function _initGoogleMap(lat, lng, mapEl) {
+    const pos = { lat: +lat, lng: +lng };
+    if (_map && _map._isGoogleMap) {
+        _map.setCenter(pos);
+        _marker.setPosition(pos);
+        return;
+    }
+    if (_map) { try { _map.remove?.(); } catch {} _map = null; _marker = null; }
+
+    const gmap = new google.maps.Map(mapEl, {
+        center: pos, zoom: 16,
+        mapTypeControl: false, fullscreenControl: false, streetViewControl: false,
+        styles: [{ elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+                 { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] }]
+    });
+    gmap._isGoogleMap = true;
+    const marker = new google.maps.Marker({
+        position: pos, map: gmap, draggable: true,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10,
+                fillColor: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6366f1',
+                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 }
+    });
+    marker.addListener('dragend', async () => {
+        const p = marker.getPosition();
+        checkoutLat = p.lat(); checkoutLng = p.lng();
+        setMapStatus('Buscando endereço...');
+        try {
+            const ad = await reverseGeocode(checkoutLat, checkoutLng);
+            fillAddressFromGeocode(ad);
+            setMapStatus('📍 Localização atualizada');
+        } catch { setMapStatus(''); }
+    });
+    _map = gmap; _marker = marker;
+    document.getElementById('map-section').style.display = 'block';
+}
+
+function _initLeafletMap(lat, lng) {
+    if (_map && !_map._isGoogleMap) { _map.setView([lat, lng], 16); _marker.setLatLng([lat, lng]); return; }
+    if (_map) { try { _map.remove(); } catch {} _map = null; _marker = null; }
+
+    _map = L.map('dl-map').setView([lat, lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', maxZoom: 19,
+    }).addTo(_map);
+    const icon = L.divIcon({
+        html: '<div style="background:var(--accent,#6366f1);width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4)"></div>',
+        iconSize: [20, 20], iconAnchor: [10, 10], className: ''
+    });
+    _marker = L.marker([lat, lng], { draggable: true, icon }).addTo(_map);
+    _marker.on('dragend', async () => {
+        const { lat: la, lng: lo } = _marker.getLatLng();
+        checkoutLat = la; checkoutLng = lo;
+        setMapStatus('Buscando endereço...');
+        try {
+            const ad = await reverseGeocode(la, lo);
+            fillAddressFromGeocode(ad);
+            setMapStatus('📍 Localização atualizada');
+        } catch { setMapStatus(''); }
+    });
+    document.getElementById('map-section').style.display = 'block';
+    setTimeout(() => _map.invalidateSize(), 100);
+}
+
+function setMapStatus(msg) {
+    const el = document.getElementById('map-status');
+    if (el) el.textContent = msg;
+}
+
+let _locationConfirmed = false;
+
+function onAddressFieldChange() {
+    // Geocoding por texto mantido apenas quando o usuário editar campos manualmente
+    // e não houver localização GPS confirmada
+    if (_locationConfirmed) return;
+    clearTimeout(_geocodeTimer);
+    _geocodeTimer = setTimeout(geocodeFromFields, 700);
+}
+
+async function geocodeFromFields() {
+    const rua    = (document.getElementById('dl-rua')?.value || '').trim();
+    const num    = (document.getElementById('dl-numero')?.value || '').trim();
+    const bairro = (document.getElementById('dl-bairro')?.value || '').trim();
+    const cidade = (document.getElementById('dl-cidade')?.value || '').trim();
+
+    if (!rua || !cidade) return;
+
+    setMapStatus('Localizando...');
+    try {
+        let lat, lng;
+        if (_mapsKey && window.google?.maps) {
+            // Usa Google Geocoding
+            const result = await new Promise((resolve) => {
+                new google.maps.Geocoder().geocode(
+                    { address: [rua, num, bairro, cidade, 'Brasil'].filter(Boolean).join(', '), language: 'pt-BR' },
+                    (results, status) => resolve(status === 'OK' ? results[0] : null)
+                );
+            });
+            if (!result) { setMapStatus('Endereço não encontrado no mapa'); return; }
+            lat = result.geometry.location.lat();
+            lng = result.geometry.location.lng();
+        } else {
+            // Fallback Nominatim
+            const q = [rua, num, bairro, cidade].filter(Boolean).join(', ') + ', Brasil';
+            const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, {
+                headers: { 'Accept-Language': 'pt-BR' }
+            });
+            const results = await r.json();
+            if (!results.length) { setMapStatus('Endereço não encontrado no mapa'); return; }
+            lat = +results[0].lat; lng = +results[0].lon;
+        }
+        checkoutLat = lat; checkoutLng = lng;
+        loadMapThen(() => initMap(checkoutLat, checkoutLng));
+        setMapStatus('✓ Mapa centralizado');
+    } catch { setMapStatus(''); }
+}
+
+function useGPS() {
+    if (!navigator.geolocation) {
+        alert('Seu navegador não suporta GPS.');
+        return;
+    }
+    setMapStatus('Capturando localização GPS...');
+    navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+            checkoutLat = pos.coords.latitude;
+            checkoutLng = pos.coords.longitude;
+            _locationConfirmed = false;
+            loadMapThen(async () => {
+                initMap(checkoutLat, checkoutLng);
+                try {
+                    const ad = await reverseGeocode(checkoutLat, checkoutLng);
+                    fillAddressFromGeocode(ad);
+                    setMapStatus('📍 GPS capturado — confirme ou ajuste o pino');
+                } catch { setMapStatus('📍 GPS capturado'); }
+            });
+        },
+        (err) => {
+            const msgs = { 1: 'Permissão de localização negada.', 2: 'Posição não disponível.', 3: 'Tempo esgotado ao obter localização.' };
+            setMapStatus('');
+            alert(msgs[err.code] || 'Não foi possível obter sua localização.');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+    );
+}
+
+function confirmLocation() {
+    if (!checkoutLat || !checkoutLng) return;
+    _locationConfirmed = true;
+    // Salva coordenadas no localStorage para próxima visita
+    if (storeData?.id) {
+        try {
+            localStorage.setItem(`ag_gps_${storeData.id}`, JSON.stringify({ lat: checkoutLat, lng: checkoutLng }));
+        } catch {}
+    }
+    const btn = document.getElementById('btn-confirm-location');
+    if (btn) {
+        btn.textContent = '✓ Localização confirmada!';
+        btn.classList.add('opacity-60');
+        btn.disabled = true;
+    }
+    setMapStatus('✅ Localização salva');
+}
+
+// ── Loader unificado de mapa ───────────────────────────────────
+// Usa Google Maps JS API se _mapsKey disponível; cai no Leaflet caso contrário.
+let _leafletLoaded = false;
+let _googleMapsLoaded = false;
+
+function loadMapThen(cb) {
+    if (_mapsKey) {
+        _loadGoogleMapsThen(cb);
+    } else {
+        _loadLeafletThen(cb);
+    }
+}
+
+function _loadGoogleMapsThen(cb) {
+    if (_googleMapsLoaded && window.google?.maps) { cb(); return; }
+    if (document.getElementById('gm-script')) {
+        // Script já em carregamento — aguarda
+        const poll = setInterval(() => {
+            if (window.google?.maps) { clearInterval(poll); _googleMapsLoaded = true; cb(); }
+        }, 100);
+        return;
+    }
+    const js = document.createElement('script');
+    js.id = 'gm-script';
+    js.src = `https://maps.googleapis.com/maps/api/js?key=${_mapsKey}&libraries=places`;
+    js.onload = () => { _googleMapsLoaded = true; cb(); };
+    js.onerror = () => {
+        console.warn('[AG-ON Maps] Falha ao carregar Google Maps — usando Leaflet como fallback.');
+        _mapsKey = null;
+        _loadLeafletThen(cb);
+    };
+    document.head.appendChild(js);
+}
+
+function _loadLeafletThen(cb) {
+    if (_leafletLoaded) { cb(); return; }
+    if (document.getElementById('leaflet-css')) { cb(); return; }
+    const css = document.createElement('link');
+    css.id = 'leaflet-css'; css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload = () => { _leafletLoaded = true; cb(); };
+    document.head.appendChild(js);
+}
+
+// Compatibilidade — usado internamente para checar se Leaflet está pronto
+function loadLeafletThen(cb) { _loadLeafletThen(cb); }
+
+function applySavedAddressWithMap(a) {
+    applySavedAddress(a);
+    if (a.lat && a.lng) {
+        checkoutLat = +a.lat; checkoutLng = +a.lng;
+        _locationConfirmed = true;
+        loadMapThen(() => initMap(checkoutLat, checkoutLng));
+    } else {
+        // Tenta restaurar GPS do localStorage
+        try {
+            const saved = storeData?.id && localStorage.getItem(`ag_gps_${storeData.id}`);
+            if (saved) {
+                const { lat, lng } = JSON.parse(saved);
+                if (lat && lng) {
+                    checkoutLat = lat; checkoutLng = lng;
+                    loadMapThen(() => initMap(checkoutLat, checkoutLng));
+                    setMapStatus('📍 Localização anterior restaurada');
+                    return;
+                }
+            }
+        } catch {}
+        onAddressFieldChange();
+    }
+}
+
+function resetCart() {
+    cart = [];
+    currentDeliveryType = 'delivery';
+    vitrineDiscount = 0;
+    vitrineCouponCode = null;
+    checkoutLat = null; checkoutLng = null; _locationConfirmed = false;
+    if (_map) { _map.remove(); _map = null; _marker = null; }
+    cartClear();
+    updateCartBar();
+}
+
+function copyPix() {
+    const val = document.getElementById('pix-copy-val').textContent;
+    navigator.clipboard.writeText(val);
+    alert('Chave Pix copiada!');
+}
+
+// ── Academia: Planos & Assinaturas ────────────────────────────
+let _selectedPlan = null;
+
+async function loadGymPlans() {
+  const grid = document.getElementById('gym-plans-grid');
+  const section = document.getElementById('gym-plans-section');
+  try {
+    const res = await fetch(`/gym/public/plans?est=${storeData.id}`);
+    if (!res.ok) return;
+    const plans = await res.json();
+    if (!plans.length) return;
+    section.classList.remove('hidden');
+    const CYCLE_LABEL = { weekly:'Semanal', monthly:'Mensal', bimonthly:'Bimestral', quarterly:'Trimestral', semiannual:'Semestral', annual:'Anual' };
+    grid.innerHTML = plans.map(p => `
+      <div class="item-card rounded-2xl p-5 flex flex-col gap-3 cursor-pointer" onclick="openSubscribeModal(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="font-bold text-white text-base leading-tight">${esc(p.name)}</h3>
+          <span class="text-[var(--accent)] font-black text-lg whitespace-nowrap">${fmtBRL(p.price)}</span>
+        </div>
+        ${p.description ? `<p class="text-slate-400 text-xs leading-relaxed">${esc(p.description)}</p>` : ''}
+        <div class="flex items-center justify-between mt-auto pt-2 border-t border-slate-700">
+          <span class="text-xs text-slate-500">${CYCLE_LABEL[p.renewal_cycle] || p.renewal_cycle || 'Avulso'}</span>
+          <button class="px-4 py-1.5 rounded-full bg-[var(--accent)] text-white text-xs font-bold hover:opacity-90 transition-opacity">Assinar</button>
+        </div>
+      </div>`).join('');
+  } catch {}
+}
+
+function openSubscribeModal(plan) {
+  _selectedPlan = plan;
+  const CYCLE_LABEL = { weekly:'Semanal', monthly:'Mensal', bimonthly:'Bimestral', quarterly:'Trimestral', semiannual:'Semestral', annual:'Anual' };
+  const CYCLE_DAYS  = { weekly:7, monthly:30, bimonthly:60, quarterly:90, semiannual:180, annual:365 };
+  document.getElementById('subscribe-plan-title').textContent = plan.name;
+  document.getElementById('subscribe-plan-desc').textContent  = plan.description || '';
+  document.getElementById('subscribe-plan-price').textContent = fmtBRL(plan.price);
+  document.getElementById('subscribe-plan-cycle').textContent = CYCLE_LABEL[plan.renewal_cycle] || 'Avulso';
+  const today  = new Date();
+  const expiry = new Date(today);
+  if (CYCLE_DAYS[plan.renewal_cycle]) expiry.setDate(expiry.getDate() + CYCLE_DAYS[plan.renewal_cycle]);
+  const fmt = d => d.toLocaleDateString('pt-BR');
+  document.getElementById('subscribe-plan-start').textContent  = fmt(today);
+  document.getElementById('subscribe-plan-expiry').textContent = CYCLE_DAYS[plan.renewal_cycle] ? fmt(expiry) : '—';
+
+  // Verifica login
+  const token = localStorage.getItem('token') || getCookie('token');
+  const loginWarn = document.getElementById('subscribe-login-warn');
+  const confirmBtn = document.getElementById('subscribe-confirm-btn');
+  if (!token) {
+    loginWarn.classList.remove('hidden');
+    document.getElementById('subscribe-login-link').href = `/portal-cliente?est=${storeData.id}&slug=${slug}`;
+    confirmBtn.disabled = true;
+    confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+  } else {
+    loginWarn.classList.add('hidden');
+    confirmBtn.disabled = false;
+    confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+  document.getElementById('modal-subscribe').classList.remove('hidden');
+}
+
+function closeSubscribeModal() {
+  document.getElementById('modal-subscribe').classList.add('hidden');
+  _selectedPlan = null;
+}
+
+async function confirmSubscribe() {
+  if (!_selectedPlan) return;
+  const btn = document.getElementById('subscribe-confirm-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i>Aguarde...';
+  try {
+    const token = localStorage.getItem('token') || getCookie('token');
+    const res = await fetch('/gym/public/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ establishment_id: storeData.id, plan_id: _selectedPlan.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao assinar');
+    closeSubscribeModal();
+    alert(`✅ Assinatura do plano "${_selectedPlan.name}" realizada com sucesso!`);
+  } catch (err) {
+    alert('❌ ' + err.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-check mr-1"></i>Confirmar Assinatura';
+  }
+}
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+init();
+</script>
+</body>
+</html>

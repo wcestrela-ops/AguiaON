@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>AG-ON Print</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">AG-ON</div>
+      <div class="logo-text">
+        <span class="logo-title">AG-ON Print</span>
+        <span class="logo-sub">Sistema de Impressão Automática</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Tabs ── -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="status">
+      <span>📋</span> Status
+    </button>
+    <button class="tab" data-tab="settings">
+      <span>⚙️</span> Configurações
+    </button>
+  </nav>
+
+  <!-- ════════════════════════════════════════
+       TAB: STATUS
+  ════════════════════════════════════════ -->
+  <section id="tab-status" class="tab-content active">
+
+    <!-- Card de conexão -->
+    <div class="card">
+      <div class="status-row">
+        <div class="status-dot" id="status-dot"></div>
+        <div>
+          <div class="status-label" id="status-label">Aguardando configuração...</div>
+          <div class="status-store" id="status-store"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Últimos pedidos -->
+    <div class="section-title">Últimos pedidos</div>
+    <div id="orders-list">
+      <div class="empty-state">Nenhum pedido recebido ainda.</div>
+    </div>
+
+  </section>
+
+  <!-- ════════════════════════════════════════
+       TAB: CONFIGURAÇÕES
+  ════════════════════════════════════════ -->
+  <section id="tab-settings" class="tab-content">
+
+    <form id="config-form" autocomplete="off">
+
+      <div class="form-group">
+        <label for="f-url">URL do Servidor</label>
+        <input id="f-url" type="url" placeholder="https://meusite.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="f-token">Token da Loja</label>
+        <div class="input-row">
+          <input id="f-token" type="text" placeholder="Cole o token aqui" required>
+          <button type="button" class="btn-icon" id="btn-show-token" title="Mostrar/ocultar">👁</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="f-name">Nome da Loja <span class="hint">(cabeçalho do cupom)</span></label>
+        <input id="f-name" type="text" placeholder="Minha Loja" required>
+      </div>
+
+      <div class="form-group">
+        <label for="f-printer">Impressora</label>
+        <div class="input-row">
+          <select id="f-printer">
+            <option value="">(modo log — sem imprimir)</option>
+          </select>
+          <button type="button" class="btn-icon" id="btn-reload-printers" title="Atualizar lista">🔄</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label for="f-font">Tamanho da fonte</label>
+          <select id="f-font">
+            <option value="10">10 — Muito pequeno</option>
+            <option value="11">11 — Pequeno</option>
+            <option value="12" selected>12 — Normal</option>
+            <option value="14">14 — Médio</option>
+            <option value="16">16 — Grande</option>
+            <option value="18">18 — Muito grande</option>
+            <option value="22">22 — Extra grande</option>
+            <option value="26">26 — Máximo</option>
+          </select>
+        </div>
+
+        <div class="form-group half">
+          <label for="f-copies">Vias de impressão</label>
+          <select id="f-copies">
+            <option value="1" selected>1 via</option>
+            <option value="2">2 vias</option>
+            <option value="3">3 vias</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group toggle-row">
+        <label class="toggle-label" for="f-autostart">
+          Iniciar automaticamente com o Windows
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="f-autostart">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div id="save-status" class="save-status"></div>
+
+      <button type="submit" class="btn-primary" id="btn-save">Salvar e Conectar</button>
+
+      <button type="button" class="btn-secondary" id="btn-log">Ver arquivo de log</button>
+
+    </form>
+  </section>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

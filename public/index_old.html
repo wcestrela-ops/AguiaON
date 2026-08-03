@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AG-ON | Marketplace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #020617; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+
+        .store-card { transition: all 0.3s ease; }
+        .store-card:hover { transform: translateY(-6px); box-shadow: 0 20px 40px -12px rgba(99,102,241,0.3); border-color: #6366f1; }
+
+        .filter-btn.active { background: #6366f1; color: white; border-color: #6366f1; }
+
+        @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+        .fade-up { animation: fadeUp 0.5s ease forwards; }
+
+        input { background-color: #0f172a !important; border: 1px solid #1e293b !important; color: #cbd5e1 !important; }
+        input:focus { border-color: #6366f1 !important; outline: none; box-shadow: 0 0 0 1px rgba(99,102,241,0.2); }
+        select { background-color: #0f172a !important; border: 1px solid #1e293b !important; color: #cbd5e1 !important; }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-300 font-sans">
+
+<!-- HEADER -->
+<header class="sticky top-0 z-50 bg-[#020617]/95 backdrop-blur-xl border-b border-slate-800/50">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+        <a href="/" class="font-black text-white text-2xl tracking-tighter shrink-0">AG<span class="text-indigo-500">ON</span></a>
+
+        <!-- Busca -->
+        <div class="flex-1 max-w-xl relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+            <input id="search-input" type="text" placeholder="Buscar loja, serviço ou cidade..."
+                   class="w-full rounded-2xl pl-11 pr-5 py-3 text-sm transition-all"
+                   oninput="filterStores()">
+        </div>
+
+        <div class="flex items-center gap-3 shrink-0">
+            <a id="btn-entrar" href="/login" class="text-slate-400 hover:text-white text-sm font-bold uppercase tracking-widest transition-all px-4 py-2">
+                Entrar
+            </a>
+            <a id="btn-criar" href="/login?mode=register" class="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/20">
+                Criar Conta
+            </a>
+        </div>
+    </div>
+</header>
+
+<!-- HERO -->
+<section class="max-w-7xl mx-auto px-6 py-16 text-center space-y-6">
+    <div class="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full">
+        <i class="fa-solid fa-store"></i> Marketplace
+    </div>
+    <h1 id="hero-title" class="text-white text-5xl md:text-6xl font-black tracking-tight leading-none">
+        Encontre os melhores<br><span class="text-indigo-400">serviços perto de você</span>
+    </h1>
+    <p class="text-slate-500 text-lg max-w-xl mx-auto">Acesse lojas, salões, restaurantes e muito mais — tudo em um só lugar.</p>
+</section>
+
+<!-- FILTROS POR MÓDULO -->
+<section class="max-w-7xl mx-auto px-6 pb-10">
+    <div id="module-filters" class="flex flex-wrap gap-3 justify-center">
+        <button onclick="filterByModule(null, this)"
+                class="filter-btn active text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-full border border-slate-700 transition-all">
+            <i class="fa-solid fa-grid-2 mr-2"></i> Todos
+        </button>
+        <!-- módulos carregados dinamicamente -->
+    </div>
+</section>
+
+<!-- GRID DE LOJAS -->
+<section class="max-w-7xl mx-auto px-6 pb-20">
+    <div id="stores-count" class="text-slate-600 text-xs font-bold uppercase tracking-widest mb-6"></div>
+    <div id="stores-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <!-- skeleton loading -->
+        <div class="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden animate-pulse h-64"></div>
+        <div class="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden animate-pulse h-64"></div>
+        <div class="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden animate-pulse h-64"></div>
+        <div class="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden animate-pulse h-64"></div>
+    </div>
+</section>
+
+<!-- SEÇÃO PARCEIRO -->
+<section class="bg-gradient-to-br from-indigo-950 via-slate-900 to-[#020617] border-t border-slate-800">
+    <div class="max-w-5xl mx-auto px-6 py-24 text-center space-y-8">
+        <div class="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full">
+            <i class="fa-solid fa-handshake"></i> Para Lojistas
+        </div>
+        <h2 class="text-white text-4xl md:text-5xl font-black tracking-tight">
+            Faça parte da plataforma.<br>
+            <span class="text-indigo-400">Leve seu negócio ao próximo nível.</span>
+        </h2>
+        <p class="text-slate-400 text-lg max-w-2xl mx-auto">
+            Cadastre seu estabelecimento, escolha o módulo que mais combina com o seu negócio e comece a atender seus clientes pela plataforma.
+        </p>
+        <div class="flex flex-wrap gap-6 justify-center text-sm text-slate-400">
+            <span><i class="fa-solid fa-check text-indigo-400 mr-2"></i>Agendamentos automáticos</span>
+            <span><i class="fa-solid fa-check text-indigo-400 mr-2"></i>Gestão de clientes</span>
+            <span><i class="fa-solid fa-check text-indigo-400 mr-2"></i>Pagamentos integrados</span>
+            <span><i class="fa-solid fa-check text-indigo-400 mr-2"></i>IA para atendimento</span>
+        </div>
+        <a href="/parceiro" class="inline-block bg-indigo-600 hover:bg-indigo-500 text-white px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-2xl shadow-indigo-600/30">
+            <i class="fa-solid fa-rocket mr-3"></i> Quero ser Parceiro
+        </a>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="border-t border-slate-800 py-8 text-center text-slate-600 text-xs">
+    <span class="font-black text-slate-500">AG<span class="text-indigo-500">ON</span></span> &nbsp;·&nbsp; Todos os direitos reservados
+</footer>
+
+<!-- MODAL LOGIN -->
+<div id="login-modal" class="hidden fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-800 p-10 rounded-[3rem] w-full max-w-md space-y-8 shadow-2xl">
+        <div class="text-center space-y-2">
+            <h3 class="text-white font-black text-2xl">Entrar</h3>
+            <p class="text-slate-500 text-sm">Acesse com seu número de WhatsApp</p>
+        </div>
+
+        <div class="space-y-4">
+            <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">WhatsApp</label>
+                <input id="login-whatsapp" type="tel" placeholder="(11) 99999-9999" class="w-full rounded-2xl p-4 text-sm">
+            </div>
+            <div id="login-error" class="hidden text-red-400 text-xs text-center font-bold"></div>
+        </div>
+
+        <div class="space-y-3">
+            <button onclick="doLogin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all">
+                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> Entrar
+            </button>
+            <button onclick="switchToRegister()" class="w-full text-slate-500 hover:text-white text-xs font-bold uppercase tracking-widest py-3 transition-all">
+                Não tenho conta — Criar agora
+            </button>
+        </div>
+
+        <button onclick="closeModals()" class="absolute top-6 right-6 w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-800 text-slate-500 hover:text-white transition-all">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+    </div>
+</div>
+
+<!-- MODAL CRIAR CONTA -->
+<div id="register-modal" class="hidden fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-800 p-10 rounded-[3rem] w-full max-w-md space-y-8 shadow-2xl relative">
+        <div class="text-center space-y-2">
+            <h3 class="text-white font-black text-2xl">Criar Conta</h3>
+            <p class="text-slate-500 text-sm">Rápido e gratuito</p>
+        </div>
+
+        <div class="space-y-4">
+            <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">Nome completo</label>
+                <input id="reg-name" type="text" placeholder="Seu nome" class="w-full rounded-2xl p-4 text-sm">
+            </div>
+            <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">WhatsApp *</label>
+                <input id="reg-whatsapp" type="tel" placeholder="(11) 99999-9999" class="w-full rounded-2xl p-4 text-sm">
+            </div>
+            <div class="space-y-1">
+                <label class="text-[9px] font-bold text-slate-500 uppercase tracking-widest ml-1">E-mail</label>
+                <input id="reg-email" type="email" placeholder="seu@email.com" class="w-full rounded-2xl p-4 text-sm">
+            </div>
+            <div id="register-error" class="hidden text-red-400 text-xs text-center font-bold"></div>
+        </div>
+
+        <div class="space-y-3">
+            <button onclick="doRegister()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all">
+                <i class="fa-solid fa-user-plus mr-2"></i> Criar Conta
+            </button>
+            <button onclick="switchToLogin()" class="w-full text-slate-500 hover:text-white text-xs font-bold uppercase tracking-widest py-3 transition-all">
+                Já tenho conta — Entrar
+            </button>
+        </div>
+
+        <button onclick="closeModals()" class="absolute top-6 right-6 w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-800 text-slate-500 hover:text-white transition-all">
+            <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+    </div>
+</div>
+
+<!-- MODAL LOJA (área pública da loja) -->
+<div id="store-modal" class="hidden fixed inset-0 z-[150] bg-[#020617] flex flex-col">
+    <nav class="p-4 border-b border-slate-800 flex items-center gap-4 bg-[#020617] shrink-0">
+        <button onclick="closeStoreModal()" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-900 text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <span id="store-modal-name" class="font-black text-white text-sm uppercase tracking-widest"></span>
+        <div class="ml-auto">
+            <button onclick="openLoginModal()" id="store-login-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl font-black text-xs transition-all">
+                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> Entrar / Criar Conta
+            </button>
+        </div>
+    </nav>
+    <iframe id="store-frame" src="" class="flex-1 w-full border-none bg-white"></iframe>
+</div>
+
+<script>
+    let allStores = [];
+    let activeModuleId = null;
+
+    // --- INICIALIZAÇÃO ---
+    async function init() {
+        await Promise.all([loadModuleFilters(), loadStores()]);
+
+        // Valida o token salvo — se expirado, limpa e não redireciona
+        const token = localStorage.getItem('ag_token') || localStorage.getItem('client_token');
+        if (token) {
+            try {
+                const res = await fetch('/auth/validate', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 401) {
+                    localStorage.removeItem('ag_token');
+                    localStorage.removeItem('client_token');
+                } else {
+                    // Token válido: troca "Entrar/Criar Conta" por "Minha Conta"
+                    const btnEntrar = document.getElementById('btn-entrar');
+                    const btnCriar  = document.getElementById('btn-criar');
+                    if (btnEntrar) {
+                        btnEntrar.innerHTML = '<i class="fa-solid fa-user mr-2"></i> Minha Conta';
+                        btnEntrar.href = '/portal';
+                    }
+                    if (btnCriar) btnCriar.style.display = 'none';
+                }
+            } catch {
+                localStorage.removeItem('ag_token');
+                localStorage.removeItem('client_token');
+            }
+        }
+    }
+
+    // --- MÓDULOS (filtros) ---
+    async function loadModuleFilters() {
+        try {
+            const res = await fetch('/public/modules');
+            const modules = await res.json();
+            const container = document.getElementById('module-filters');
+
+            modules.forEach(m => {
+                const btn = document.createElement('button');
+                btn.className = 'filter-btn text-xs font-black uppercase tracking-widest px-5 py-2.5 rounded-full border border-slate-700 text-slate-400 transition-all';
+                btn.innerHTML = `<i class="fa-solid ${m.icon || 'fa-puzzle-piece'} mr-2"></i>${m.name}`;
+                btn.onclick = function() { filterByModule(m.id, this); };
+                container.appendChild(btn);
+            });
+        } catch(e) { console.error('Erro ao carregar módulos:', e); }
+    }
+
+    // --- LOJAS ---
+    async function loadStores() {
+        try {
+            const res = await fetch('/public/establishments');
+            allStores = await res.json();
+            renderStores(allStores);
+        } catch(e) {
+            document.getElementById('stores-grid').innerHTML = '<p class="text-slate-600 col-span-4 text-center py-16">Erro ao carregar lojas.</p>';
+        }
+    }
+
+    function renderStores(stores) {
+        const grid = document.getElementById('stores-grid');
+        const count = document.getElementById('stores-count');
+        count.innerText = `${stores.length} loja${stores.length !== 1 ? 's' : ''} encontrada${stores.length !== 1 ? 's' : ''}`;
+
+        if (!stores.length) {
+            grid.innerHTML = '<div class="col-span-4 text-center py-20 text-slate-600"><i class="fa-solid fa-store-slash text-5xl mb-4 block"></i>Nenhuma loja encontrada.</div>';
+            return;
+        }
+
+        grid.innerHTML = stores.map((s, i) => `
+            <div onclick="openStore('${s.slug}', '${s.name}')"
+                 class="store-card cursor-pointer bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden fade-up"
+                 style="animation-delay:${i * 50}ms">
+                <!-- Capa -->
+                <div class="h-36 bg-gradient-to-br from-slate-800 to-slate-950 relative overflow-hidden">
+                    ${s.cover_url
+                        ? `<img src="${s.cover_url}" class="w-full h-full object-cover">`
+                        : `<div class="w-full h-full flex items-center justify-center text-5xl text-slate-700 opacity-30"><i class="fa-solid ${s.module_icon || 'fa-store'}"></i></div>`
+                    }
+                    <!-- Badge do módulo -->
+                    <div class="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-[9px] font-black text-slate-300 uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1">
+                        <i class="fa-solid ${s.module_icon || 'fa-puzzle-piece'} text-indigo-400"></i>
+                        ${s.module_name || 'Geral'}
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="p-5 flex gap-4">
+                    <!-- Logo -->
+                    <div class="w-12 h-12 rounded-2xl shrink-0 overflow-hidden border border-slate-700 bg-slate-800 flex items-center justify-center">
+                        ${s.logo_url
+                            ? `<img src="${s.logo_url}" class="w-full h-full object-cover">`
+                            : `<i class="fa-solid fa-store text-slate-500 text-lg"></i>`
+                        }
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white font-black text-sm truncate">${s.name}</p>
+                        ${s.description ? `<p class="text-slate-500 text-xs mt-1 line-clamp-2">${s.description}</p>` : ''}
+                        ${s.city ? `<p class="text-slate-600 text-[10px] mt-2"><i class="fa-solid fa-location-dot mr-1 text-indigo-500"></i>${s.city}${s.state ? `, ${s.state}` : ''}</p>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // --- FILTROS ---
+    function filterByModule(moduleId, btn) {
+        activeModuleId = moduleId;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+    }
+
+    function filterStores() { applyFilters(); }
+
+    function applyFilters() {
+        const search = document.getElementById('search-input').value.toLowerCase();
+        let filtered = allStores;
+
+        if (activeModuleId) filtered = filtered.filter(s => s.module_id === activeModuleId);
+        if (search) filtered = filtered.filter(s =>
+            (s.name || '').toLowerCase().includes(search) ||
+            (s.description || '').toLowerCase().includes(search) ||
+            (s.city || '').toLowerCase().includes(search)
+        );
+
+        renderStores(filtered);
+    }
+
+    // --- ABRIR LOJA ---
+    async function openStore(slug, name) {
+        try {
+            const res = await fetch(`/public/establishments/${slug}`);
+            const store = await res.json();
+
+            document.getElementById('store-modal-name').innerText = name;
+            document.getElementById('store-frame').src = store.module_url
+                ? `${store.module_url}?establishment=${slug}`
+                : `/loja/${slug}`;
+
+            // Se logado, mostra botão "Meu Portal"; senão, mostra "Entrar"
+            const token = localStorage.getItem('client_token');
+            const loginBtn = document.getElementById('store-login-btn');
+            if (token) {
+                loginBtn.innerHTML = '<i class="fa-solid fa-user mr-2"></i> Meu Portal';
+                loginBtn.setAttribute('onclick', 'window.location.href="/portal"');
+            }
+
+            document.getElementById('store-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        } catch(e) { alert('Erro ao abrir loja.'); }
+    }
+
+    function closeStoreModal() {
+        document.getElementById('store-modal').classList.add('hidden');
+        document.getElementById('store-frame').src = '';
+        document.body.style.overflow = 'auto';
+    }
+
+    // --- MODAIS LOGIN / REGISTRO ---
+    function openLoginModal()    { document.getElementById('login-modal').classList.remove('hidden'); }
+    function openRegisterModal() { document.getElementById('register-modal').classList.remove('hidden'); }
+    function closeModals() {
+        document.getElementById('login-modal').classList.add('hidden');
+        document.getElementById('register-modal').classList.add('hidden');
+    }
+    function switchToRegister() { closeModals(); openRegisterModal(); }
+    function switchToLogin()    { closeModals(); openLoginModal(); }
+
+    async function doLogin() {
+        const whatsapp = document.getElementById('login-whatsapp').value.trim();
+        const errEl = document.getElementById('login-error');
+        if (!whatsapp) { errEl.innerText = 'Informe seu WhatsApp.'; errEl.classList.remove('hidden'); return; }
+
+        try {
+            const res = await fetch('/auth/identify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ whatsapp })
+            });
+            const data = await res.json();
+
+            if (data.token) {
+                localStorage.setItem('client_token', data.token);
+                window.location.href = '/portal';
+            } else {
+                errEl.innerText = data.error || 'Erro ao entrar.';
+                errEl.classList.remove('hidden');
+            }
+        } catch(e) { errEl.innerText = 'Erro de conexão.'; errEl.classList.remove('hidden'); }
+    }
+
+    async function doRegister() {
+        const name     = document.getElementById('reg-name').value.trim();
+        const whatsapp = document.getElementById('reg-whatsapp').value.trim();
+        const email    = document.getElementById('reg-email').value.trim();
+        const errEl    = document.getElementById('register-error');
+
+        if (!whatsapp) { errEl.innerText = 'WhatsApp obrigatório.'; errEl.classList.remove('hidden'); return; }
+
+        try {
+            const res = await fetch('/public/register/client', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ whatsapp, full_name: name, email })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Faz login automático logo após o cadastro
+                const loginRes = await fetch('/auth/identify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ whatsapp })
+                });
+                const loginData = await loginRes.json();
+                if (loginData.token) {
+                    localStorage.setItem('client_token', loginData.token);
+                    window.location.href = '/portal';
+                }
+            } else {
+                errEl.innerText = data.error || 'Erro ao criar conta.';
+                errEl.classList.remove('hidden');
+            }
+        } catch(e) { errEl.innerText = 'Erro de conexão.'; errEl.classList.remove('hidden'); }
+    }
+
+    // Fechar modal com ESC
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModals(); closeStoreModal(); } });
+
+    init();
+</script>
+</body>
+</html>

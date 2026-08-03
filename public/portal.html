@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AG-ON · Meu Portal</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="AG-ON" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    :root { --accent: #6366f1; }
+    * { box-sizing: border-box; }
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    /* Design system — mesmo padrão da loja.html */
+    .card   { background: #1e293b; border-radius: 12px; }
+    .input  { background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+              border-radius: 8px; padding: 8px 12px; width: 100%; font-size: .9rem; font-family: 'Inter', sans-serif; }
+    .input:focus  { outline: none; border-color: var(--accent); }
+    .input:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: #fff; border-radius: 8px;
+                   padding: 8px 18px; font-weight: 700; border: none; cursor: pointer;
+                   transition: opacity .2s; font-family: 'Inter', sans-serif; }
+    .btn-primary:hover { opacity: .85; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+    .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent);
+                   border-radius: 8px; padding: 8px 18px; font-weight: 700; cursor: pointer;
+                   transition: all .2s; font-family: 'Inter', sans-serif; }
+    .btn-outline:hover { background: var(--accent); color: #fff; }
+
+    /* Tabs */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn .25s ease-out; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+    /* Nav */
+    .nav-link { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                border-radius: 8px; cursor: pointer; font-size: .88rem; font-weight: 600;
+                transition: background .15s; border: none; background: transparent; width: 100%; text-align: left; }
+    .nav-link:hover  { background: #1e293b; color: #fff; }
+    .nav-link.active { background: #1e293b; color: var(--accent); }
+
+    /* Safe area */
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .safe-top    { padding-top:    env(safe-area-inset-top, 0px); }
+
+    /* Módulos */
+    .module-card { transition: transform .2s, border-color .2s; }
+    .module-card:hover { transform: translateY(-4px); }
+
+    /* Toggle switch */
+    .toggle-track { position:relative; width:44px; height:24px; border-radius:12px;
+                    background:#334155; transition:background .25s; cursor:pointer; border:none; }
+    .toggle-track.on { background: var(--accent); }
+    .toggle-dot { position:absolute; top:3px; left:3px; width:18px; height:18px;
+                  border-radius:50%; background:#fff; transition:transform .25s; }
+    .toggle-track.on .toggle-dot { transform:translateX(20px); }
+
+    /* Carrossel */
+    .carousel-track { display:flex; transition:transform .5s ease; }
+    .carousel-slide  { min-width:100%; position:relative; }
+
+    /* Chat Ágatha */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    .animate-fadeUp { animation:fadeUp .2s ease-out; }
+
+    /* Bottom nav ativo */
+    .bnav-btn { display:flex; flex-direction:column; align-items:center; gap:2px;
+                padding:10px 12px; color:#64748b; border:none; background:transparent;
+                cursor:pointer; font-size:9px; font-weight:700; letter-spacing:.05em;
+                text-transform:uppercase; transition:color .2s; }
+    .bnav-btn.active, .bnav-btn:hover { color: var(--accent); }
+    .bnav-btn i { font-size:20px; }
+  </style>
+</head>
+<body>
+
+<div class="flex h-[100dvh] overflow-hidden">
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR — desktop
+  ══════════════════════════════════════════ -->
+  <aside class="hidden md:flex w-56 border-r border-slate-800 flex-col py-6 bg-[#0f172a] z-50 shrink-0">
+    <div class="mb-8 font-black text-white text-xl tracking-tighter px-5">
+      AG<span style="color:var(--accent)">ON</span>
+    </div>
+
+    <nav class="flex flex-col gap-1 flex-1 px-3">
+      <button data-tab="inicio" onclick="showTab('inicio')" class="nav-link active">
+        <i class="fa fa-house w-4 text-center"></i><span>Início</span>
+      </button>
+      <button data-tab="apps" onclick="showTab('apps')" class="nav-link text-slate-400">
+        <i class="fa fa-border-all w-4 text-center"></i><span>Meus Apps</span>
+      </button>
+      <button data-tab="historico" onclick="showTab('historico')" class="nav-link text-slate-400">
+        <i class="fa fa-receipt w-4 text-center"></i><span>Histórico</span>
+      </button>
+      <button data-tab="perfil" onclick="showTab('perfil')" class="nav-link text-slate-400">
+        <i class="fa fa-user w-4 text-center"></i><span>Meu Perfil</span>
+      </button>
+      <button id="nav-loja" data-tab="loja" onclick="showTab('loja')" class="nav-link text-slate-400 hidden">
+        <i class="fa fa-store w-4 text-center"></i><span>Minha Loja</span>
+      </button>
+      <button id="nav-equipe" data-tab="equipe" onclick="showTab('equipe')" class="nav-link text-slate-400 hidden">
+        <i class="fa fa-users w-4 text-center"></i><span>Equipe</span>
+      </button>
+    </nav>
+
+    <button onclick="logout()" class="nav-link text-slate-600 hover:text-red-400 mx-3">
+      <i class="fa fa-right-from-bracket w-4 text-center"></i><span>Sair</span>
+    </button>
+  </aside>
+
+  <!-- ══════════════════════════════════════════
+       CONTEÚDO PRINCIPAL
+  ══════════════════════════════════════════ -->
+  <main class="flex-1 overflow-y-auto pb-24 md:pb-6">
+
+    <!-- ── INÍCIO ── -->
+    <div id="inicio" class="tab-content active p-5 md:p-8 space-y-6">
+      <header class="flex items-center justify-between pt-1">
+        <div>
+          <p class="text-slate-500 text-xs">Bem-vindo de volta,</p>
+          <h1 id="greeting-name" class="text-white text-2xl font-black tracking-tight mt-0.5">...</h1>
+        </div>
+        <div id="avatar-main"
+             class="w-11 h-11 rounded-full flex items-center justify-center font-black text-white text-base shrink-0"
+             style="background:var(--accent)">?</div>
+      </header>
+
+      <!-- Card painel especial (LOJISTA / SUPERADMIN / funcionário legado) -->
+      <div id="role-panel" class="hidden">
+        <a id="role-panel-link" href="#" target="_blank" rel="noopener"
+           class="group flex items-center gap-4 p-4 card border border-slate-700 hover:border-[var(--accent)] transition-all no-underline">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-slate-700"
+               style="background:color-mix(in srgb,var(--accent) 15%,transparent)">
+            <i id="role-panel-icon" class="fa fa-store text-xl" style="color:var(--accent)"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-0.5" style="color:var(--accent)">Acesso especial</p>
+            <p id="role-panel-label" class="text-white font-bold text-sm truncate">Meu Painel</p>
+            <p class="text-slate-500 text-xs mt-0.5">Toque para abrir</p>
+          </div>
+          <i class="fa fa-arrow-up-right-from-square text-slate-600 group-hover:text-[var(--accent)] transition-all shrink-0"></i>
+        </a>
+      </div>
+
+      <!-- Cards de vínculos como funcionário -->
+      <div id="staff-memberships" class="hidden space-y-2">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-amber-400 px-1">
+          <i class="fa fa-id-badge mr-1"></i>Meu Trabalho
+        </p>
+        <div id="staff-memberships-list" class="space-y-2"></div>
+      </div>
+
+      <!-- Carrossel de Anúncios -->
+      <section id="announcements-section" class="hidden">
+        <div class="relative rounded-xl overflow-hidden border border-slate-800">
+          <div id="carousel-track" class="carousel-track"></div>
+          <button onclick="prevSlide()"
+                  class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-all">
+            <i class="fa fa-chevron-left text-xs"></i>
+          </button>
+          <button onclick="nextSlide()"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-all">
+            <i class="fa fa-chevron-right text-xs"></i>
+          </button>
+          <div id="carousel-dots" class="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5"></div>
+        </div>
+      </section>
+
+      <!-- Banner PWA -->
+      <section id="pwa-install-banner" class="hidden">
+        <div class="card p-4 flex items-center justify-between gap-4 border border-slate-700"
+             style="background:color-mix(in srgb,var(--accent) 10%,#1e293b)">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                 style="background:color-mix(in srgb,var(--accent) 20%,transparent)">
+              <i class="fa fa-mobile-screen-button" style="color:var(--accent)"></i>
+            </div>
+            <div>
+              <p class="text-white font-bold text-sm">Instalar AG-ON</p>
+              <p class="text-slate-400 text-xs">Acesse como app nativo</p>
+            </div>
+          </div>
+          <button onclick="installPWA()" class="btn-primary text-xs py-2 px-4 shrink-0">Instalar</button>
+        </div>
+      </section>
+
+      <!-- Acesso rápido aos segmentos -->
+      <section>
+        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">Lojas & Segmentos</p>
+        <div id="home-modules"></div>
+      </section>
+
+      <!-- Agendamentos -->
+      <section id="appointments-section" class="hidden">
+        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">Meus Agendamentos</p>
+        <div id="appointments-list" class="space-y-3"></div>
+      </section>
+
+      <!-- Pedidos de Delivery -->
+      <section id="delivery-orders-section" class="hidden">
+        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">Meus Pedidos</p>
+        <div id="delivery-orders-list" class="space-y-3"></div>
+      </section>
+
+      <!-- Notificações Academia -->
+      <section id="gym-notifications-section" class="hidden">
+        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">
+          <i class="fa fa-dumbbell mr-1"></i>Minhas Assinaturas
+          <span id="gym-notif-badge" class="hidden ml-2 bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full align-middle">0</span>
+        </p>
+        <div id="gym-notifications-list" class="space-y-2"></div>
+      </section>
+    </div>
+
+    <!-- ── MEUS APPS ── -->
+    <div id="apps" class="tab-content p-5 md:p-8 space-y-6">
+      <div>
+        <h2 class="text-white text-xl font-black">Lojas & Segmentos</h2>
+        <p class="text-slate-500 text-sm mt-1">Todos os estabelecimentos disponíveis.</p>
+      </div>
+      <div id="modules-grid"></div>
+    </div>
+
+    <!-- ── HISTÓRICO ── -->
+    <div id="historico" class="tab-content p-5 md:p-8 space-y-6">
+      <div>
+        <h2 class="text-white text-xl font-black">Histórico</h2>
+        <p class="text-slate-500 text-sm mt-1">Suas compras e pagamentos.</p>
+      </div>
+      <div id="transactions-list" class="space-y-3"></div>
+
+      <!-- Pedidos de delivery vinculados ao WhatsApp -->
+      <div id="historico-delivery" class="hidden">
+        <p class="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-3">Pedidos nas Lojas</p>
+        <div id="historico-delivery-list" class="space-y-3"></div>
+      </div>
+    </div>
+
+    <!-- ── MEU PERFIL ── -->
+    <div id="perfil" class="tab-content p-5 md:p-8 space-y-6">
+      <div>
+        <h2 class="text-white text-xl font-black">Meu Perfil</h2>
+        <p class="text-slate-500 text-sm mt-1">Alterações requerem código de verificação.</p>
+      </div>
+
+      <div class="max-w-lg space-y-5">
+        <!-- Card de dados pessoais -->
+        <div class="card p-5 space-y-4">
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">WhatsApp</label>
+            <input id="profile-whatsapp" type="tel" placeholder="(11) 99999-9999" class="input" disabled />
+            <p class="text-xs text-slate-600 mt-1">Pode ser alterado após verificação.</p>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Nome completo</label>
+            <input id="profile-name" type="text" placeholder="Seu nome" class="input" disabled />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">E-mail</label>
+            <input id="profile-email" type="email" placeholder="seu@email.com" class="input" disabled />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">CPF <span class="text-slate-600 font-normal">(opcional)</span></label>
+            <input id="profile-cpf" type="text" placeholder="000.000.000-00" class="input" disabled />
+          </div>
+
+          <!-- Bloqueado -->
+          <div id="profile-locked">
+            <button onclick="requestOtp()" class="btn-primary w-full py-3">
+              <i class="fa fa-lock mr-2"></i>Editar Perfil
+            </button>
+          </div>
+
+          <!-- Aguardando OTP -->
+          <div id="profile-otp" class="hidden space-y-3">
+            <div class="p-3 rounded-lg border text-sm text-slate-300"
+                 style="background:color-mix(in srgb,var(--accent) 10%,transparent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+              <i class="fa fa-paper-plane mr-2" style="color:var(--accent)"></i>
+              <span id="otp-sent-msg">Código enviado.</span>
+            </div>
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Código de verificação</label>
+              <input id="profile-otp-code" type="text" inputmode="numeric" maxlength="6"
+                     placeholder="000000" class="input text-center text-xl font-black tracking-[.5em]" />
+            </div>
+            <div class="flex gap-3">
+              <button onclick="cancelEdit()" class="btn-outline flex-1 py-2">Cancelar</button>
+              <button onclick="saveProfile()" class="btn-primary flex-1 py-2">
+                <i class="fa fa-check mr-1"></i>Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ENDEREÇOS SALVOS ── -->
+        <div class="card p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-white font-bold text-sm">Meus Endereços</p>
+              <p class="text-slate-500 text-xs mt-0.5">Endereços usados em pedidos</p>
+            </div>
+            <button onclick="openNewAddress()"
+              class="btn-primary text-xs py-2 px-3">
+              <i class="fa fa-plus mr-1"></i>Novo
+            </button>
+          </div>
+
+          <div id="addresses-list" class="space-y-2">
+            <p class="text-slate-600 text-sm text-center py-4"><i class="fa fa-spinner fa-spin mr-1"></i>Carregando...</p>
+          </div>
+        </div>
+
+        <!-- Formulário novo/editar endereço (oculto por padrão) -->
+        <div id="address-form-card" class="card p-5 space-y-3 hidden">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-white font-bold text-sm" id="addr-form-title">Novo Endereço</p>
+            <button onclick="closeAddressForm()" class="text-slate-500 hover:text-slate-300"><i class="fa fa-xmark"></i></button>
+          </div>
+          <input type="hidden" id="addr-edit-id" />
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Nome do endereço</label>
+            <input id="addr-label" type="text" placeholder="Ex: Casa, Trabalho, Academia..." class="input" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Rua / Avenida</label>
+              <input id="addr-street" type="text" placeholder="Rua..." class="input" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Número</label>
+              <input id="addr-number" type="text" placeholder="123" class="input" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Bairro</label>
+              <input id="addr-neighborhood" type="text" placeholder="Bairro" class="input" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Cidade</label>
+              <input id="addr-city" type="text" placeholder="Cidade" class="input" />
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Ponto de referência</label>
+            <input id="addr-reference" type="text" placeholder="Próximo ao..." class="input" />
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="addr-default" style="accent-color:var(--accent);width:16px;height:16px" />
+            <label for="addr-default" class="text-sm text-slate-400 cursor-pointer">Definir como padrão</label>
+          </div>
+          <div id="addr-error" class="hidden text-red-400 text-xs"></div>
+          <div class="flex gap-2 pt-1">
+            <button onclick="closeAddressForm()" class="btn-outline flex-1 py-2 text-sm">Cancelar</button>
+            <button onclick="saveAddress()" class="btn-primary flex-1 py-2 text-sm">
+              <i class="fa fa-check mr-1"></i>Salvar Endereço
+            </button>
+          </div>
+        </div>
+
+        <!-- ── MEUS DADOS (LGPD) ── -->
+        <div class="card p-5 space-y-3 border border-indigo-900/40">
+          <p class="text-indigo-300 font-bold text-sm flex items-center gap-2">
+            <i class="fa fa-shield-halved text-indigo-400"></i> Meus Dados & Privacidade (LGPD)
+          </p>
+          <p class="text-slate-500 text-xs leading-relaxed">
+            Conforme a Lei Geral de Proteção de Dados (Lei 13.709/2018), você tem direito de exportar ou excluir seus dados pessoais.
+            <a href="/privacidade" target="_blank" class="text-indigo-400 underline ml-1">Ver Política de Privacidade</a>
+          </p>
+          <!-- Opt-out WhatsApp -->
+          <div class="flex items-center justify-between py-2 border-b border-slate-800">
+            <div>
+              <p class="text-slate-300 text-xs font-bold">Comunicações via WhatsApp</p>
+              <p class="text-slate-600 text-[11px] mt-0.5">Receber mensagens automáticas da plataforma</p>
+            </div>
+            <button id="btn-optout-wa" onclick="toggleWaOptout()"
+                    class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide transition-all border border-emerald-700/50 text-emerald-400 hover:bg-emerald-900/20">
+              <i class="fa fa-check mr-1"></i>Ativo
+            </button>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-2 pt-1">
+            <button onclick="exportMyData()"
+                    class="flex-1 py-2.5 rounded-lg border border-indigo-700/50 text-indigo-300 hover:bg-indigo-900/30 transition-all text-xs font-bold uppercase tracking-wide">
+              <i class="fa fa-download mr-2"></i>Exportar meus dados
+            </button>
+            <button onclick="requestDeleteAccount()"
+                    class="flex-1 py-2.5 rounded-lg border border-red-900/40 text-red-400 hover:bg-red-900/20 transition-all text-xs font-bold uppercase tracking-wide">
+              <i class="fa fa-trash mr-2"></i>Excluir minha conta
+            </button>
+          </div>
+        </div>
+
+        <button onclick="logout()"
+                class="md:hidden w-full py-3 rounded-lg border border-slate-800 text-slate-500 hover:text-red-400 hover:border-red-900/50 transition-all text-xs font-bold uppercase tracking-widest">
+          <i class="fa fa-right-from-bracket mr-2"></i>Sair da conta
+        </button>
+      </div>
+    </div>
+
+    <!-- ── MINHA LOJA (LOJISTA) ── -->
+    <div id="loja" class="tab-content p-5 md:p-8 space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-white text-xl font-black">Minha Loja</h2>
+          <p class="text-slate-500 text-sm mt-0.5">Perfil público no
+            <a href="/marketplace" target="_blank" class="hover:underline" style="color:var(--accent)">Marketplace</a>
+          </p>
+        </div>
+        <a href="/marketplace" target="_blank"
+           class="text-xs font-bold flex items-center gap-1.5 transition-all hover:underline"
+           style="color:var(--accent)">
+          <i class="fa fa-arrow-up-right-from-square"></i>Ver no Marketplace
+        </a>
+      </div>
+
+      <!-- Toggle visibilidade -->
+      <div class="card p-4 border border-slate-700 flex items-center justify-between gap-4">
+        <div>
+          <p class="text-white font-semibold text-sm">Aparecer no Marketplace</p>
+          <p class="text-slate-500 text-xs mt-0.5">Quando ativo, sua loja fica visível para todos</p>
+        </div>
+        <button id="store-toggle-btn" onclick="toggleMarketplace()" class="toggle-track">
+          <span class="toggle-dot"></span>
+        </button>
+      </div>
+
+      <!-- Formulário -->
+      <div class="card p-5 space-y-4">
+        <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Informações Públicas</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="text-xs text-slate-400 block mb-1">Descrição da loja</label>
+            <textarea id="store-description" rows="2" placeholder="Descreva sua loja em poucas palavras..."
+                      class="input resize-none"></textarea>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Categoria</label>
+            <input id="store-category" type="text" placeholder="Ex: Beleza, Saúde..." class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Cidade</label>
+            <input id="store-city" type="text" placeholder="Sua cidade" class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Telefone</label>
+            <input id="store-phone" type="tel" placeholder="(11) 99999-9999" class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Link WhatsApp</label>
+            <input id="store-whatsapp-link" type="url" placeholder="https://wa.me/5511..." class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Instagram</label>
+            <input id="store-instagram" type="url" placeholder="https://instagram.com/..." class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">URL da Logo</label>
+            <input id="store-logo-url" type="url" placeholder="https://..." class="input" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">URL da Capa</label>
+            <input id="store-cover-url" type="url" placeholder="https://..." class="input" />
+          </div>
+        </div>
+        <p id="store-msg" class="hidden text-xs font-bold text-center"></p>
+        <button onclick="saveStoreProfile()" class="btn-primary w-full py-3">
+          <i class="fa fa-floppy-disk mr-2"></i>Salvar e publicar no Marketplace
+        </button>
+      </div>
+    </div>
+
+    <!-- ── EQUIPE (LOJISTA) ── -->
+    <div id="equipe" class="tab-content p-5 md:p-8 space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-white text-xl font-black">Equipe</h2>
+          <p class="text-slate-500 text-sm mt-0.5">Funcionários vinculados à sua loja</p>
+        </div>
+        <button onclick="openAddEmployee()" class="btn-primary py-2 px-4 text-sm flex items-center gap-2">
+          <i class="fa fa-plus"></i><span class="hidden sm:inline">Adicionar</span>
+        </button>
+      </div>
+      <div id="employees-list" class="space-y-3"></div>
+    </div>
+
+  </main><!-- /main -->
+
+  <!-- ══════════════════════════════════════════
+       BOTTOM NAV — mobile
+  ══════════════════════════════════════════ -->
+  <nav class="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-800 safe-bottom"
+       style="background:#0f172a">
+    <div class="flex items-center justify-around">
+      <button data-tab="inicio" onclick="showTab('inicio')" class="bnav-btn active">
+        <i class="fa fa-house"></i>Início
+      </button>
+      <button data-tab="apps" onclick="showTab('apps')" class="bnav-btn">
+        <i class="fa fa-border-all"></i>Apps
+      </button>
+      <button data-tab="historico" onclick="showTab('historico')" class="bnav-btn">
+        <i class="fa fa-receipt"></i>Histórico
+      </button>
+      <button data-tab="perfil" onclick="showTab('perfil')" class="bnav-btn">
+        <i class="fa fa-user"></i>Perfil
+      </button>
+      <button id="bnav-loja" data-tab="loja" onclick="showTab('loja')" class="bnav-btn hidden">
+        <i class="fa fa-store"></i>Loja
+      </button>
+      <button id="bnav-equipe" data-tab="equipe" onclick="showTab('equipe')" class="bnav-btn hidden">
+        <i class="fa fa-users"></i>Equipe
+      </button>
+    </div>
+  </nav>
+
+</div><!-- /flex -->
+
+<!-- ══════════════════════════════════════════
+     VIEWPORT DE MÓDULO (fullscreen + SSO)
+══════════════════════════════════════════ -->
+<div id="module-viewport" class="hidden fixed inset-0 z-[100] flex flex-col" style="background:#0f172a">
+  <nav class="p-3 border-b border-slate-800 flex justify-between items-center shrink-0 safe-top">
+    <div class="flex items-center gap-3">
+      <button onclick="closeModule()"
+              class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-all">
+        <i class="fa fa-arrow-left"></i>
+      </button>
+      <span id="module-title" class="font-bold text-white text-sm uppercase tracking-widest"></span>
+    </div>
+    <span class="text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border"
+          style="color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+      Sessão Ativa
+    </span>
+  </nav>
+  <iframe id="module-frame" src="" class="flex-1 w-full border-none bg-white"></iframe>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MODAL — Adicionar Funcionário
+══════════════════════════════════════════ -->
+<div id="employee-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center">
+  <div class="card w-full sm:max-w-md p-6 space-y-4 rounded-b-none sm:rounded-xl border border-slate-700 safe-bottom">
+    <div class="flex items-center justify-between">
+      <h3 class="text-white font-bold text-lg">Novo Funcionário</h3>
+      <button onclick="document.getElementById('employee-modal').classList.add('hidden')"
+              class="w-8 h-8 rounded-lg bg-slate-700 text-slate-400 flex items-center justify-center hover:text-white">
+        <i class="fa fa-xmark"></i>
+      </button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Nome completo</label>
+        <input id="emp-name"  type="text"  placeholder="Nome completo" class="input" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">WhatsApp</label>
+        <input id="emp-wa"   type="tel"   placeholder="(11) 99999-9999" class="input" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">E-mail (opcional)</label>
+        <input id="emp-email" type="email" placeholder="email@exemplo.com" class="input" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Função</label>
+        <select id="emp-role" class="input">
+          <option value="Profissional">Profissional</option>
+          <option value="Recepcionista">Recepcionista</option>
+          <option value="Gerente">Gerente</option>
+          <option value="Atendente">Atendente</option>
+        </select>
+      </div>
+      <p id="emp-error" class="hidden text-red-400 text-xs font-bold"></p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="document.getElementById('employee-modal').classList.add('hidden')"
+              class="btn-outline flex-1 py-2.5">Cancelar</button>
+      <button onclick="saveEmployee()" class="btn-primary flex-1 py-2.5">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CHAT ÁGATHA (flutuante)
+══════════════════════════════════════════ -->
+<button id="agata-fab" onclick="toggleAgataChat()"
+        class="fixed bottom-24 right-5 md:bottom-8 md:right-8 z-[60] w-14 h-14 rounded-full shadow-xl overflow-hidden flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+        style="background:var(--accent)">
+  <img id="agata-fab-img" src="" alt="" class="hidden w-full h-full object-cover" />
+  <i id="agata-fab-icon" class="fa fa-sparkles text-white text-xl"></i>
+</button>
+
+<div id="agata-chat-window"
+     class="hidden fixed bottom-44 right-5 md:bottom-28 md:right-8 z-[70] w-[calc(100vw-2.5rem)] sm:w-96 animate-fadeUp">
+  <div class="card border border-slate-700 flex flex-col overflow-hidden" style="max-height:480px">
+    <!-- Header -->
+    <div class="p-4 flex items-center justify-between shrink-0"
+         style="background:var(--accent)">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full overflow-hidden bg-white/20 flex items-center justify-center text-white shrink-0">
+          <img id="agata-header-img" src="" alt="" class="hidden w-full h-full object-cover" />
+          <i id="agata-header-icon" class="fa fa-sparkles"></i>
+        </div>
+        <div>
+          <p id="agata-header-name" class="text-white font-bold text-sm">Ágatha IA</p>
+          <p class="text-white/70 text-[10px]">Online agora</p>
+        </div>
+      </div>
+      <button onclick="toggleAgataChat()" class="text-white/70 hover:text-white p-1">
+        <i class="fa fa-xmark text-lg"></i>
+      </button>
+    </div>
+    <!-- Banner de memória -->
+    <div id="agata-memory-banner" class="hidden px-4 pt-3 shrink-0">
+      <div class="rounded-xl p-3 text-xs text-slate-300 leading-relaxed flex gap-2 items-start"
+           style="background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent)">
+        <i class="fa fa-brain mt-0.5 shrink-0" style="color:var(--accent)"></i>
+        <span id="agata-memory-text"></span>
+      </div>
+      <button onclick="clearAgataMemory()"
+              class="mt-1.5 text-[10px] text-slate-600 hover:text-red-400 transition-all float-right">
+        <i class="fa fa-trash-can mr-1"></i>Apagar memória
+      </button>
+      <div class="clear-both"></div>
+    </div>
+    <!-- Mensagens -->
+    <div id="agata-messages" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]"></div>
+    <!-- Input -->
+    <div class="p-3 border-t border-slate-700 flex gap-2 shrink-0" style="background:#0f172a">
+      <input id="agata-input" type="text" placeholder="Pergunte algo..."
+             class="input flex-1 text-sm py-2"
+             onkeydown="if(event.key==='Enter')sendToAgata()" />
+      <button onclick="sendToAgata()"
+              class="w-9 h-9 rounded-lg flex items-center justify-center text-white transition-all hover:opacity-80"
+              style="background:var(--accent)">
+        <i class="fa fa-paper-plane text-sm"></i>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════ -->
+<script>
+// ─── UTILITÁRIOS ─────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ─── ESTADO GLOBAL ───────────────────────────────────────────────────────────
+const TOKEN = localStorage.getItem('ag_token')
+           || localStorage.getItem('client_token')
+           || localStorage.getItem('admin_token')
+           || '';
+
+let currentSlide = 0;
+let carouselSlides = [];
+let carouselTimer = null;
+let storeIsPublic = false;
+
+if (!TOKEN) window.location.href = '/login';
+
+// ─── API HELPER ──────────────────────────────────────────────────────────────
+function authHeaders() {
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` };
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, { ...options, headers: authHeaders() });
+  if (res.status === 401) {
+    ['ag_token','client_token','admin_token'].forEach(k => localStorage.removeItem(k));
+    window.location.href = '/login';
+    throw new Error('Sessão expirada.');
+  }
+  return res;
+}
+
+// ─── NAVEGAÇÃO ───────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+
+  // Sidebar
+  document.querySelectorAll('.nav-link[data-tab]').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === id);
+    el.classList.toggle('text-slate-400', el.dataset.tab !== id);
+  });
+  // Bottom nav
+  document.querySelectorAll('.bnav-btn[data-tab]').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === id);
+  });
+
+  if (id === 'equipe') loadEmployees();
+  if (id === 'perfil') { loadAddresses(); loadWaOptout(); }
+}
+
+// ─── PEDIDOS DE DELIVERY ─────────────────────────────────────────────────────
+function renderDeliveryOrders(orders) {
+  if (!orders.length) return;
+
+  const STATUS_COLORS = {
+    pending:    '#f59e0b', confirmed: '#6366f1', preparing: '#3b82f6',
+    delivering: '#8b5cf6', delivered: '#10b981', cancelled: '#ef4444',
+  };
+  const STATUS_LABELS = {
+    pending: 'Aguardando', confirmed: 'Confirmado', preparing: 'Preparando',
+    delivering: 'A caminho', delivered: 'Entregue', cancelled: 'Cancelado',
+  };
+  const PAY_LABELS = {
+    pix: 'PIX', cartao_credito: 'Cartão', cartao_debito: 'Débito',
+    dinheiro: 'Dinheiro', na_entrega: 'Na entrega',
+  };
+
+  const cardHtml = (order) => {
+    const cor   = STATUS_COLORS[order.status] || '#94a3b8';
+    const label = STATUS_LABELS[order.status] || order.status;
+    const items = Array.isArray(order.items) ? order.items : JSON.parse(order.items || '[]');
+    const summary = items.slice(0, 2).map(i => `${i.quantity||1}× ${esc(i.name)}`).join(', ')
+                  + (items.length > 2 ? ` +${items.length - 2}` : '');
+    const storeAddedItems = items.filter(i => i.added_by_store);
+    const storeAddedNote = storeAddedItems.length
+      ? `<p class="text-xs mt-1" style="color:#0369a1">★ ${storeAddedItems.length === 1 ? `"${esc(storeAddedItems[0].name)}" adicionado` : `${storeAddedItems.length} itens adicionados`} pelo lojista</p>`
+      : '';
+    const date  = new Date(order.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const pay   = PAY_LABELS[order.payment_method] || order.payment_method;
+    const trackUrl = `/track/${order.id}`;
+    const encodedItems = encodeURIComponent(JSON.stringify(items));
+    const storeSlug = order.store_slug || '';
+
+    return `
+    <div class="card p-4 border border-slate-700 flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center border border-slate-700"
+           style="background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent)">
+        <i class="fa fa-bag-shopping text-sm"></i>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2 mb-0.5">
+          <p class="text-white font-semibold text-sm truncate">${esc(order.store_name || 'Loja')}</p>
+          <span class="text-[10px] font-black shrink-0" style="color:${cor}">${label}</span>
+        </div>
+        <p class="text-slate-400 text-xs truncate">${summary}</p>
+        ${storeAddedNote}
+        <div class="flex items-center justify-between gap-2 mt-2">
+          <p class="text-slate-500 text-xs">${date} · ${pay} · <span class="text-emerald-400 font-bold">R$ ${parseFloat(order.total||0).toFixed(2).replace('.',',')}</span></p>
+          <div class="flex gap-2 shrink-0">
+            <a href="${trackUrl}" class="text-xs text-slate-400 hover:text-white px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
+              <i class="fa fa-location-dot"></i>
+            </a>
+            ${storeSlug ? `<button onclick="repeatDeliveryOrder('${storeSlug}','${esc(order.establishment_id||'')}','${encodedItems}')"
+              class="text-xs font-bold text-white px-3 py-1 rounded-lg transition-colors"
+              style="background:var(--accent)">
+              <i class="fa fa-rotate-right mr-1"></i>Repetir
+            </button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  // Exibe até 3 na home
+  const homeList = document.getElementById('delivery-orders-list');
+  const homeSection = document.getElementById('delivery-orders-section');
+  if (homeList && homeSection) {
+    homeList.innerHTML = orders.slice(0, 3).map(cardHtml).join('');
+    if (orders.length > 3) {
+      homeList.innerHTML += `<button onclick="showTab('historico')" class="w-full text-[var(--accent)] text-xs py-2 hover:underline">Ver todos os pedidos →</button>`;
+    }
+    homeSection.classList.remove('hidden');
+  }
+
+  // Exibe todos no histórico
+  const histList = document.getElementById('historico-delivery-list');
+  const histSection = document.getElementById('historico-delivery');
+  if (histList && histSection) {
+    histList.innerHTML = orders.map(cardHtml).join('');
+    histSection.classList.remove('hidden');
+  }
+}
+
+function repeatDeliveryOrder(storeSlug, establishmentId, encodedItems) {
+  try {
+    const items = JSON.parse(decodeURIComponent(encodedItems));
+    sessionStorage.setItem('ag_repeat_order', JSON.stringify({
+      establishment_id: establishmentId,
+      items: items.map(i => ({
+        item: { id: i.id, name: i.name, price: i.price },
+        quantity: i.quantity || 1,
+        selected_options: i.selected_options || [],
+      })),
+    }));
+    window.location.href = `/${storeSlug}`;
+  } catch { alert('Erro ao repetir pedido.'); }
+}
+
+// ─── ACADEMIA: NOTIFICAÇÕES ──────────────────────────────────────────────────
+async function loadGymNotifications() {
+  try {
+    const res = await apiFetch('/gym/public/notifications');
+    if (!res.ok) return;
+    const notifs = await res.json();
+    if (!notifs.length) return;
+    const section = document.getElementById('gym-notifications-section');
+    const list    = document.getElementById('gym-notifications-list');
+    const badge   = document.getElementById('gym-notif-badge');
+    if (!section || !list) return;
+
+    const unread = notifs.filter(n => !n.read).length;
+    if (unread > 0) { badge.textContent = unread; badge.classList.remove('hidden'); }
+
+    const TYPE_ICON = { welcome:'🎉', expired:'⚠️', expiry_soon:'⏰' };
+    list.innerHTML = notifs.slice(0, 5).map(n => `
+      <div id="gymn-${n.id}" class="flex gap-3 p-3 rounded-xl border ${n.read ? 'border-slate-800 bg-slate-900/40' : 'border-[var(--accent)]/40 bg-[var(--accent)]/5'} cursor-pointer transition-all hover:border-slate-700"
+           onclick="markGymNotifRead('${n.id}')">
+        <span class="text-xl shrink-0 mt-0.5">${TYPE_ICON[n.type] || '📋'}</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-white text-sm font-semibold leading-snug">${n.title}</p>
+          <p class="text-slate-400 text-xs mt-0.5 leading-relaxed">${n.message}</p>
+          <p class="text-slate-600 text-[10px] mt-1">${new Date(n.created_at).toLocaleDateString('pt-BR')}</p>
+        </div>
+        ${!n.read ? `<span class="w-2 h-2 rounded-full bg-[var(--accent)] shrink-0 mt-2"></span>` : ''}
+      </div>`).join('');
+
+    section.classList.remove('hidden');
+  } catch {}
+}
+
+async function markGymNotifRead(id) {
+  try {
+    await apiFetch(`/gym/public/notifications/${id}/read`, { method: 'PATCH' });
+    const el = document.getElementById(`gymn-${id}`);
+    if (el) {
+      el.classList.remove('border-[var(--accent)]/40', 'bg-[var(--accent)]/5');
+      el.classList.add('border-slate-800', 'bg-slate-900/40');
+      const dot = el.querySelector('span.rounded-full.bg-\\[var\\(--accent\\)\\]');
+      if (dot) dot.remove();
+    }
+  } catch {}
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [settingsRes, meRes, modulesRes, annRes, txRes, agendaRes] = await Promise.all([
+      fetch('/public/settings').catch(() => null),
+      apiFetch('/client/me'),
+      apiFetch('/client/modules'),
+      apiFetch('/client/announcements'),
+      apiFetch('/client/transactions'),
+      apiFetch('/client/agenda/summary'),
+    ]);
+
+    if (settingsRes?.ok) {
+      const s = await settingsRes.json();
+      if (s.pwa_name)        document.title = `${s.pwa_name} · Portal`;
+      if (s.pwa_theme_color) document.querySelector('meta[name="theme-color"]').setAttribute('content', s.pwa_theme_color);
+      applyAgataAvatar(s.agata_photo_url || '', s.agata_name || '');
+    }
+
+    const me = await meRes.json();
+    renderProfile(me);
+    renderModules(await modulesRes.json().catch(() => []));
+    renderAnnouncements(await annRes.json().catch(() => []));
+    renderTransactions(await txRes.json().catch(() => []));
+    renderAgenda(await agendaRes.json().catch(() => []));
+
+    // Busca pedidos de delivery pelo WhatsApp cadastrado na conta
+    if (me.whatsapp) {
+      fetch(`/delivery/public/my-orders?phone=${encodeURIComponent(me.whatsapp)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(orders => renderDeliveryOrders(orders))
+        .catch(() => {});
+    }
+
+    // Notificações de academia (assinaturas, vencimentos)
+    loadGymNotifications();
+  } catch (e) {
+    console.error('Erro ao inicializar portal:', e);
+  }
+}
+
+// ─── PERFIL / ROLE ───────────────────────────────────────────────────────────
+function renderProfile(me) {
+  const name = me.full_name || me.whatsapp || 'Visitante';
+  document.getElementById('greeting-name').textContent = name;
+  document.getElementById('avatar-main').textContent   = name[0].toUpperCase();
+  document.getElementById('profile-whatsapp').value    = me.whatsapp   || '';
+  document.getElementById('profile-name').value        = me.full_name  || '';
+  document.getElementById('profile-email').value       = me.email      || '';
+  document.getElementById('profile-cpf').value         = me.cpf        || '';
+
+  // Card painel especial
+  if (me.panel_url) {
+    const sep = me.panel_url.includes('?') ? '&' : '?';
+    const url = me.panel_url.startsWith('/') ? me.panel_url : `${me.panel_url}${sep}token=${TOKEN}`;
+    document.getElementById('role-panel-link').href       = url;
+    document.getElementById('role-panel-label').textContent = me.panel_label || 'Meu Painel';
+    const iconName = (me.panel_icon || 'store').split(' ').pop().replace('fa-','') || 'store';
+    document.getElementById('role-panel-icon').className    = `fa fa-${iconName} text-xl`;
+    document.getElementById('role-panel').classList.remove('hidden');
+  }
+
+  // Vínculos como funcionário
+  if (me.staff_memberships?.length) renderStaffMemberships(me.staff_memberships);
+
+  // Esconde "Editar Perfil" para não-clientes (já gerenciam pelo painel próprio)
+  if (me.role !== 'CLIENT') {
+    document.getElementById('profile-locked').classList.add('hidden');
+  }
+
+  // Abas exclusivas do LOJISTA
+  if (me.role === 'LOJISTA') {
+    ['nav-loja','nav-equipe','bnav-loja','bnav-equipe'].forEach(id =>
+      document.getElementById(id)?.classList.remove('hidden')
+    );
+    loadStoreProfile();
+  }
+}
+
+// ─── VÍNCULOS DE FUNCIONÁRIO ─────────────────────────────────────────────────
+function renderStaffMemberships(memberships) {
+  const section = document.getElementById('staff-memberships');
+  const list    = document.getElementById('staff-memberships-list');
+  if (!section || !list) return;
+
+  list.innerHTML = memberships.map(m => {
+    const logo = m.logo_base64
+      ? `<img src="${m.logo_base64}" class="w-full h-full object-cover">`
+      : `<span class="font-black text-base" style="color:var(--accent)">${esc(m.store_name[0] || '?')}</span>`;
+
+    // Badges de todas as funções
+    const rolesBadges = (m.roles || []).map(r =>
+      `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+             style="background:color-mix(in srgb,#f59e0b 15%,transparent);color:#fbbf24">
+         <i class="fa fa-${esc(r.icon)} text-[9px]"></i>${esc(r.label)}
+       </span>`
+    ).join('');
+
+    // Botão por painel distinto
+    const panelBtns = (m.panels || []).map(p =>
+      `<a href="${esc(p.url)}" target="_blank" rel="noopener"
+          class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-all"
+          style="background:color-mix(in srgb,#f59e0b 18%,transparent);color:#fbbf24;border:1px solid color-mix(in srgb,#f59e0b 30%,transparent)"
+          onmouseover="this.style.background='color-mix(in srgb,#f59e0b 28%,transparent)'"
+          onmouseout="this.style.background='color-mix(in srgb,#f59e0b 18%,transparent)'">
+         <i class="fa fa-${esc(p.icon)}"></i>${esc(p.label)}
+         <i class="fa fa-arrow-up-right-from-square text-[9px] opacity-60"></i>
+       </a>`
+    ).join('');
+
+    return `
+    <div class="card border p-4 space-y-3" style="border-color:color-mix(in srgb,#f59e0b 25%,transparent)">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border border-slate-700 overflow-hidden bg-slate-800">
+          ${logo}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-white font-bold text-sm truncate">${esc(m.store_name)}</p>
+          <div class="flex flex-wrap gap-1 mt-1">${rolesBadges}</div>
+        </div>
+      </div>
+      <div class="flex gap-2">${panelBtns}</div>
+    </div>`;
+  }).join('');
+
+  section.classList.remove('hidden');
+}
+
+// ─── SEGMENTOS / ESTABELECIMENTOS ────────────────────────────────────────────
+function renderModules(items) {
+  // Card compacto (home)
+  const cardSmall = (m) => `
+    <div class="module-card group cursor-pointer relative"
+         data-slug="${esc(m.slug)}" data-name="${esc(m.name)}" data-url="${esc(m.config_url||'')}">
+      <div class="card border border-slate-700 rounded-xl p-3 flex flex-col gap-2 transition-all group-hover:border-[var(--accent)]">
+        <div class="flex items-center gap-2">
+          <span class="text-xl leading-none">${esc(m.segment_icon||'🏪')}</span>
+          <div class="min-w-0 flex-1">
+            <p class="text-white text-xs font-bold truncate leading-tight">${esc(m.name)}</p>
+            ${m.city ? `<p class="text-slate-500 text-[10px] truncate">${esc(m.city)}</p>` : ''}
+          </div>
+        </div>
+        ${m.segment_label ? `<span class="text-[9px] font-bold uppercase tracking-wide self-start px-2 py-0.5 rounded-full"
+          style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">${esc(m.segment_label)}</span>` : ''}
+      </div>
+    </div>`;
+
+  // Card grande (aba Apps)
+  const cardBig = (m) => `
+    <div class="module-card group cursor-pointer"
+         data-slug="${esc(m.slug)}" data-name="${esc(m.name)}" data-url="${esc(m.config_url||'')}">
+      <div class="card border border-slate-700 rounded-2xl p-5 flex flex-col gap-3 h-full transition-all group-hover:border-[var(--accent)]">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl border border-slate-700"
+             style="background:color-mix(in srgb,var(--accent) 10%,transparent)">
+          ${esc(m.segment_icon||'🏪')}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-white font-bold text-sm truncate">${esc(m.name)}</p>
+          ${m.city ? `<p class="text-slate-500 text-xs mt-0.5">${esc(m.city)}</p>` : ''}
+        </div>
+        ${m.segment_label ? `<span class="text-[9px] font-bold uppercase tracking-wide self-start px-2 py-0.5 rounded-full"
+          style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">${esc(m.segment_label)}</span>` : ''}
+      </div>
+    </div>`;
+
+  const empty = `<p class="text-slate-600 text-sm col-span-full py-8 text-center">Nenhum estabelecimento encontrado.</p>`;
+
+  document.getElementById('home-modules').className = 'grid grid-cols-1 sm:grid-cols-2 gap-3';
+  document.getElementById('modules-grid').className  = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4';
+
+  document.getElementById('home-modules').innerHTML = items.length ? items.slice(0,4).map(cardSmall).join('') : empty;
+  document.getElementById('modules-grid').innerHTML  = items.length ? items.map(cardBig).join('') : empty;
+}
+
+function handleModuleClick(e) {
+  const card = e.target.closest('[data-url]');
+  if (!card) return;
+  openModule(card.dataset.slug, card.dataset.name, card.dataset.url);
+}
+document.getElementById('home-modules').addEventListener('click', handleModuleClick);
+document.getElementById('modules-grid').addEventListener('click', handleModuleClick);
+
+// ─── ANÚNCIOS ────────────────────────────────────────────────────────────────
+function renderAnnouncements(ann) {
+  if (!ann.length) return;
+  carouselSlides = ann;
+  document.getElementById('announcements-section').classList.remove('hidden');
+
+  document.getElementById('carousel-track').innerHTML = ann.map(a => {
+    let media;
+    if (a.image_url) {
+      media = `<img src="${esc(a.image_url)}" class="w-full h-full object-cover" alt="${esc(a.title)}">`;
+    } else {
+      media = `<div class="w-full h-full card flex flex-col items-center justify-center p-6 text-center">
+                 <h3 class="text-white text-lg font-black">${esc(a.title)}</h3>
+                 ${a.description ? `<p class="text-slate-400 text-sm mt-2">${esc(a.description)}</p>` : ''}
+               </div>`;
+    }
+    return `<div class="carousel-slide h-40 md:h-52 ${ytId ? '' : 'cursor-pointer'}" data-href="${esc(a.link_url||'')}">${media}</div>`;
+  }).join('');
+
+  document.getElementById('carousel-track').addEventListener('click', e => {
+    const slide = e.target.closest('[data-href]');
+    if (slide?.dataset.href) window.open(slide.dataset.href, '_blank', 'noopener');
+  });
+
+  document.getElementById('carousel-dots').innerHTML = ann.map((_,i) => `
+    <div onclick="goToSlide(${i})"
+         class="h-1.5 rounded-full cursor-pointer transition-all ${i===0?'w-5 bg-white':'w-1.5 bg-white/30'}"></div>`).join('');
+
+  clearInterval(carouselTimer);
+  carouselTimer = ann.length > 1 ? setInterval(nextSlide, 5000) : null;
+}
+
+function goToSlide(i) {
+  currentSlide = i;
+  document.getElementById('carousel-track').style.transform = `translateX(-${i*100}%)`;
+  document.querySelectorAll('#carousel-dots div').forEach((d,j) => {
+    d.className = `h-1.5 rounded-full cursor-pointer transition-all ${j===i?'w-5 bg-white':'w-1.5 bg-white/30'}`;
+  });
+}
+function nextSlide() { goToSlide((currentSlide+1) % carouselSlides.length); }
+function prevSlide() { goToSlide((currentSlide-1+carouselSlides.length) % carouselSlides.length); }
+
+// ─── AGENDAMENTOS ─────────────────────────────────────────────────────────────
+function renderAgenda(agenda) {
+  if (!agenda.length) return;
+  document.getElementById('appointments-section').classList.remove('hidden');
+  const statusColor = { pendente:'#eab308', confirmado:'#22c55e', cancelado:'#ef4444' };
+
+  document.getElementById('appointments-list').innerHTML = agenda.map(a => {
+    const dt   = new Date(a.data);
+    const dia  = String(dt.getDate()).padStart(2,'0');
+    const mes  = dt.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
+    const hora = (a.hora_inicio||'').slice(0,5);
+    const cor  = statusColor[a.status] || '#94a3b8';
+    return `
+      <div class="card p-4 border border-slate-700 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 border border-slate-700"
+             style="background:color-mix(in srgb,var(--accent) 10%,transparent)">
+          <span class="text-[9px] font-black uppercase" style="color:var(--accent)">${esc(mes)}</span>
+          <span class="text-lg font-black text-white leading-none">${esc(dia)}</span>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-white font-semibold text-sm truncate">${esc(a.service_name||'Serviço')}</p>
+          <p class="text-slate-500 text-xs truncate">${esc(a.establishment_name||'')} · ${esc(hora)}</p>
+        </div>
+        <span class="text-[10px] font-black uppercase tracking-widest" style="color:${esc(cor)}">${esc(a.status)}</span>
+      </div>`;
+  }).join('');
+}
+
+// ─── TRANSAÇÕES ──────────────────────────────────────────────────────────────
+function renderTransactions(txs) {
+  const statusColor = { PAID:'#22c55e', PENDING:'#eab308', FAILED:'#ef4444', REFUNDED:'#94a3b8' };
+  const statusLabel = { PAID:'Pago', PENDING:'Pendente', FAILED:'Falhou', REFUNDED:'Estornado' };
+
+  document.getElementById('transactions-list').innerHTML = txs.length
+    ? txs.map(t => `
+        <div class="card p-4 border border-slate-700 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-slate-700"
+                 style="color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)">
+              <i class="fa fa-${(t.module_icon||'receipt').replace('fa-','')} text-sm"></i>
+            </div>
+            <div class="min-w-0">
+              <p class="text-white font-semibold text-sm truncate">${esc(t.description||t.module_name||'Transação')}</p>
+              <p class="text-slate-500 text-xs">${new Date(t.created_at).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'})}</p>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-white font-bold text-sm">R$ ${parseFloat(t.amount||0).toFixed(2)}</p>
+            <p class="text-xs font-bold" style="color:${statusColor[t.status]||'#94a3b8'}">${esc(statusLabel[t.status]||t.status)}</p>
+          </div>
+        </div>`).join('')
+    : `<div class="text-slate-600 text-sm text-center py-12">Nenhuma transação encontrada.</div>`;
+}
+
+// ─── MINHA LOJA (LOJISTA) ────────────────────────────────────────────────────
+async function loadStoreProfile() {
+  try {
+    const res  = await apiFetch('/client/establishment');
+    const data = await res.json();
+    storeIsPublic = !!data.is_public;
+    updateToggle();
+
+    const fields = {
+      'store-description':   data.description,
+      'store-category':      data.category,
+      'store-city':          data.city,
+      'store-phone':         data.phone,
+      'store-whatsapp-link': data.whatsapp_link,
+      'store-instagram':     data.instagram_url,
+      'store-logo-url':      data.logo_url,
+      'store-cover-url':     data.cover_url,
+    };
+    Object.entries(fields).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val || '';
+    });
+  } catch(e) { console.error('Erro ao carregar perfil da loja:', e); }
+}
+
+function updateToggle() {
+  const btn = document.getElementById('store-toggle-btn');
+  if (!btn) return;
+  btn.classList.toggle('on', storeIsPublic);
+}
+
+async function toggleMarketplace() {
+  storeIsPublic = !storeIsPublic;
+  updateToggle();
+  try {
+    await apiFetch('/client/establishment', { method:'PATCH', body: JSON.stringify({ is_public: storeIsPublic }) });
+  } catch(e) {
+    storeIsPublic = !storeIsPublic;
+    updateToggle();
+  }
+}
+
+async function saveStoreProfile() {
+  const msg = document.getElementById('store-msg');
+  try {
+    const res = await apiFetch('/client/establishment', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        description:   document.getElementById('store-description')?.value.trim()   || null,
+        category:      document.getElementById('store-category')?.value.trim()      || null,
+        city:          document.getElementById('store-city')?.value.trim()          || null,
+        phone:         document.getElementById('store-phone')?.value.trim()         || null,
+        whatsapp_link: document.getElementById('store-whatsapp-link')?.value.trim() || null,
+        instagram_url: document.getElementById('store-instagram')?.value.trim()     || null,
+        logo_url:      document.getElementById('store-logo-url')?.value.trim()      || null,
+        cover_url:     document.getElementById('store-cover-url')?.value.trim()     || null,
+        is_public:     storeIsPublic,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    msg.style.color = '#22c55e';
+    msg.textContent = '✓ Salvo e publicado no Marketplace!';
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 4000);
+  } catch(e) {
+    msg.style.color = '#ef4444';
+    msg.textContent = e.message || 'Erro ao salvar.';
+    msg.classList.remove('hidden');
+  }
+}
+
+// ─── EQUIPE (LOJISTA) ────────────────────────────────────────────────────────
+function openAddEmployee() {
+  ['emp-name','emp-wa','emp-email'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('emp-role').value = 'Profissional';
+  document.getElementById('emp-error').classList.add('hidden');
+  document.getElementById('employee-modal').classList.remove('hidden');
+}
+
+async function saveEmployee() {
+  const full_name     = document.getElementById('emp-name').value.trim();
+  const whatsapp      = document.getElementById('emp-wa').value.trim();
+  const email         = document.getElementById('emp-email').value.trim();
+  const employee_role = document.getElementById('emp-role').value;
+  const errEl         = document.getElementById('emp-error');
+
+  if (!whatsapp && !email) {
+    errEl.textContent = 'Informe WhatsApp ou e-mail.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  try {
+    const res  = await apiFetch('/lojista/employees', {
+      method: 'POST',
+      body: JSON.stringify({ full_name, whatsapp, email, employee_role }),
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar.'; errEl.classList.remove('hidden'); return; }
+    document.getElementById('employee-modal').classList.add('hidden');
+    loadEmployees();
+  } catch(e) {
+    errEl.textContent = 'Erro de conexão.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function loadEmployees() {
+  const list = document.getElementById('employees-list');
+  if (!list) return;
+  try {
+    const res  = await apiFetch('/lojista/employees');
+    const data = await res.json();
+    if (!data.length) {
+      list.innerHTML = `<p class="text-slate-600 text-sm text-center py-10">Nenhum funcionário cadastrado ainda.</p>`;
+      return;
+    }
+    list.innerHTML = data.map(e => `
+      <div class="card p-4 border border-slate-700 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+             style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)">
+          ${esc((e.full_name||e.whatsapp||'?')[0].toUpperCase())}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-white font-semibold text-sm truncate">${esc(e.full_name||e.whatsapp||'Sem nome')}</p>
+          <p class="text-slate-500 text-xs truncate">${esc(e.employee_role)} · ${esc(e.whatsapp||e.email||'')}</p>
+        </div>
+        <button data-emp-id="${esc(e.id)}"
+                class="emp-remove w-8 h-8 rounded-lg bg-slate-700 hover:bg-red-600/20 text-slate-500 hover:text-red-400 flex items-center justify-center transition-all shrink-0">
+          <i class="fa fa-trash text-xs"></i>
+        </button>
+      </div>`).join('');
+
+    list.addEventListener('click', e => {
+      const btn = e.target.closest('.emp-remove');
+      if (btn) removeEmployee(btn.dataset.empId);
+    }, { once: true });
+  } catch(e) { console.error('Erro ao carregar equipe:', e); }
+}
+
+async function removeEmployee(id) {
+  if (!confirm('Remover este funcionário da equipe?')) return;
+  try {
+    await apiFetch(`/lojista/employees/${id}`, { method: 'DELETE' });
+    loadEmployees();
+  } catch(e) { alert('Erro ao remover.'); }
+}
+
+// ─── ABRIR MÓDULO (SSO) ──────────────────────────────────────────────────────
+function openModule(slug, name, url) {
+  if (!url) { alert('Este app ainda não tem URL configurada.'); return; }
+  try {
+    const base = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    const sep  = base.includes('?') ? '&' : '?';
+    document.getElementById('module-viewport').classList.remove('hidden');
+    document.getElementById('module-title').textContent = name;
+    document.getElementById('module-frame').src = `${base}${sep}sso_token=${TOKEN}`;
+    document.body.style.overflow = 'hidden';
+  } catch(e) { alert('Erro ao abrir o app. Tente novamente.'); }
+}
+
+function closeModule() {
+  document.getElementById('module-viewport').classList.add('hidden');
+  document.getElementById('module-frame').src = '';
+  document.body.style.overflow = '';
+}
+
+// ─── OTP / EDITAR PERFIL ─────────────────────────────────────────────────────
+async function requestOtp() {
+  try {
+    const res  = await apiFetch('/client/otp/send', { method: 'POST' });
+    const data = await res.json();
+    if (!data.sent) { alert(data.error || 'Erro ao enviar código.'); return; }
+    document.getElementById('otp-sent-msg').textContent = `Código enviado via ${data.channels.join(' e ')}.`;
+    document.getElementById('profile-locked').classList.add('hidden');
+    document.getElementById('profile-otp').classList.remove('hidden');
+    document.getElementById('profile-whatsapp').disabled = false;
+    document.getElementById('profile-name').disabled  = false;
+    document.getElementById('profile-email').disabled = false;
+    document.getElementById('profile-cpf').disabled   = false;
+  } catch(e) { alert('Erro ao solicitar código.'); }
+}
+
+function cancelEdit() {
+  document.getElementById('profile-locked').classList.remove('hidden');
+  document.getElementById('profile-otp').classList.add('hidden');
+  document.getElementById('profile-whatsapp').disabled = true;
+  document.getElementById('profile-name').disabled  = true;
+  document.getElementById('profile-email').disabled = true;
+  document.getElementById('profile-cpf').disabled   = true;
+  document.getElementById('profile-otp-code').value = '';
+}
+
+async function saveProfile() {
+  const code = document.getElementById('profile-otp-code').value.trim();
+  if (code.length !== 6) { alert('Digite o código de 6 dígitos.'); return; }
+  try {
+    const res  = await apiFetch('/client/me', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        otp_code:  code,
+        whatsapp:  document.getElementById('profile-whatsapp').value,
+        full_name: document.getElementById('profile-name').value,
+        email:     document.getElementById('profile-email').value,
+        cpf:       document.getElementById('profile-cpf').value,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) { alert('Perfil atualizado!'); cancelEdit(); init(); }
+    else              { alert(data.error || 'Código inválido ou WhatsApp já em uso.'); }
+  } catch(e) { alert('Erro ao salvar perfil.'); }
+}
+
+// ─── ENDEREÇOS SALVOS ─────────────────────────────────────────
+async function loadAddresses() {
+  const el = document.getElementById('addresses-list');
+  try {
+    const res  = await apiFetch('/client/addresses');
+    const list = await res.json();
+    if (!list.length) {
+      el.innerHTML = '<p class="text-slate-600 text-sm text-center py-3">Nenhum endereço salvo. Clique em "+ Novo" para adicionar.</p>';
+      return;
+    }
+    el.innerHTML = list.map(a => `
+      <div class="flex items-start justify-between gap-3 p-3 rounded-xl border border-slate-700 bg-slate-900/40">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-white font-bold text-sm">${a.label}</span>
+            ${a.is_default ? '<span style="background:#6366f122;color:#818cf8;padding:1px 8px;border-radius:20px;font-size:.65rem;font-weight:700">Padrão</span>' : ''}
+          </div>
+          <p class="text-slate-400 text-xs mt-0.5 break-all">${a.address}</p>
+        </div>
+        <div class="flex gap-1 shrink-0">
+          <button onclick="openEditAddress(${JSON.stringify(a).replace(/"/g,'&quot;')})"
+            class="text-slate-500 hover:text-indigo-400 transition-colors p-1" title="Editar">
+            <i class="fa fa-pen-to-square text-sm"></i>
+          </button>
+          <button onclick="deleteAddress('${a.id}')"
+            class="text-slate-500 hover:text-red-400 transition-colors p-1" title="Remover">
+            <i class="fa fa-trash text-sm"></i>
+          </button>
+        </div>
+      </div>`).join('');
+  } catch {
+    el.innerHTML = '<p class="text-red-400 text-sm text-center py-3">Erro ao carregar endereços.</p>';
+  }
+}
+
+function openNewAddress() {
+  document.getElementById('addr-form-title').textContent = 'Novo Endereço';
+  document.getElementById('addr-edit-id').value  = '';
+  document.getElementById('addr-label').value    = '';
+  document.getElementById('addr-street').value   = '';
+  document.getElementById('addr-number').value   = '';
+  document.getElementById('addr-neighborhood').value = '';
+  document.getElementById('addr-city').value     = '';
+  document.getElementById('addr-reference').value = '';
+  document.getElementById('addr-default').checked = false;
+  document.getElementById('addr-error').classList.add('hidden');
+  document.getElementById('address-form-card').classList.remove('hidden');
+  document.getElementById('address-form-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function openEditAddress(a) {
+  document.getElementById('addr-form-title').textContent = 'Editar Endereço';
+  document.getElementById('addr-edit-id').value      = a.id;
+  document.getElementById('addr-label').value        = a.label || '';
+  document.getElementById('addr-street').value       = a.street || '';
+  document.getElementById('addr-number').value       = a.number || '';
+  document.getElementById('addr-neighborhood').value = a.neighborhood || '';
+  document.getElementById('addr-city').value         = a.city || '';
+  document.getElementById('addr-reference').value    = a.reference || '';
+  document.getElementById('addr-default').checked    = !!a.is_default;
+  document.getElementById('addr-error').classList.add('hidden');
+  document.getElementById('address-form-card').classList.remove('hidden');
+  document.getElementById('address-form-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function closeAddressForm() {
+  document.getElementById('address-form-card').classList.add('hidden');
+}
+
+function buildAddressString() {
+  const street = document.getElementById('addr-street').value.trim();
+  const number = document.getElementById('addr-number').value.trim();
+  const neighborhood = document.getElementById('addr-neighborhood').value.trim();
+  const city   = document.getElementById('addr-city').value.trim();
+  const ref    = document.getElementById('addr-reference').value.trim();
+  let addr = '';
+  if (street) addr += street;
+  if (number) addr += `, ${number}`;
+  if (neighborhood) addr += ` — ${neighborhood}`;
+  if (city) addr += `, ${city}`;
+  if (ref) addr += ` (Ref: ${ref})`;
+  return addr;
+}
+
+async function saveAddress() {
+  const errEl = document.getElementById('addr-error');
+  errEl.classList.add('hidden');
+
+  const address = buildAddressString();
+  if (!address.trim()) {
+    errEl.textContent = 'Preencha ao menos rua ou endereço completo.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const id = document.getElementById('addr-edit-id').value;
+  const body = {
+    label:        document.getElementById('addr-label').value.trim() || 'Casa',
+    street:       document.getElementById('addr-street').value.trim(),
+    number:       document.getElementById('addr-number').value.trim(),
+    neighborhood: document.getElementById('addr-neighborhood').value.trim(),
+    city:         document.getElementById('addr-city').value.trim(),
+    reference:    document.getElementById('addr-reference').value.trim(),
+    address,
+    is_default:   document.getElementById('addr-default').checked,
+  };
+
+  try {
+    const res = id
+      ? await apiFetch(`/client/addresses/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      : await apiFetch('/client/addresses',         { method: 'POST',  body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Erro ao salvar.'; errEl.classList.remove('hidden'); return; }
+    closeAddressForm();
+    loadAddresses();
+  } catch {
+    errEl.textContent = 'Erro de conexão.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function deleteAddress(id) {
+  if (!confirm('Remover este endereço?')) return;
+  try {
+    await apiFetch(`/client/addresses/${id}`, { method: 'DELETE' });
+    loadAddresses();
+  } catch { alert('Erro ao remover endereço.'); }
+}
+
+// ─── ÁGATHA CHAT ─────────────────────────────────────────────────────────────
+function applyAgataAvatar(photoUrl, name) {
+  const setAvatar = (imgId, iconId) => {
+    const img  = document.getElementById(imgId);
+    const icon = document.getElementById(iconId);
+    if (!img || !icon) return;
+    if (photoUrl) {
+      img.src = photoUrl;
+      img.classList.remove('hidden');
+      icon.classList.add('hidden');
+    }
+  };
+  setAvatar('agata-fab-img',    'agata-fab-icon');
+  setAvatar('agata-header-img', 'agata-header-icon');
+  if (name) {
+    const el = document.getElementById('agata-header-name');
+    if (el) el.textContent = name;
+  }
+}
+
+let agataMemoryLoaded = false;
+
+async function toggleAgataChat() {
+  const chat = document.getElementById('agata-chat-window');
+  chat.classList.toggle('hidden');
+  if (!chat.classList.contains('hidden')) {
+    document.getElementById('agata-input').focus();
+    if (!agataMemoryLoaded) {
+      agataMemoryLoaded = true;
+      await loadAgataMemory();
+    }
+  }
+}
+
+async function loadAgataMemory() {
+  try {
+    const res  = await apiFetch('/actions/memory');
+    const data = await res.json();
+    const list = document.getElementById('agata-messages');
+
+    // Mostra o banner de memória se houver summary
+    if (data.summary) {
+      document.getElementById('agata-memory-text').textContent = data.summary;
+      document.getElementById('agata-memory-banner').classList.remove('hidden');
+    }
+
+    // Recarrega histórico recente de mensagens
+    if (data.messages?.length) {
+      list.innerHTML = '';
+      data.messages.forEach(m => appendMsg(m.role === 'user' ? 'user' : 'agata', m.content));
+    } else {
+      // Saudação inicial se não houver histórico
+      list.innerHTML = '';
+      appendMsg('agata', 'Olá! Sou a Ágatha. Como posso te ajudar hoje?');
+    }
+  } catch {
+    // Silencioso — exibe saudação padrão se falhar
+    const list = document.getElementById('agata-messages');
+    list.innerHTML = '';
+    appendMsg('agata', 'Olá! Sou a Ágatha. Como posso te ajudar hoje?');
+  }
+}
+
+async function clearAgataMemory() {
+  if (!confirm('Apagar toda a memória da Ágatha sobre você?')) return;
+  try {
+    await apiFetch('/actions/memory', { method: 'DELETE' });
+    document.getElementById('agata-memory-banner').classList.add('hidden');
+    document.getElementById('agata-messages').innerHTML = '';
+    appendMsg('agata', 'Memória apagada! Começamos do zero. Como posso te ajudar?');
+    agataMemoryLoaded = false;
+  } catch { alert('Erro ao apagar memória.'); }
+}
+
+async function sendToAgata() {
+  const input = document.getElementById('agata-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  appendMsg('user', text);
+  input.value = '';
+  try {
+    const res  = await apiFetch('/actions/ask', { method:'POST', body: JSON.stringify({ prompt: text }) });
+    const data = await res.json();
+    appendMsg('agata', data.response || 'Desculpe, tive um problema ao processar.');
+  } catch(e) {
+    appendMsg('agata', 'Estou com dificuldade de conexão. Tente em instantes.');
+  }
+}
+
+function appendMsg(role, text) {
+  const list = document.getElementById('agata-messages');
+  const el   = document.createElement('div');
+  el.className = `flex gap-2 ${role==='user' ? 'flex-row-reverse' : ''}`;
+
+  const avatarEl = document.createElement('div');
+  if (role === 'user') {
+    avatarEl.className = 'w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 shrink-0 text-[9px] font-bold';
+    avatarEl.textContent = 'EU';
+  } else {
+    avatarEl.className = 'w-7 h-7 rounded-full overflow-hidden flex items-center justify-center shrink-0 text-xs';
+    avatarEl.style.cssText = 'background:color-mix(in srgb,var(--accent) 20%,transparent);color:var(--accent)';
+    const fabImg = document.getElementById('agata-fab-img');
+    if (fabImg && !fabImg.classList.contains('hidden') && fabImg.src) {
+      const img = document.createElement('img');
+      img.src = fabImg.src;
+      img.className = 'w-full h-full object-cover';
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.innerHTML = '<i class="fa fa-sparkles"></i>';
+    }
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = `p-3 rounded-xl text-sm leading-relaxed max-w-[82%] ${role==='user' ? 'rounded-tr-none text-white' : 'bg-slate-700 text-slate-200 rounded-tl-none'}`;
+  if (role === 'user') bubble.style.background = 'var(--accent)';
+  bubble.textContent = text; // textContent evita XSS
+
+  el.appendChild(avatarEl);
+  el.appendChild(bubble);
+  list.appendChild(el);
+  list.scrollTop = list.scrollHeight;
+}
+
+// ─── LOGOUT ───────────────────────────────────────────────────────────────────
+function logout() {
+  ['ag_token','client_token','admin_token'].forEach(k => localStorage.removeItem(k));
+  window.location.href = '/login';
+}
+
+// ── LGPD: Opt-out WhatsApp ──────────────────────────────────
+let waOptoutState = false;
+
+async function loadWaOptout() {
+  try {
+    const data = await apiFetch('/client/lgpd/optout');
+    waOptoutState = data?.whatsapp_optout ?? false;
+    renderWaOptoutBtn();
+  } catch(e) {}
+}
+
+function renderWaOptoutBtn() {
+  const btn = document.getElementById('btn-optout-wa');
+  if (!btn) return;
+  if (waOptoutState) {
+    btn.innerHTML = '<i class="fa fa-ban mr-1"></i>Desativado';
+    btn.className = 'px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide transition-all border border-red-800/50 text-red-400 hover:bg-red-900/20';
+  } else {
+    btn.innerHTML = '<i class="fa fa-check mr-1"></i>Ativo';
+    btn.className = 'px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wide transition-all border border-emerald-700/50 text-emerald-400 hover:bg-emerald-900/20';
+  }
+}
+
+async function toggleWaOptout() {
+  const next = !waOptoutState;
+  const msg  = next
+    ? 'Desativar mensagens automáticas de WhatsApp?\nVocê pode reativar a qualquer momento.'
+    : 'Reativar mensagens automáticas de WhatsApp?';
+  if (!confirm(msg)) return;
+  try {
+    const data = await apiFetch('/client/lgpd/optout', { method: 'PATCH', body: JSON.stringify({ whatsapp_optout: next }) });
+    if (data?.success) { waOptoutState = next; renderWaOptoutBtn(); }
+  } catch(e) { alert('Erro ao alterar preferência. Tente novamente.'); }
+}
+
+// ── LGPD: Exportar dados ────────────────────────────────────
+async function exportMyData() {
+  try {
+    const res = await apiFetch('/client/lgpd/export');
+    if (!res || res.error) { alert('Erro ao exportar dados: ' + (res?.error || '')); return; }
+    const blob = new Blob([JSON.stringify(res, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `meus-dados-ag-on-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { alert('Erro ao exportar dados.'); }
+}
+
+// ── LGPD: Excluir conta (anonimização) ─────────────────────
+async function requestDeleteAccount() {
+  const ok = confirm(
+    '⚠️ EXCLUIR MINHA CONTA\n\n' +
+    'Seus dados pessoais (nome, WhatsApp, e-mail, CPF e endereços) serão permanentemente removidos.\n\n' +
+    'Pedidos históricos são mantidos de forma anônima por obrigação legal (LGPD, Art. 16).\n\n' +
+    'Esta ação não pode ser desfeita. Confirmar?'
+  );
+  if (!ok) return;
+
+  try {
+    const res = await apiFetch('/client/me', { method: 'DELETE' });
+    if (res?.success) {
+      alert('Conta excluída com sucesso. Você será desconectado.');
+      logout();
+    } else {
+      alert('Erro: ' + (res?.error || 'Tente novamente.'));
+    }
+  } catch(e) { alert('Erro de conexão. Tente novamente.'); }
+}
+
+// ─── PWA ──────────────────────────────────────────────────────────────────────
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('pwa-install-banner')?.classList.remove('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  document.getElementById('pwa-install-banner')?.classList.add('hidden');
+});
+async function installPWA() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') document.getElementById('pwa-install-banner')?.classList.add('hidden');
+  deferredPrompt = null;
+}
+
+// ─── SERVICE WORKER ───────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+// ─── START ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

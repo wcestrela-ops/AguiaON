@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AG-ON | Entrar</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AG-ON">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        input {
+            background-color: #0f172a !important;
+            border: 1px solid #1e293b !important;
+            color: #cbd5e1 !important;
+            transition: all 0.3s;
+        }
+        input:focus {
+            border-color: #6366f1 !important;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+        }
+        input::placeholder { color: #475569 !important; }
+
+        .otp-box {
+            background-color: #0f172a !important;
+            border: 1px solid #1e293b !important;
+            color: white !important;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 900;
+            width: 3rem;
+            height: 3.5rem;
+            border-radius: 0.75rem;
+            transition: all 0.2s;
+        }
+        .otp-box:focus {
+            border-color: #6366f1 !important;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+        }
+        .otp-box.filled { border-color: #6366f1 !important; background-color: rgba(99,102,241,0.08) !important; }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        .fade-up { animation: fadeUp 0.35s ease forwards; }
+
+        @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)} }
+        .shake { animation: shake 0.4s ease; }
+
+        .btn-primary {
+            width: 100%; background: #4f46e5; color: white;
+            padding: 1rem 1.5rem; border-radius: 1rem; font-weight: 900;
+            font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase;
+            transition: all 0.2s; box-shadow: 0 8px 24px rgba(99,102,241,0.25);
+            border: none; cursor: pointer;
+        }
+        .btn-primary:hover:not(:disabled) { background: #6366f1; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            width: 100%; background: transparent; color: #64748b;
+            padding: 0.75rem; border-radius: 1rem; font-weight: 700;
+            font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+            transition: all 0.2s; border: 1px solid #1e293b; cursor: pointer;
+        }
+        .btn-secondary:hover { color: #94a3b8; border-color: #334155; }
+
+        .input-field {
+            width: 100%; border-radius: 1rem;
+            padding: 1rem 1.25rem; font-size: 0.875rem;
+        }
+        .input-icon-wrap { position: relative; }
+        .input-icon-wrap .icon {
+            position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);
+            color: #475569; font-size: 0.875rem; pointer-events: none;
+        }
+        .input-icon-wrap input { padding-left: 2.5rem; }
+        .input-icon-wrap .icon-right {
+            position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+            color: #475569; cursor: pointer; font-size: 0.875rem;
+        }
+        .input-icon-wrap input.with-right { padding-right: 2.5rem; }
+
+        .label { font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.1em; margin-left: 4px; display: block; margin-bottom: 4px; }
+        .err { color: #f87171; font-size: 0.75rem; text-align: center; font-weight: 700; padding: 4px 0; }
+        .link-btn { background: none; border: none; color: #6366f1; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: color 0.2s; }
+        .link-btn:hover { color: #818cf8; }
+        .icon-box { width: 4rem; height: 4rem; border-radius: 1.25rem; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-300 font-sans min-h-screen flex flex-col">
+
+    <header class="p-6 flex items-center justify-between">
+        <a href="/" class="font-black text-white text-2xl tracking-tighter">AG<span class="text-indigo-500">ON</span></a>
+        <a href="/" class="text-slate-600 hover:text-slate-400 text-sm transition-all">
+            <i class="fa-solid fa-arrow-left mr-2"></i>Início
+        </a>
+    </header>
+
+    <main class="flex-1 flex items-center justify-center px-6 py-8">
+        <div class="w-full max-w-sm">
+
+            <!-- ═══════════════════════════════════════
+                 TELA 1: LOGIN (identifier + password)
+            ═══════════════════════════════════════ -->
+            <div id="screen-login" class="screen active fade-up space-y-6">
+                <div class="text-center">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-lock text-2xl text-indigo-400"></i>
+                    </div>
+                    <h1 class="text-white text-3xl font-black tracking-tight">Entrar</h1>
+                    <p class="text-slate-500 text-sm mt-2">Use seu WhatsApp ou e-mail para acessar</p>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="label">WhatsApp ou E-mail</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-at"></i>
+                            <input id="login-identifier" class="input-field" type="text"
+                                   placeholder="(11) 99999-9999 ou email@exemplo.com"
+                                   onkeydown="if(event.key==='Enter') doLogin()">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label">Senha</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-key"></i>
+                            <input id="login-password" class="input-field with-right" type="password"
+                                   placeholder="Sua senha"
+                                   onkeydown="if(event.key==='Enter') doLogin()">
+                            <i class="icon-right fa-solid fa-eye-slash" onclick="togglePwd('login-password', this)"></i>
+                        </div>
+                    </div>
+
+                    <div id="login-error" class="hidden err"></div>
+
+                    <button class="btn-primary" id="btn-login" onclick="doLogin()">
+                        <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> Entrar
+                    </button>
+
+                    <div class="flex justify-between items-center pt-1">
+                        <button class="link-btn text-slate-500 hover:text-slate-300" onclick="showScreen('forgot')">
+                            <i class="fa-solid fa-key mr-1"></i>Esqueci minha senha
+                        </button>
+                        <button class="link-btn" onclick="showScreen('register')">
+                            <i class="fa-solid fa-user-plus mr-1"></i>Criar conta
+                        </button>
+                    </div>
+
+                    <p class="text-center text-slate-700 text-xs pt-2">
+                        <i class="fa-solid fa-crown mr-1 text-slate-600"></i>
+                        Administrador? Entre com seu WhatsApp — sem senha, você receberá um código.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════
+                 TELA 2: ESQUECI MINHA SENHA
+            ═══════════════════════════════════════ -->
+            <div id="screen-forgot" class="screen fade-up space-y-6">
+                <div class="text-center">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-unlock-keyhole text-2xl text-indigo-400"></i>
+                    </div>
+                    <h1 class="text-white text-3xl font-black tracking-tight">Recuperar senha</h1>
+                    <p class="text-slate-500 text-sm mt-2">Enviaremos um código para redefinir sua senha</p>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="label">WhatsApp ou E-mail</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-at"></i>
+                            <input id="forgot-identifier" class="input-field" type="text"
+                                   placeholder="(11) 99999-9999 ou email@exemplo.com"
+                                   onkeydown="if(event.key==='Enter') doForgot()">
+                        </div>
+                    </div>
+
+                    <div id="forgot-error" class="hidden err"></div>
+
+                    <button class="btn-primary" id="btn-forgot" onclick="doForgot()">
+                        <i class="fa-solid fa-paper-plane mr-2"></i> Enviar código
+                    </button>
+
+                    <button class="btn-secondary" onclick="showScreen('login')">
+                        <i class="fa-solid fa-arrow-left mr-2"></i> Voltar
+                    </button>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════
+                 TELA 3: CRIAR CONTA
+            ═══════════════════════════════════════ -->
+            <div id="screen-register" class="screen fade-up space-y-6">
+                <div class="text-center">
+                    <div class="icon-box">
+                        <i class="fa-solid fa-user-plus text-2xl text-indigo-400"></i>
+                    </div>
+                    <h1 class="text-white text-3xl font-black tracking-tight">Criar conta</h1>
+                    <p class="text-slate-500 text-sm mt-2">Preencha seus dados para se cadastrar</p>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="label">Seu nome</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-user"></i>
+                            <input id="reg-name" class="input-field" type="text" placeholder="Nome completo">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label">WhatsApp <span class="text-slate-500 font-normal">(para login e notificações)</span></label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-brands fa-whatsapp"></i>
+                            <input id="reg-whatsapp" class="input-field" type="tel"
+                                   placeholder="(11) 99999-9999">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label">E-mail <span class="text-slate-500 font-normal">(para login e notificações)</span></label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-envelope"></i>
+                            <input id="reg-email" class="input-field" type="email"
+                                   placeholder="seu@email.com">
+                        </div>
+                    </div>
+                    <p class="text-slate-500 text-xs text-center -mt-1">Informe ao menos um dos dois. Você poderá fazer login com qualquer um deles.</p>
+                    <div>
+                        <label class="label">Senha</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-lock"></i>
+                            <input id="reg-password" class="input-field with-right" type="password" placeholder="Mínimo 6 caracteres">
+                            <i class="icon-right fa-solid fa-eye-slash" onclick="togglePwd('reg-password', this)"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label">Confirmar senha</label>
+                        <div class="input-icon-wrap">
+                            <i class="icon fa-solid fa-lock"></i>
+                            <input id="reg-confirm" class="input-field with-right" type="password" placeholder="Repita a senha"
+                                   onkeydown="if(event.key==='Enter') doRegister()">
+                            <i class="icon-right fa-solid fa-eye-slash" onclick="togglePwd('reg-confirm', this)"></i>
+                        </div>
+                    </div>
+
+                    <!-- LGPD: consentimento explícito -->
+                    <label class="flex items-start gap-3 cursor-pointer select-none">
+                        <input id="reg-consent" type="checkbox" class="mt-0.5 w-4 h-4 accent-indigo-500 shrink-0 cursor-pointer">
+                        <span class="text-slate-400 text-xs leading-relaxed">
+                            Li e concordo com a
+                            <a href="/privacidade" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">Política de Privacidade</a>
+                            e os
+                            <a href="/privacidade#termos" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">Termos de Uso</a>.
+                            Autorizo o tratamento dos meus dados conforme a LGPD (Lei 13.709/2018).
+                        </span>
+                    </label>
+
+                    <div id="reg-error" class="hidden err"></div>
+
+                    <button class="btn-primary" id="btn-register" onclick="doRegister()">
+                        <i class="fa-solid fa-check mr-2"></i> Criar conta
+                    </button>
+
+                    <button class="btn-secondary" onclick="showScreen('login')">
+                        <i class="fa-solid fa-arrow-left mr-2"></i> Já tenho conta
+                    </button>
+                </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════
+                 TELA 4: CÓDIGO OTP (multi-purpose)
+                 Modes: 'superadmin' | 'confirm' | 'reset'
+            ═══════════════════════════════════════ -->
+            <div id="screen-otp" class="screen fade-up space-y-6">
+                <div class="text-center">
+                    <div class="icon-box" id="otp-icon-box">
+                        <i class="fa-solid fa-shield-halved text-2xl text-indigo-400"></i>
+                    </div>
+                    <h1 class="text-white text-3xl font-black tracking-tight">Verificação</h1>
+                    <p class="text-slate-500 text-sm mt-2" id="otp-subtitle">Insira o código recebido</p>
+                    <p class="text-xs mt-1 font-bold" id="otp-channels"></p>
+                </div>
+
+                <!-- 6 caixas OTP -->
+                <div class="flex justify-center gap-2" id="otp-boxes">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                    <input class="otp-box" maxlength="1" type="text" inputmode="numeric" pattern="[0-9]">
+                </div>
+
+                <div id="otp-error" class="hidden err"></div>
+
+                <!-- Campos de nova senha — visíveis apenas no modo 'reset' -->
+                <div id="otp-new-pwd" class="hidden space-y-3">
+                    <div class="border-t border-slate-800 pt-4">
+                        <p class="text-slate-500 text-xs text-center mb-3">Defina sua nova senha</p>
+                        <div class="space-y-2">
+                            <div class="input-icon-wrap">
+                                <i class="icon fa-solid fa-lock"></i>
+                                <input id="new-password" class="input-field with-right" type="password" placeholder="Nova senha (mín. 6 caracteres)">
+                                <i class="icon-right fa-solid fa-eye-slash" onclick="togglePwd('new-password', this)"></i>
+                            </div>
+                            <div class="input-icon-wrap">
+                                <i class="icon fa-solid fa-lock"></i>
+                                <input id="new-password-confirm" class="input-field with-right" type="password" placeholder="Confirmar nova senha">
+                                <i class="icon-right fa-solid fa-eye-slash" onclick="togglePwd('new-password-confirm', this)"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button class="btn-primary" id="btn-verify" onclick="doVerifyOtp()">
+                        <i class="fa-solid fa-check mr-2"></i> Confirmar
+                    </button>
+
+                    <div class="flex justify-between items-center text-xs">
+                        <button id="btn-resend" onclick="doResend()" class="link-btn disabled:opacity-40" disabled>
+                            <i class="fa-solid fa-rotate-right mr-1"></i>Reenviar código
+                            <span id="resend-timer" class="text-slate-600 ml-1"></span>
+                        </button>
+                        <button class="link-btn text-slate-500 hover:text-slate-300" id="btn-otp-back" onclick="otpGoBack()">
+                            <i class="fa-solid fa-arrow-left mr-1"></i>Voltar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+<script>
+    // ── Estado ──────────────────────────────────────────────────
+    let currentIdentifier = '';
+    let otpMode = '';          // 'superadmin' | 'confirm' | 'reset'
+    let resendInterval = null;
+
+    // Carregar configurações públicas
+    fetch('/public/settings').then(r => r.json()).then(settings => {
+        if (settings.pwa_name) document.title = `${settings.pwa_name} | Entrar`;
+        if (settings.pwa_theme_color) {
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', settings.pwa_theme_color);
+            document.querySelector('meta[name="apple-mobile-web-app-title"]').setAttribute('content', settings.pwa_name || 'AG-ON');
+        }
+    }).catch(() => {});
+
+    // Abre tela correta conforme ?mode=
+    const urlMode = new URLSearchParams(location.search).get('mode');
+    if (urlMode === 'register') showScreen('register');
+    else if (urlMode === 'forgot') showScreen('forgot');
+
+    // Se já logado, redireciona
+    const token = localStorage.getItem('ag_token') || localStorage.getItem('admin_token') || localStorage.getItem('client_token');
+    if (token) {
+        fetch('/auth/validate', { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(d => { 
+                if (d.valid) {
+                    redirectByRole(d.user.role); 
+                } else {
+                    localStorage.removeItem('ag_token');
+                    localStorage.removeItem('admin_token');
+                    localStorage.removeItem('client_token');
+                }
+            })
+            .catch(() => {
+                localStorage.removeItem('ag_token');
+                localStorage.removeItem('admin_token');
+                localStorage.removeItem('client_token');
+            });
+    }
+
+    // ── Navegação entre telas ───────────────────────────────────
+    function showScreen(name) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        const el = document.getElementById('screen-' + name);
+        el.classList.add('active');
+        el.classList.remove('fade-up');
+        void el.offsetWidth; // reflow para reiniciar animação
+        el.classList.add('fade-up');
+    }
+
+    function redirectByRole(role) {
+        if (role === 'SUPERADMIN') window.location.href = '/admin-panel';
+        else if (role === 'LOJISTA') window.location.href = '/lojista';
+        else window.location.href = '/portal';
+    }
+
+    function storeToken(data) {
+        localStorage.setItem('ag_token', data.token);
+        if (data.role === 'CLIENT')    localStorage.setItem('client_token', data.token);
+        if (data.role === 'SUPERADMIN') localStorage.setItem('admin_token', data.token);
+    }
+
+    function togglePwd(inputId, iconEl) {
+        const inp = document.getElementById(inputId);
+        if (inp.type === 'password') {
+            inp.type = 'text';
+            iconEl.classList.replace('fa-eye-slash', 'fa-eye');
+        } else {
+            inp.type = 'password';
+            iconEl.classList.replace('fa-eye', 'fa-eye-slash');
+        }
+    }
+
+    function showErr(id, msg) {
+        const el = document.getElementById(id);
+        el.innerText = msg;
+        el.classList.remove('hidden');
+    }
+    function hideErr(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function setBtn(id, html, disabled) {
+        const b = document.getElementById(id);
+        b.innerHTML = html;
+        b.disabled = disabled;
+    }
+
+    // ── TELA 1: Login ───────────────────────────────────────────
+    async function doLogin() {
+        const identifier = document.getElementById('login-identifier').value.trim();
+        const password   = document.getElementById('login-password').value;
+        hideErr('login-error');
+        if (!identifier) { showErr('login-error', 'Informe seu WhatsApp ou e-mail.'); return; }
+
+        setBtn('btn-login', '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Aguarde...', true);
+
+        try {
+            const res  = await fetch('/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier, password }),
+            });
+            const data = await res.json();
+
+            if (data.requireOtp) {
+                // SuperAdmin → vai para tela OTP
+                currentIdentifier = identifier;
+                otpMode = 'superadmin';
+                showOtpScreen({
+                    icon: 'fa-crown',
+                    subtitle: 'Código enviado para o WhatsApp do administrador',
+                    channels: data.channels,
+                    backTo: 'login',
+                });
+                return;
+            }
+
+            if (data.token) {
+                storeToken(data);
+                setBtn('btn-login', '<i class="fa-solid fa-check mr-2"></i> Entrando...', true);
+                setTimeout(() => redirectByRole(data.role), 400);
+                return;
+            }
+
+            // Erros específicos
+            if (data.error === 'FIRST_ACCESS') {
+                showErr('login-error', 'Você ainda não tem uma senha. Clique em "Esqueci minha senha" para criar.');
+            } else if (data.error === 'UNCONFIRMED') {
+                showErr('login-error', 'Conta não confirmada. Verifique o código enviado no cadastro.');
+            } else {
+                showErr('login-error', data.error || 'Erro ao entrar.');
+            }
+        } catch {
+            showErr('login-error', 'Erro de conexão. Tente novamente.');
+        }
+
+        setBtn('btn-login', '<i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> Entrar', false);
+    }
+
+    // ── TELA 2: Esqueci a senha ─────────────────────────────────
+    async function doForgot() {
+        const identifier = document.getElementById('forgot-identifier').value.trim();
+        hideErr('forgot-error');
+        if (!identifier) { showErr('forgot-error', 'Informe seu WhatsApp ou e-mail.'); return; }
+
+        setBtn('btn-forgot', '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Enviando...', true);
+
+        try {
+            const res  = await fetch('/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ identifier }),
+            });
+            const data = await res.json();
+
+            currentIdentifier = identifier;
+            otpMode = 'reset';
+            showOtpScreen({
+                icon: 'fa-unlock-keyhole',
+                subtitle: 'Insira o código recebido e defina sua nova senha',
+                channels: data.channels,
+                backTo: 'forgot',
+            });
+        } catch {
+            showErr('forgot-error', 'Erro de conexão. Tente novamente.');
+            setBtn('btn-forgot', '<i class="fa-solid fa-paper-plane mr-2"></i> Enviar código', false);
+        }
+    }
+
+    // ── TELA 3: Criar conta ─────────────────────────────────────
+    async function doRegister() {
+        const full_name = document.getElementById('reg-name').value.trim();
+        const whatsapp  = document.getElementById('reg-whatsapp').value.trim();
+        const email     = document.getElementById('reg-email').value.trim().toLowerCase();
+        const password  = document.getElementById('reg-password').value;
+        const confirm   = document.getElementById('reg-confirm').value;
+        hideErr('reg-error');
+
+        const consent = document.getElementById('reg-consent').checked;
+
+        if (!whatsapp && !email) { showErr('reg-error', 'Informe ao menos WhatsApp ou e-mail.'); return; }
+        if (!password)           { showErr('reg-error', 'Defina uma senha.'); return; }
+        if (password.length < 6) { showErr('reg-error', 'Senha deve ter pelo menos 6 caracteres.'); return; }
+        if (password !== confirm) { showErr('reg-error', 'As senhas não coincidem.'); return; }
+        if (!consent)            { showErr('reg-error', 'Você precisa aceitar a Política de Privacidade para criar sua conta.'); return; }
+
+        setBtn('btn-register', '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Criando...', true);
+
+        try {
+            const res  = await fetch('/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ whatsapp: whatsapp || null, email: email || null, full_name, password }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                showErr('reg-error', data.error || 'Erro ao criar conta.');
+                setBtn('btn-register', '<i class="fa-solid fa-check mr-2"></i> Criar conta', false);
+                return;
+            }
+
+            // Registra consentimento LGPD (sem bloquear fluxo se falhar)
+            fetch('/auth/lgpd-consent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: data.user_id || whatsapp || email, event: 'REGISTER', version: '1.0' }),
+            }).catch(() => {});
+
+            // Para o OTP de confirmação, usa o identificador que foi informado (prefere WA)
+            currentIdentifier = whatsapp || email;
+            otpMode = 'confirm';
+            showOtpScreen({
+                icon: 'fa-envelope-circle-check',
+                subtitle: 'Confirme seu cadastro com o código enviado',
+                channels: data.channels,
+                backTo: 'register',
+            });
+        } catch {
+            showErr('reg-error', 'Erro de conexão. Tente novamente.');
+            setBtn('btn-register', '<i class="fa-solid fa-check mr-2"></i> Criar conta', false);
+        }
+    }
+
+    // ── TELA 4: OTP — configurar e exibir ──────────────────────
+    function showOtpScreen({ icon, subtitle, channels, backTo }) {
+        // Ícone
+        document.getElementById('otp-icon-box').innerHTML =
+            `<i class="fa-solid ${icon} text-2xl text-indigo-400"></i>`;
+
+        // Subtítulo
+        document.getElementById('otp-subtitle').innerText = subtitle;
+
+        // Canais
+        const chEl = document.getElementById('otp-channels');
+        if (channels && channels.includes('console')) {
+            chEl.innerHTML = '<span class="text-yellow-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Sem canal configurado — veja os logs do servidor</span>';
+        } else if (channels && channels.length > 0) {
+            chEl.innerHTML = `<span class="text-indigo-400">Enviado via ${channels.join(' e ')}</span>`;
+        } else {
+            chEl.innerText = '';
+        }
+
+        // Campos nova senha (modo reset)
+        document.getElementById('otp-new-pwd').classList.toggle('hidden', otpMode !== 'reset');
+
+        // Botão voltar
+        document.getElementById('btn-otp-back').dataset.backTo = backTo;
+
+        // Limpa boxes e erros
+        document.querySelectorAll('.otp-box').forEach(b => { b.value = ''; b.classList.remove('filled'); });
+        hideErr('otp-error');
+        setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Confirmar', false);
+
+        showScreen('otp');
+        document.querySelectorAll('.otp-box')[0].focus();
+        startResendTimer();
+    }
+
+    function otpGoBack() {
+        const backTo = document.getElementById('btn-otp-back').dataset.backTo || 'login';
+        showScreen(backTo);
+    }
+
+    // ── TELA 4: Verificar OTP ───────────────────────────────────
+    async function doVerifyOtp() {
+        const boxes = document.querySelectorAll('.otp-box');
+        const code  = Array.from(boxes).map(b => b.value).join('');
+        hideErr('otp-error');
+
+        if (code.length < 6) {
+            document.getElementById('otp-boxes').classList.add('shake');
+            setTimeout(() => document.getElementById('otp-boxes').classList.remove('shake'), 400);
+            return;
+        }
+
+        setBtn('btn-verify', '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Verificando...', true);
+
+        try {
+            let res, data;
+
+            if (otpMode === 'superadmin') {
+                res  = await fetch('/auth/login/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: currentIdentifier, code }),
+                });
+                data = await res.json();
+
+            } else if (otpMode === 'reset') {
+                const newPwd  = document.getElementById('new-password').value;
+                const confPwd = document.getElementById('new-password-confirm').value;
+
+                if (!newPwd || newPwd.length < 6) {
+                    showErr('otp-error', 'Defina uma nova senha com pelo menos 6 caracteres.');
+                    setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Confirmar', false);
+                    return;
+                }
+                if (newPwd !== confPwd) {
+                    showErr('otp-error', 'As senhas não coincidem.');
+                    setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Confirmar', false);
+                    return;
+                }
+
+                res  = await fetch('/auth/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: currentIdentifier, code, newPassword: newPwd }),
+                });
+                data = await res.json();
+
+            } else {
+                // 'confirm'
+                res  = await fetch('/auth/confirm-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: currentIdentifier, code }),
+                });
+                data = await res.json();
+            }
+
+            if (data.token) {
+                storeToken(data);
+                setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Entrando...', true);
+                setTimeout(() => redirectByRole(data.role), 400);
+                return;
+            }
+
+            // Erro
+            showErr('otp-error', data.error || 'Código inválido ou expirado.');
+            boxes.forEach(b => { b.value = ''; b.classList.remove('filled'); });
+            boxes[0].focus();
+            document.getElementById('otp-boxes').classList.add('shake');
+            setTimeout(() => document.getElementById('otp-boxes').classList.remove('shake'), 400);
+            setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Confirmar', false);
+
+        } catch {
+            showErr('otp-error', 'Erro de conexão.');
+            setBtn('btn-verify', '<i class="fa-solid fa-check mr-2"></i> Confirmar', false);
+        }
+    }
+
+    // ── Reenviar código ─────────────────────────────────────────
+    async function doResend() {
+        try {
+            if (otpMode === 'superadmin') {
+                await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: currentIdentifier }),
+                });
+            } else if (otpMode === 'reset') {
+                await fetch('/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier: currentIdentifier }),
+                });
+            }
+            // 'confirm': não há reenvio automático por segurança (conta já criada)
+        } catch {}
+        startResendTimer();
+    }
+
+    function startResendTimer() {
+        const btn   = document.getElementById('btn-resend');
+        const timer = document.getElementById('resend-timer');
+        btn.disabled = true;
+        let secs = 60;
+        timer.innerText = `(${secs}s)`;
+        if (resendInterval) clearInterval(resendInterval);
+        resendInterval = setInterval(() => {
+            secs--;
+            timer.innerText = secs > 0 ? `(${secs}s)` : '';
+            if (secs <= 0) {
+                clearInterval(resendInterval);
+                btn.disabled = false;
+            }
+        }, 1000);
+    }
+
+    // ── Comportamento dos boxes OTP ─────────────────────────────
+    document.querySelectorAll('.otp-box').forEach((box, i, boxes) => {
+        box.addEventListener('input', e => {
+            const val = e.target.value.replace(/\D/g, '');
+            e.target.value = val ? val[0] : '';
+            e.target.classList.toggle('filled', !!val);
+            if (val && i < boxes.length - 1) boxes[i + 1].focus();
+            if (i === boxes.length - 1 && val) doVerifyOtp();
+        });
+
+        box.addEventListener('keydown', e => {
+            if (e.key === 'Backspace' && !e.target.value && i > 0) {
+                boxes[i - 1].focus();
+                boxes[i - 1].value = '';
+                boxes[i - 1].classList.remove('filled');
+            }
+        });
+
+        box.addEventListener('paste', e => {
+            e.preventDefault();
+            const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+            boxes.forEach((b, j) => {
+                b.value = pasted[j] || '';
+                b.classList.toggle('filled', !!pasted[j]);
+            });
+            if (pasted.length === 6) doVerifyOtp();
+        });
+    });
+
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+</script>
+</body>
+</html>
