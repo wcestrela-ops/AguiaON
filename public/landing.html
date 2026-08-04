@@ -418,7 +418,7 @@ async function init() {
         headers: { Authorization: 'Bearer ' + token },
       });
     } else {
-      res = await fetch('/public/landing/resolve');
+      res = await fetch('/public/landing/resolve?path=' + encodeURIComponent(window.location.pathname));
     }
     if (!res.ok) throw new Error('not found');
     landing = await res.json();

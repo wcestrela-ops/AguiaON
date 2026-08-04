@@ -138,7 +138,12 @@ export async function resolveVerticalLanding(req: Request): Promise<any | null> 
     }
 
     // 2. Caminho no domínio raiz (ex: aguiaon.com/rastreamento).
-    const pathSlug = (req.path || '').replace(/^\/+/, '').split('/')[0];
+    // OBS: quando quem chama é o próprio landing.html (via fetch em
+    // /public/landing/resolve), req.path é sempre "/public/landing/resolve" —
+    // não reflete a URL que o visitante realmente está vendo. Por isso o
+    // client manda o path original em ?path=, e damos prioridade a ele.
+    const rawPath = (typeof req.query.path === 'string' && req.query.path) ? req.query.path : req.path;
+    const pathSlug = (rawPath || '').split('?')[0].replace(/^\/+/, '').split('/')[0];
     if (!pathSlug) return null;
     const r = await pool.query(
       `SELECT * FROM vertical_landings WHERE domain_mode='path' AND domain_value=$1 AND published=true`,
