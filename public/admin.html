@@ -280,10 +280,13 @@
                         </div>
 
                         <div class="border-t border-slate-800 pt-5">
-                            <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Contrato (quando o CTA for "Contratar")</p>
+                            <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Termo de Adesão (quando o CTA for "Contratar")</p>
                             <p class="text-slate-500 text-xs mb-2">Placeholders disponíveis: {{nome}}, {{empresa}}, {{whatsapp}}, {{email}}, {{cpf_cnpj}}, {{plano_nome}}, {{plano_preco}}, {{modulo}}, {{data}}</p>
-                            <textarea id="landing-contract-template" rows="6" placeholder="Contrato de prestação de serviço entre AguiaON e {{empresa}}..."
+                            <textarea id="landing-contract-template" rows="6" placeholder="Termo de adesão entre AguiaON e {{empresa}}..."
                                       class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-indigo-500"></textarea>
+                            <p class="text-slate-500 text-xs mt-3 mb-2">WhatsApp de contato — usado no botão "Continuar no WhatsApp" que aparece pro visitante depois de aceitar o termo (ele mesmo manda a mensagem, com um resumo pronto, pra esse número)</p>
+                            <input type="text" id="landing-contato-whatsapp" placeholder="Ex: 5511999999999"
+                                   class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
                         </div>
 
                         <div class="grid grid-cols-1 gap-3 border-t border-slate-800 pt-5">
@@ -2949,9 +2952,22 @@
                             ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
                             ${l.email ? `<span><i class="fa fa-envelope mr-1"></i>${l.email}</span>` : ''}
                             ${l.cpf_cnpj ? `<span><i class="fa fa-id-card mr-1"></i>${l.cpf_cnpj}</span>` : ''}
+                            ${l.data_nascimento ? `<span><i class="fa fa-cake-candles mr-1"></i>${new Date(l.data_nascimento).toLocaleDateString('pt-BR')}</span>` : ''}
                         </div>
+                        ${(l.veiculo_placa || l.veiculo_modelo || l.veiculo_ano || l.veiculo_cor) ? `
+                            <p class="text-slate-400 text-[11px]"><i class="fa fa-car mr-1"></i>${[l.veiculo_placa, l.veiculo_modelo, l.veiculo_ano, l.veiculo_cor].filter(Boolean).join(' · ') || 'Sem dados do veículo'}</p>
+                        ` : ''}
+                        ${(l.endereco_rua || l.endereco_cidade) ? `
+                            <p class="text-slate-400 text-[11px]"><i class="fa fa-location-dot mr-1"></i>${[
+                                [l.endereco_rua, l.endereco_numero].filter(Boolean).join(', '),
+                                l.endereco_bairro, l.endereco_cidade, l.endereco_estado, l.endereco_cep,
+                            ].filter(Boolean).join(' · ')}</p>
+                        ` : ''}
+                        ${(l.contato_emergencia_nome || l.contato_emergencia_telefone) ? `
+                            <p class="text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
+                        ` : ''}
                         ${l.status === 'aceito' ? `
-                            <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Contrato aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
+                            <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
                             <button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>
                         ` : ''}
                     </div>`).join('');
@@ -2962,7 +2978,14 @@
 
         async function converterLead(id) {
             try {
-                await fetch(`/admin/landing-leads/${id}/converter`, { method: 'POST', headers: adminHeaders() });
+                const res = await fetch(`/admin/landing-leads/${id}/converter`, { method: 'POST', headers: adminHeaders() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao converter.');
+                if (data.cliente_id) {
+                    alert(data.login_disponivel
+                        ? '✅ Cliente criado na loja de gestão veicular. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
+                        : '✅ Cliente criado na loja de gestão veicular, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
+                }
                 openLeadsModal();
             } catch (e) { alert('❌ ' + e.message); }
         }
@@ -3010,6 +3033,7 @@
             document.querySelector(`input[name="landing-domain-mode"][value="${l.domain_mode || 'path'}"]`).checked = true;
             document.getElementById('landing-domain-value').value = l.domain_value || mod.vertical_slug;
             document.getElementById('landing-contract-template').value = l.contract_template || '';
+            document.getElementById('landing-contato-whatsapp').value = l.contato_whatsapp || '';
             document.getElementById('landing-seo-title').value = l.seo_title || '';
             document.getElementById('landing-seo-description').value = l.seo_description || '';
 
@@ -3038,6 +3062,7 @@
                 domain_value: document.getElementById('landing-domain-value').value.trim(),
                 blocks: currentBlocks,
                 contract_template: document.getElementById('landing-contract-template').value,
+                contato_whatsapp: document.getElementById('landing-contato-whatsapp').value.trim(),
                 seo_title: document.getElementById('landing-seo-title').value,
                 seo_description: document.getElementById('landing-seo-description').value,
             };

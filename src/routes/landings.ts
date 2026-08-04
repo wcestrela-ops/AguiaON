@@ -32,12 +32,21 @@
  * possível novo lojista daquele módulo — não é o CRM de uma loja específica.
  */
 import { Router, Request } from 'express';
+import nodemailer from 'nodemailer';
 import pool from '../shared/db';
 import { requireAdmin } from '../shared/authMiddleware';
 import { listBlueprints } from '../verticals/blueprints';
 import { extractSubdomainSlug } from '../shared/tenantResolver';
+import { findOrCreateClienteUser, ensureTables as ensureAgendaTables } from './agenda/index';
 
 const router = Router();
+
+// Fase 17 (Fix 8) — o Rastreamento não é multiloja: existe uma única loja de
+// gestão veicular (não uma por lead), e converter um lead vira um cliente
+// (agenda_clientes) dentro dela, não uma loja nova. Se algum dia mais de uma
+// vertical precisar desse mesmo comportamento "singleton", isso vira um campo
+// no blueprint em vez de uma constante — por ora só o Rastreamento usa.
+const RASTREAMENTO_SINGLETON_SLUG = 'aguia-gestao-veicular';
 
 // ── Migração (executa na inicialização, mesmo padrão dos outros módulos) ──
 (async () => {
@@ -75,6 +84,10 @@ const router = Router();
     // Fase 17 — conteúdo modular por blocos + template de contrato.
     await pool.query(`ALTER TABLE vertical_landings ADD COLUMN IF NOT EXISTS blocks JSONB NOT NULL DEFAULT '[]'::jsonb`);
     await pool.query(`ALTER TABLE vertical_landings ADD COLUMN IF NOT EXISTS contract_template TEXT`);
+    // Fix de produção 10 — número que recebe o "Continuar no WhatsApp" depois
+    // do Termo de Adesão assinado (resumo pré-preenchido, pra evitar mandar
+    // mensagem automática pelo número da AguiaON e correr risco de bloqueio).
+    await pool.query(`ALTER TABLE vertical_landings ADD COLUMN IF NOT EXISTS contato_whatsapp TEXT`);
 
     // Fase 17 — leads capturados no CTA "Contratar" de uma landing, com
     // aceite eletrônico do contrato (sem serviço externo de assinatura).
@@ -101,6 +114,48 @@ const router = Router();
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_landing_leads_vertical ON landing_leads(vertical_slug)`);
+    // Fix de produção 8 — conversão do lead de Rastreamento vira um cliente
+    // (agenda_clientes) na loja única de gestão veicular, não uma loja nova
+    // (o Rastreamento não é multiloja). Guarda o vínculo pra não duplicar
+    // caso "converter" seja clicado duas vezes.
+    // Sem REFERENCES de propósito: agenda_clientes é criada na migração de
+    // outro arquivo (routes/agenda/index.ts), e as duas migrações rodam em
+    // paralelo na subida do servidor sem ordem garantida entre si — um FK
+    // aqui arriscaria "relation agenda_clientes does not exist" num banco
+    // zerado, dependendo de qual migração terminar primeiro. É só um vínculo
+    // de conveniência pro admin, não precisa de integridade referencial dura
+    // (a linha de agenda_clientes nunca é apagada por causa disso, e mesmo
+    // que fosse, o pior caso é o cliente_id apontar pra um id que não existe
+    // mais). A alteração do CHECK de agenda_clientes.origem, por sua vez,
+    // fica no próprio arquivo que já cria essa tabela (agenda/index.ts), pra
+    // garantir ordem certa dentro do mesmo arquivo.
+    await pool.query(`ALTER TABLE landing_leads ADD COLUMN IF NOT EXISTS cliente_id UUID`);
+
+    // Fix de produção 9 — campos extras pro Rastreamento: o Carlos pediu pra
+    // coletar dados do veículo (placa opcional, pode não ter ainda) e do
+    // cliente (endereço sem número obrigatório, data de nascimento, contato
+    // de emergência) já no formulário "Contratar" da landing, pra não
+    // precisar redigitar tudo na aba Clientes depois de converter o lead.
+    // Só o Rastreamento usa esses campos por enquanto (landing.html só
+    // mostra o bloco quando vertical_slug === 'rastreamento'), mas ficam
+    // aqui soltos (não dentro de um JSONB) pra manter o mesmo estilo do
+    // resto da tabela.
+    await pool.query(`
+      ALTER TABLE landing_leads
+        ADD COLUMN IF NOT EXISTS veiculo_placa  TEXT,
+        ADD COLUMN IF NOT EXISTS veiculo_modelo TEXT,
+        ADD COLUMN IF NOT EXISTS veiculo_ano    TEXT,
+        ADD COLUMN IF NOT EXISTS veiculo_cor    TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_cep     TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_rua     TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_numero  TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_bairro  TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_cidade  TEXT,
+        ADD COLUMN IF NOT EXISTS endereco_estado  TEXT,
+        ADD COLUMN IF NOT EXISTS data_nascimento  DATE,
+        ADD COLUMN IF NOT EXISTS contato_emergencia_nome      TEXT,
+        ADD COLUMN IF NOT EXISTS contato_emergencia_telefone  TEXT
+    `);
   } catch (e: any) {
     console.error('[landings migration]', e.message);
   }
@@ -111,6 +166,46 @@ const router = Router();
 // {{plano_nome}}, {{plano_preco}}, {{modulo}}, {{data}}.
 function preencherContrato(template: string, dados: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => dados[key] ?? '');
+}
+
+// Fix de produção 10 — cópia do Termo de Adesão por e-mail depois do aceite.
+// Mesmo padrão de envio de e-mail já usado em otp_service.ts/gymExpiryJob.ts
+// (lê SMTP de global_settings, nodemailer direto — sem serviço externo).
+// Best-effort: se não tiver SMTP configurado ou a mensagem falhar, não
+// derruba o aceite (o aceite já foi salvo antes de chamar isso).
+async function enviarCopiaTermoPorEmail(to: string, nome: string, moduloLabel: string, contratoTexto: string): Promise<boolean> {
+  try {
+    const settings = await pool.query(
+      `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
+    ).then(r => Object.fromEntries(r.rows.map((row: any) => [row.key, row.value])));
+
+    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) return false;
+
+    const transporter = nodemailer.createTransport({
+      host: settings.smtp_host,
+      port: parseInt(settings.smtp_port || '587'),
+      secure: false,
+      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    });
+
+    await transporter.sendMail({
+      from: settings.smtp_from || settings.smtp_user,
+      to,
+      subject: `Termo de Adesão — ${moduloLabel} (${settings.pwa_name || 'AguiaON'})`,
+      html: `
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
+          <h2 style="color:#6366f1;margin:0 0 8px">Termo de Adesão</h2>
+          <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${nome}</strong>! Aqui está a cópia do termo de adesão que você aceitou pra ${moduloLabel}.</p>
+          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:20px;white-space:pre-wrap;font-size:12px;color:#cbd5e1">${contratoTexto}</div>
+          <p style="margin:24px 0 0;font-size:11px;color:#475569">Guarde este e-mail — ele é o comprovante do seu aceite eletrônico.</p>
+        </div>
+      `,
+    });
+    return true;
+  } catch (err: any) {
+    console.error('[landings] falha ao enviar cópia do termo por email:', err.message);
+    return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -211,7 +306,7 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
     const verticalSlug = req.params.vertical_slug;
     const {
       published, domain_mode, domain_value,
-      blocks, contract_template,
+      blocks, contract_template, contato_whatsapp,
       seo_title, seo_description,
     } = req.body;
 
@@ -231,15 +326,15 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO vertical_landings
          (vertical_slug, published, domain_mode, domain_value, blocks, contract_template,
-          seo_title, seo_description, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+          contato_whatsapp, seo_title, seo_description, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
        ON CONFLICT (vertical_slug) DO UPDATE SET
          published=$2, domain_mode=$3, domain_value=$4, blocks=$5, contract_template=$6,
-         seo_title=$7, seo_description=$8, updated_at=NOW()
+         contato_whatsapp=$7, seo_title=$8, seo_description=$9, updated_at=NOW()
        RETURNING *`,
       [
         verticalSlug, !!published, mode, value,
-        JSON.stringify(blocks || []), contract_template || null,
+        JSON.stringify(blocks || []), contract_template || null, contato_whatsapp || null,
         seo_title || null, seo_description || null,
       ]
     );
@@ -264,7 +359,12 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
 router.post('/public/landing/:vertical_slug/leads', async (req, res) => {
   try {
     const verticalSlug = req.params.vertical_slug;
-    const { nome, empresa, whatsapp, email, cpf_cnpj, plano_nome, plano_preco } = req.body;
+    const {
+      nome, empresa, whatsapp, email, cpf_cnpj, plano_nome, plano_preco,
+      veiculo_placa, veiculo_modelo, veiculo_ano, veiculo_cor,
+      endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
+      data_nascimento, contato_emergencia_nome, contato_emergencia_telefone,
+    } = req.body;
     if (!nome?.trim()) return res.status(400).json({ error: 'Informe seu nome.' });
 
     const landingRes = await pool.query(`SELECT contract_template FROM vertical_landings WHERE vertical_slug=$1`, [verticalSlug]);
@@ -285,10 +385,18 @@ router.post('/public/landing/:vertical_slug/leads', async (req, res) => {
 
     const r = await pool.query(
       `INSERT INTO landing_leads
-         (vertical_slug, plano_nome, plano_preco, nome, empresa, whatsapp, email, cpf_cnpj, contrato_texto)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         (vertical_slug, plano_nome, plano_preco, nome, empresa, whatsapp, email, cpf_cnpj, contrato_texto,
+          veiculo_placa, veiculo_modelo, veiculo_ano, veiculo_cor,
+          endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
+          data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        RETURNING id, contrato_texto`,
-      [verticalSlug, plano_nome || null, plano_preco || null, nome.trim(), empresa || null, whatsapp || null, email || null, cpf_cnpj || null, contratoTexto]
+      [
+        verticalSlug, plano_nome || null, plano_preco || null, nome.trim(), empresa || null, whatsapp || null, email || null, cpf_cnpj || null, contratoTexto,
+        veiculo_placa || null, veiculo_modelo || null, veiculo_ano || null, veiculo_cor || null,
+        endereco_cep || null, endereco_rua || null, endereco_numero || null, endereco_bairro || null, endereco_cidade || null, endereco_estado || null,
+        data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null,
+      ]
     );
     res.status(201).json(r.rows[0]);
   } catch (err: any) {
@@ -299,17 +407,23 @@ router.post('/public/landing/:vertical_slug/leads', async (req, res) => {
 // POST /public/landing/leads/:id/aceitar — aceite eletrônico simples: quem
 // preencher precisa digitar o próprio nome + CPF de novo (mesmo padrão de
 // "confirme seus dados" usado em aceites eletrônicos simples), e o servidor
-// registra IP + user-agent + timestamp como evidência do aceite.
+// registra IP + user-agent + timestamp como evidência do aceite. Depois de
+// salvar, manda uma cópia do termo por e-mail (se o lead tiver e-mail) e
+// devolve o WhatsApp de contato da landing pro botão "Continuar no
+// WhatsApp" do front — a mensagem em si quem monta e manda é o próprio
+// visitante, clicando um link wa.me com o texto pronto, não o servidor
+// (evita risco de bloqueio por disparo automático).
 router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
   try {
     const { aceite_nome, aceite_cpf } = req.body;
     if (!aceite_nome?.trim() || !aceite_cpf?.trim()) {
-      return res.status(400).json({ error: 'Confirme seu nome completo e CPF pra aceitar o contrato.' });
+      return res.status(400).json({ error: 'Confirme seu nome completo e CPF pra aceitar o termo de adesão.' });
     }
-    const leadRes = await pool.query(`SELECT id, status FROM landing_leads WHERE id=$1`, [req.params.id]);
+    const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
     if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
-    if (leadRes.rows[0].status !== 'novo') {
-      return res.status(409).json({ error: 'Esse contrato já foi tratado antes.' });
+    const lead = leadRes.rows[0];
+    if (lead.status !== 'novo') {
+      return res.status(409).json({ error: 'Esse termo de adesão já foi tratado antes.' });
     }
 
     const ip = (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || req.socket.remoteAddress || '';
@@ -319,7 +433,22 @@ router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
        WHERE id=$5`,
       [aceite_nome.trim(), aceite_cpf.trim(), ip, req.headers['user-agent'] || null, req.params.id]
     );
-    res.json({ success: true });
+
+    const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
+    const moduloLabel = bp?.label || lead.vertical_slug;
+
+    let emailEnviado = false;
+    if (lead.email && lead.contrato_texto) {
+      emailEnviado = await enviarCopiaTermoPorEmail(lead.email, lead.nome, moduloLabel, lead.contrato_texto);
+    }
+
+    const landingRes = await pool.query(`SELECT contato_whatsapp FROM vertical_landings WHERE vertical_slug=$1`, [lead.vertical_slug]);
+
+    res.json({
+      success: true,
+      email_enviado: emailEnviado,
+      contato_whatsapp: landingRes.rows[0]?.contato_whatsapp || null,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -342,19 +471,88 @@ router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /admin/landing-leads/:id/converter — marca o lead como convertido
-// (ação manual). A criação da loja de verdade continua pelo fluxo já
-// existente no painel (criar nova loja) — não automatizamos isso aqui pra
-// não duplicar aquela lógica com dados parciais do formulário de lead
-// (falta senha, cidade/estado etc. que o formulário de lead não coleta).
+// POST /admin/landing-leads/:id/converter — marca o lead como convertido.
+//
+// Regra geral (Delivery, Agenda etc., módulos multiloja): a criação da loja
+// de verdade continua pelo fluxo já existente no painel (criar nova loja) —
+// não automatizamos isso aqui pra não duplicar aquela lógica com dados
+// parciais do formulário de lead (falta senha, cidade/estado etc.).
+//
+// Exceção — Rastreamento (Fix de produção 8): o Rastreamento não é multiloja,
+// é uma única loja de gestão veicular gerenciando muitos clientes. Então
+// converter um lead de Rastreamento não cria uma loja nova — cria um cliente
+// (agenda_clientes) dentro da loja única (`aguia-gestao-veicular`), com login
+// (findOrCreateClienteUser, mesmo mecanismo do Fase 14) pra ele poder acessar
+// o painel de cliente e completar a senha por "Esqueci minha senha" no
+// primeiro acesso. O veículo (placa, modelo, ano, cor — o que vier do
+// formulário) vira um agenda_frota vinculado a esse cliente; o que o
+// formulário não coleta (IMEI, data de instalação) fica pro onboarding.
 router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res) => {
   try {
+    const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    const lead = leadRes.rows[0];
+
+    if (lead.cliente_id) {
+      return res.status(400).json({ error: 'Esse lead já foi convertido em cliente.' });
+    }
+
+    let clienteId: string | null = null;
+    let loginDisponivel = false;
+
+    if (lead.vertical_slug === 'rastreamento') {
+      // Garante que agenda_clientes (e o CHECK de origem atualizado) já
+      // existam — essa migração normalmente só roda no primeiro request a
+      // /agenda/*, e essa rota não passa por lá.
+      await ensureAgendaTables();
+
+      const estab = await pool.query(`SELECT id FROM establishments WHERE slug=$1`, [RASTREAMENTO_SINGLETON_SLUG]);
+      if (!estab.rows.length) {
+        return res.status(500).json({
+          error: `Loja de Rastreamento ("${RASTREAMENTO_SINGLETON_SLUG}") não encontrada. Confirme o slug antes de converter.`,
+        });
+      }
+      const eid = estab.rows[0].id;
+
+      const userId = await findOrCreateClienteUser(lead.nome, lead.whatsapp, lead.email);
+      loginDisponivel = !!userId;
+
+      const clienteRes = await pool.query(
+        `INSERT INTO agenda_clientes
+           (establishment_id, nome, telefone, email, cpf_cnpj, observacoes, origem, user_id,
+            endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
+            data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
+         VALUES ($1,$2,$3,$4,$5,$6,'landing_rastreamento',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         RETURNING id`,
+        [
+          eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null,
+          lead.empresa ? `Empresa: ${lead.empresa}` : null, userId,
+          lead.endereco_cep || null, lead.endereco_rua || null, lead.endereco_numero || null,
+          lead.endereco_bairro || null, lead.endereco_cidade || null, lead.endereco_estado || null,
+          lead.data_nascimento || null, lead.contato_emergencia_nome || null, lead.contato_emergencia_telefone || null,
+        ]
+      );
+      clienteId = clienteRes.rows[0].id;
+
+      // Veículo — só cria se algum dado do veículo veio preenchido no lead
+      // (placa é opcional de propósito: às vezes o cliente ainda não tem
+      // placa/rastreador instalado no momento da contratação).
+      if (lead.veiculo_placa || lead.veiculo_modelo || lead.veiculo_ano || lead.veiculo_cor) {
+        const anoNum = lead.veiculo_ano ? parseInt(lead.veiculo_ano, 10) : null;
+        await pool.query(
+          `INSERT INTO agenda_frota (establishment_id, cliente_id, cliente_nome, cliente_telefone, placa, modelo, ano, cor, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ativo')`,
+          [eid, clienteId, lead.nome, lead.whatsapp || null, lead.veiculo_placa || null, lead.veiculo_modelo || null,
+           Number.isFinite(anoNum) ? anoNum : null, lead.veiculo_cor || null]
+        );
+      }
+    }
+
     const r = await pool.query(
-      `UPDATE landing_leads SET status='convertido', updated_at=NOW() WHERE id=$1 RETURNING *`,
-      [req.params.id]
+      `UPDATE landing_leads SET status='convertido', cliente_id=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
+      [clienteId, req.params.id]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
-    res.json(r.rows[0]);
+    res.json({ ...r.rows[0], login_disponivel: loginDisponivel });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

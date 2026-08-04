@@ -64,17 +64,45 @@
         <input id="lead-whatsapp" class="input" placeholder="WhatsApp" />
         <input id="lead-email" class="input" placeholder="E-mail" />
         <input id="lead-cpf" class="input" placeholder="CPF/CNPJ" />
+
+        <div id="lead-rastreamento-extra" class="hidden space-y-3 pt-2 border-t border-slate-800">
+          <p class="text-slate-500 text-[11px] uppercase tracking-widest font-bold pt-1">Veículo</p>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="lead-veiculo-placa" class="input" placeholder="Placa (se já tiver)" />
+            <input id="lead-veiculo-modelo" class="input" placeholder="Modelo" />
+            <input id="lead-veiculo-ano" class="input" placeholder="Ano" />
+            <input id="lead-veiculo-cor" class="input" placeholder="Cor" />
+          </div>
+          <p class="text-slate-500 text-[11px] uppercase tracking-widest font-bold pt-1">Endereço</p>
+          <div class="grid grid-cols-2 gap-2">
+            <input id="lead-endereco-cep" class="input" placeholder="CEP" />
+            <input id="lead-endereco-numero" class="input" placeholder="Número (se tiver)" />
+          </div>
+          <input id="lead-endereco-rua" class="input" placeholder="Rua" />
+          <div class="grid grid-cols-3 gap-2">
+            <input id="lead-endereco-bairro" class="input" placeholder="Bairro" />
+            <input id="lead-endereco-cidade" class="input" placeholder="Cidade" />
+            <input id="lead-endereco-estado" class="input" placeholder="UF" />
+          </div>
+          <p class="text-slate-500 text-[11px] uppercase tracking-widest font-bold pt-1">Outros dados</p>
+          <input id="lead-nascimento" type="date" class="input" placeholder="Data de nascimento" />
+          <div class="grid grid-cols-2 gap-2">
+            <input id="lead-emergencia-nome" class="input" placeholder="Contato de emergência (nome)" />
+            <input id="lead-emergencia-telefone" class="input" placeholder="Telefone" />
+          </div>
+        </div>
+
         <button onclick="enviarLead()" class="btn-primary w-full py-3 rounded-xl text-sm mt-2">Continuar</button>
         <p id="lead-error" class="hidden text-red-400 text-xs text-center"></p>
       </div>
     </div>
   </div>
 
-  <!-- MODAL — Contrato / aceite eletrônico -->
+  <!-- MODAL — Termo de Adesão / aceite eletrônico -->
   <div id="modal-contrato" class="hidden fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
     <div class="card rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-white font-black text-lg">Contrato</h3>
+        <h3 class="text-white font-black text-lg">Termo de Adesão</h3>
         <button onclick="closeModal('modal-contrato')" class="text-slate-500 hover:text-white"><i class="fa fa-times"></i></button>
       </div>
       <div id="contrato-texto" class="text-xs text-slate-400 whitespace-pre-wrap border border-slate-700 rounded-lg p-4 mb-4 max-h-64 overflow-y-auto"></div>
@@ -83,7 +111,7 @@
         <input id="aceite-cpf" class="input" placeholder="Digite seu CPF pra confirmar *" />
         <label class="flex items-start gap-2 text-xs text-slate-400">
           <input type="checkbox" id="aceite-check" class="mt-0.5 accent-[var(--accent)]" />
-          Li e concordo com os termos do contrato acima.
+          Li e concordo com os termos do termo de adesão acima.
         </label>
         <button onclick="confirmarAceite()" class="btn-primary w-full py-3 rounded-xl text-sm">Confirmar aceite</button>
         <p id="aceite-error" class="hidden text-red-400 text-xs text-center"></p>
@@ -95,8 +123,11 @@
   <div id="modal-sucesso" class="hidden fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4">
     <div class="card rounded-2xl w-full max-w-sm p-8 text-center">
       <i class="fa fa-circle-check text-4xl mb-4" style="color:#22c55e"></i>
-      <p class="text-white font-bold mb-1">Contrato aceito!</p>
-      <p class="text-slate-400 text-sm mb-5">Recebemos seus dados — nossa equipe entra em contato em breve.</p>
+      <p class="text-white font-bold mb-1">Termo de adesão aceito!</p>
+      <p id="sucesso-msg" class="text-slate-400 text-sm mb-5">Recebemos seus dados — nossa equipe entra em contato em breve.</p>
+      <button id="btn-continuar-whatsapp" onclick="continuarNoWhatsApp()" class="hidden w-full py-3 rounded-xl text-sm mb-2 font-bold" style="background:#22c55e;color:#fff">
+        <i class="fa-brands fa-whatsapp mr-1"></i>Continuar no WhatsApp
+      </button>
       <button onclick="closeModal('modal-sucesso')" class="btn-primary w-full py-3 rounded-xl text-sm">Fechar</button>
     </div>
   </div>
@@ -112,6 +143,8 @@ let landing = null;
 let deferredPrompt = null;
 let leadPlanoAtual = null;
 let leadIdAtual = null;
+let leadDadosAtual = null;
+let contatoWhatsAppAtual = null;
 
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
@@ -126,7 +159,13 @@ async function handleCta(cta, plano) {
   if (type === 'contratar') {
     leadPlanoAtual = plano || null;
     document.getElementById('lead-error').classList.add('hidden');
-    ['lead-nome','lead-empresa','lead-whatsapp','lead-email','lead-cpf'].forEach(id => document.getElementById(id).value = '');
+    [
+      'lead-nome','lead-empresa','lead-whatsapp','lead-email','lead-cpf',
+      'lead-veiculo-placa','lead-veiculo-modelo','lead-veiculo-ano','lead-veiculo-cor',
+      'lead-endereco-cep','lead-endereco-rua','lead-endereco-numero','lead-endereco-bairro','lead-endereco-cidade','lead-endereco-estado',
+      'lead-nascimento','lead-emergencia-nome','lead-emergencia-telefone',
+    ].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('lead-rastreamento-extra').classList.toggle('hidden', landing?.vertical_slug !== 'rastreamento');
     const info = document.getElementById('lead-plano-info');
     if (plano) {
       info.textContent = `Plano selecionado: ${plano.nome}${plano.preco ? ` — R$ ${Number(plano.preco).toFixed(2)}${plano.periodo || ''}` : ''}`;
@@ -169,25 +208,41 @@ async function enviarLead() {
   const err = document.getElementById('lead-error');
   if (!nome) { err.textContent = 'Informe seu nome.'; err.classList.remove('hidden'); return; }
 
+  const payload = {
+    nome,
+    empresa: document.getElementById('lead-empresa').value.trim(),
+    whatsapp: document.getElementById('lead-whatsapp').value.trim(),
+    email: document.getElementById('lead-email').value.trim(),
+    cpf_cnpj: document.getElementById('lead-cpf').value.trim(),
+    plano_nome: leadPlanoAtual?.nome || null,
+    plano_preco: leadPlanoAtual?.preco || null,
+    veiculo_placa: document.getElementById('lead-veiculo-placa').value.trim(),
+    veiculo_modelo: document.getElementById('lead-veiculo-modelo').value.trim(),
+    veiculo_ano: document.getElementById('lead-veiculo-ano').value.trim(),
+    veiculo_cor: document.getElementById('lead-veiculo-cor').value.trim(),
+    endereco_cep: document.getElementById('lead-endereco-cep').value.trim(),
+    endereco_rua: document.getElementById('lead-endereco-rua').value.trim(),
+    endereco_numero: document.getElementById('lead-endereco-numero').value.trim(),
+    endereco_bairro: document.getElementById('lead-endereco-bairro').value.trim(),
+    endereco_cidade: document.getElementById('lead-endereco-cidade').value.trim(),
+    endereco_estado: document.getElementById('lead-endereco-estado').value.trim(),
+    data_nascimento: document.getElementById('lead-nascimento').value || null,
+    contato_emergencia_nome: document.getElementById('lead-emergencia-nome').value.trim(),
+    contato_emergencia_telefone: document.getElementById('lead-emergencia-telefone').value.trim(),
+  };
+
   try {
     const res = await fetch(`/public/landing/${encodeURIComponent(landing.vertical_slug)}/leads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        nome,
-        empresa: document.getElementById('lead-empresa').value.trim(),
-        whatsapp: document.getElementById('lead-whatsapp').value.trim(),
-        email: document.getElementById('lead-email').value.trim(),
-        cpf_cnpj: document.getElementById('lead-cpf').value.trim(),
-        plano_nome: leadPlanoAtual?.nome || null,
-        plano_preco: leadPlanoAtual?.preco || null,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Não foi possível enviar.');
 
     leadIdAtual = data.id;
-    document.getElementById('contrato-texto').textContent = data.contrato_texto || 'Nenhum contrato configurado pra esse módulo ainda — nossa equipe entra em contato pra alinhar os termos.';
+    leadDadosAtual = payload;
+    document.getElementById('contrato-texto').textContent = data.contrato_texto || 'Nenhum termo de adesão configurado pra esse módulo ainda — nossa equipe entra em contato pra alinhar os termos.';
     document.getElementById('aceite-nome').value = '';
     document.getElementById('aceite-cpf').value = '';
     document.getElementById('aceite-check').checked = false;
@@ -207,7 +262,7 @@ async function confirmarAceite() {
   const err = document.getElementById('aceite-error');
 
   if (!nome || !cpf || !checked) {
-    err.textContent = 'Preencha nome, CPF e confirme que leu o contrato.';
+    err.textContent = 'Preencha nome, CPF e confirme que leu o termo de adesão.';
     err.classList.remove('hidden');
     return;
   }
@@ -220,12 +275,40 @@ async function confirmarAceite() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Não foi possível confirmar.');
+
+    contatoWhatsAppAtual = data.contato_whatsapp || null;
+    document.getElementById('sucesso-msg').textContent = data.email_enviado
+      ? 'Recebemos seus dados e mandamos uma cópia do termo de adesão pro seu e-mail.'
+      : 'Recebemos seus dados — nossa equipe entra em contato em breve.';
+    document.getElementById('btn-continuar-whatsapp').classList.toggle('hidden', !contatoWhatsAppAtual);
+
     closeModal('modal-contrato');
     openModal('modal-sucesso');
   } catch (e) {
     err.textContent = e.message;
     err.classList.remove('hidden');
   }
+}
+
+// Abre o WhatsApp com um resumo pré-preenchido (nome, plano contratado etc.)
+// pro próprio visitante mandar — não é a plataforma que dispara a mensagem,
+// então não corre risco de bloqueio por disparo automático em massa.
+function continuarNoWhatsApp() {
+  if (!contatoWhatsAppAtual) return;
+  const phone = String(contatoWhatsAppAtual).replace(/\D/g, '');
+  const d = leadDadosAtual || {};
+  const linhas = [
+    `Olá! Assinei o termo de adesão de ${landing?.vertical_label || 'AguiaON'}.`,
+    `Nome: ${d.nome || ''}`,
+  ];
+  if (d.empresa) linhas.push(`Empresa: ${d.empresa}`);
+  if (leadPlanoAtual?.nome) linhas.push(`Plano: ${leadPlanoAtual.nome}${leadPlanoAtual.preco ? ` — R$ ${Number(leadPlanoAtual.preco).toFixed(2)}` : ''}`);
+  if (d.veiculo_placa || d.veiculo_modelo) linhas.push(`Veículo: ${[d.veiculo_placa, d.veiculo_modelo, d.veiculo_ano, d.veiculo_cor].filter(Boolean).join(' ')}`);
+  if (d.whatsapp) linhas.push(`Meu WhatsApp: ${d.whatsapp}`);
+  linhas.push('Aguardo os próximos passos, obrigado!');
+
+  const text = encodeURIComponent(linhas.join('\n'));
+  window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
 }
 
 // ─── Renderização dos blocos ───────────────────────────────────────────────

@@ -52,8 +52,12 @@ function estabId(req: Request): string {
 }
 
 // Auto-migração das tabelas do agenda (roda na primeira chamada)
+// Exportada porque routes/landings.ts (conversão de lead do Rastreamento em
+// agenda_clientes) também precisa garantir que a tabela/constraint existam
+// antes do INSERT — sem isso, se nenhuma rota /agenda/* tiver rodado ainda
+// nesse processo, a conversão quebraria com "relation does not exist".
 let migrated = false;
-async function ensureTables() {
+export async function ensureTables() {
   if (migrated) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agenda_profissionais (
@@ -266,6 +270,30 @@ async function ensureTables() {
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_asaas_id
       ON agenda_clientes(establishment_id, asaas_customer_id) WHERE asaas_customer_id IS NOT NULL
+  `);
+  // Fase 17 (Fix de produção 8) — conversão de lead do Rastreamento
+  // (routes/landings.ts) cria um agenda_clientes com origem='landing_rastreamento',
+  // valor novo que o CHECK original (só 'manual'/'asaas_sync') não aceitava.
+  // Fica aqui, não em landings.ts, porque essa migração roda logo depois da
+  // CREATE TABLE acima, no mesmo arquivo — sem depender de ordem entre
+  // migrações de arquivos diferentes.
+  await pool.query(`ALTER TABLE agenda_clientes DROP CONSTRAINT IF EXISTS agenda_clientes_origem_check`);
+  await pool.query(`ALTER TABLE agenda_clientes ADD CONSTRAINT agenda_clientes_origem_check CHECK (origem IN ('manual','asaas_sync','landing_rastreamento'))`);
+  // Fix de produção 9 — endereço, data de nascimento e contato de emergência
+  // coletados no formulário "Contratar" da landing (routes/landings.ts), pra
+  // já vir preenchido no cadastro do cliente sem precisar redigitar. Dados
+  // do veículo (placa/modelo/ano/cor) vão pra agenda_frota, não pra cá.
+  await pool.query(`
+    ALTER TABLE agenda_clientes
+      ADD COLUMN IF NOT EXISTS endereco_cep    TEXT,
+      ADD COLUMN IF NOT EXISTS endereco_rua    TEXT,
+      ADD COLUMN IF NOT EXISTS endereco_numero TEXT,
+      ADD COLUMN IF NOT EXISTS endereco_bairro TEXT,
+      ADD COLUMN IF NOT EXISTS endereco_cidade TEXT,
+      ADD COLUMN IF NOT EXISTS endereco_estado TEXT,
+      ADD COLUMN IF NOT EXISTS data_nascimento DATE,
+      ADD COLUMN IF NOT EXISTS contato_emergencia_nome     TEXT,
+      ADD COLUMN IF NOT EXISTS contato_emergencia_telefone TEXT
   `);
   // Cache local (só leitura/exibição) das cobranças e assinaturas que já
   // existiam na conta Asaas do lojista antes de existir essa tela — não é
@@ -1432,7 +1460,7 @@ router.get('/clientes', async (req, res) => {
 // telefone/e-mail — nesse caso não mexe, o cliente segue funcionando
 // normalmente no painel, só não ganha login (evita "roubar" a conta de
 // alguém que já era lojista ou funcionário com o mesmo contato).
-async function findOrCreateClienteUser(nome: string, telefone?: string | null, email?: string | null): Promise<string | null> {
+export async function findOrCreateClienteUser(nome: string, telefone?: string | null, email?: string | null): Promise<string | null> {
   const clean = telefone?.replace(/\D/g, '') || null;
   const emailLow = email?.toLowerCase().trim() || null;
   if (!clean && !emailLow) return null;
