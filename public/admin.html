@@ -58,54 +58,77 @@
             /* Simulador de chat menor no mobile */
             #agata-sim-messages { max-height: 50vh; }
         }
+
+        /* Sidebar recolhível (botão em #admin-sidebar) — só faz efeito em
+           lg+, onde o padrão hoje é expandir com rótulos (lg:w-64). Recolhida
+           força a largura estreita (ícones só) mesmo em telas grandes. */
+        #admin-sidebar.sidebar-collapsed { width: 5rem !important; }
+        #admin-sidebar.sidebar-collapsed .sidebar-label { display: none !important; }
+        #admin-sidebar.sidebar-collapsed .sidebar-toggle-icon { transform: rotate(180deg); }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30 overflow-hidden">
 
     <div class="flex h-screen">
 
-        <!-- Sidebar — oculta no mobile, visível em md+ -->
-        <aside class="hidden md:flex w-20 lg:w-64 border-r border-slate-800/50 flex-col items-center py-8 bg-[#020617] z-50">
-            <div class="mb-12 font-black text-white text-2xl tracking-tighter">AG<span class="text-indigo-500">ON</span></div>
+        <!-- Sidebar — oculta no mobile, visível em md+. Recolhível manualmente
+             em lg+ via botão (estado salvo em localStorage) — ver a classe
+             sidebar-collapsed no bloco de estilos e a função toggleAdminSidebar. -->
+        <aside id="admin-sidebar" class="hidden md:flex w-20 lg:w-64 border-r border-slate-800/50 flex-col items-center py-6 bg-[#020617] z-50 relative transition-all duration-200">
+            <button onclick="toggleAdminSidebar()" title="Recolher/expandir menu"
+                    class="hidden lg:flex absolute -right-3 top-9 w-6 h-6 rounded-full bg-slate-800 border border-slate-700 hover:bg-indigo-600 hover:border-indigo-500 text-slate-400 hover:text-white items-center justify-center text-[10px] transition-all z-10">
+                <i class="fa-solid fa-angles-left sidebar-toggle-icon transition-transform duration-200"></i>
+            </button>
 
-            <nav class="flex flex-col gap-10 flex-1">
+            <div class="mb-8 font-black text-white text-xl tracking-tighter">AG<span class="text-indigo-500">ON</span></div>
+
+            <nav class="flex flex-col gap-7 flex-1">
                 <button onclick="showTab('dash')" class="nav-link text-indigo-500 transition-all" title="Dashboard">
-                    <i class="fa-solid fa-chart-pie text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Visão Geral</span>
+                    <i class="fa-solid fa-chart-pie text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Visão Geral</span>
                 </button>
                 <button onclick="showTab('lojistas')" class="nav-link text-slate-500 transition-all" title="Lojistas">
-                    <i class="fa-solid fa-store text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Lojistas</span>
+                    <i class="fa-solid fa-store text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Lojistas</span>
                 </button>
                 <button onclick="showTab('segmentos')" class="nav-link text-slate-500 transition-all" title="Módulos & Segmentos">
-                    <i class="fa-solid fa-layer-group text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Segmentos</span>
+                    <i class="fa-solid fa-layer-group text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Segmentos</span>
                 </button>
                 <button onclick="showTab('agata')" class="nav-link text-slate-500 transition-all" title="Ágata Core">
-                    <i class="fa-solid fa-brain text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Ágata DNA</span>
+                    <i class="fa-solid fa-brain text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Ágata DNA</span>
                 </button>
                 <button onclick="showTab('settings')" class="nav-link text-slate-500 transition-all" title="Infraestrutura">
-                    <i class="fa-solid fa-gears text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Infra Geral</span>
+                    <i class="fa-solid fa-gears text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Infra Geral</span>
                 </button>
                 <button onclick="showTab('announcements')" class="nav-link text-slate-500 transition-all" title="Anúncios">
-                    <i class="fa-solid fa-bullhorn text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Anúncios</span>
+                    <i class="fa-solid fa-bullhorn text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Anúncios</span>
                 </button>
                 <button onclick="showTab('usuarios')" class="nav-link text-slate-500 transition-all" title="Usuários">
-                    <i class="fa-solid fa-users text-2xl"></i>
-                    <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Usuários</span>
+                    <i class="fa-solid fa-users text-xl"></i>
+                    <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Usuários</span>
                 </button>
             </nav>
 
-            <button onclick="logoutAdmin()" class="text-slate-500 hover:text-red-400 transition-all mb-6" title="Sair da conta">
-                <i class="fa-solid fa-right-from-bracket text-2xl"></i>
-                <span class="hidden lg:block text-[10px] font-bold uppercase mt-2">Sair</span>
+            <button onclick="logoutAdmin()" class="text-slate-500 hover:text-red-400 transition-all mb-4" title="Sair da conta">
+                <i class="fa-solid fa-right-from-bracket text-xl"></i>
+                <span class="sidebar-label hidden lg:block text-[10px] font-bold uppercase mt-1.5">Sair</span>
             </button>
 
-            <div class="text-slate-600 text-[10px] font-black rotate-180 uppercase tracking-widest">v2.6.0-PLATINUM</div>
+            <div class="sidebar-label text-slate-600 text-[9px] font-black rotate-180 uppercase tracking-widest">v2.6.0-PLATINUM</div>
         </aside>
+        <script>
+          // Restaura o estado recolhido/expandido salvo — roda inline aqui (não
+          // espera DOMContentLoaded) porque o <aside> já existe no HTML acima
+          // nesse ponto do parsing, e queremos aplicar antes do primeiro paint
+          // pra não "piscar" expandido e depois recolher.
+          if (localStorage.getItem('admin_sidebar_collapsed') === '1') {
+            document.getElementById('admin-sidebar')?.classList.add('sidebar-collapsed');
+          }
+        </script>
 
         <!-- Bottom Nav — só no mobile -->
         <nav class="md:hidden fixed bottom-0 inset-x-0 bg-[#020617] border-t border-slate-800 flex justify-around items-center py-2 z-50" style="padding-bottom: env(safe-area-inset-bottom)">
@@ -197,32 +220,32 @@
             </div>
 
             <!-- ════ ABA SEGMENTOS ════ -->
-            <div id="segmentos" class="tab-content space-y-10">
-                <header class="flex flex-col md:flex-row md:justify-between md:items-end gap-4">
+            <div id="segmentos" class="tab-content space-y-6">
+                <header class="flex flex-col md:flex-row md:justify-between md:items-end gap-3">
                     <div>
                         <h2 class="text-white text-2xl md:text-4xl font-black tracking-tight">Módulos & Segmentos</h2>
-                        <p class="text-slate-500 text-sm mt-2">Configure os segmentos disponíveis para os lojistas na página de cadastro.</p>
+                        <p class="text-slate-500 text-sm mt-1">Configure os segmentos disponíveis para os lojistas na página de cadastro.</p>
                     </div>
                     <button onclick="openSegmentModal()"
-                            class="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-2xl font-black text-xs transition-all shadow-xl shadow-indigo-500/20">
+                            class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-black text-xs transition-all shadow-lg shadow-indigo-500/20">
                         <i class="fa-solid fa-plus mr-2"></i> NOVO SEGMENTO
                     </button>
                 </header>
 
-                <div id="segments-container" class="space-y-8"></div>
+                <div id="segments-container" class="space-y-5"></div>
 
                 <!-- ════ LANDING PAGES POR MÓDULO (Fase 16 + 17) ════ -->
                 <div class="pt-4 border-t border-slate-800/50">
-                    <header class="mb-6 flex flex-wrap justify-between items-end gap-3">
+                    <header class="mb-4 flex flex-wrap justify-between items-end gap-3">
                         <div>
-                            <h3 class="text-white text-xl md:text-2xl font-black tracking-tight">Landing Pages por Módulo</h3>
-                            <p class="text-slate-500 text-sm mt-2">Cada módulo pode ter uma página de marketing própria, montada por blocos (hero, benefícios, planos, depoimentos, FAQ...), publicada num caminho (aguiaon.com/rastreamento) ou num subdomínio (rastreamento.aguiaon.com).</p>
+                            <h3 class="text-white text-lg md:text-xl font-black tracking-tight">Landing Pages por Módulo</h3>
+                            <p class="text-slate-500 text-xs mt-1 max-w-2xl">Cada módulo pode ter uma página de marketing própria, montada por blocos (hero, benefícios, planos, depoimentos, FAQ...), publicada num caminho (aguiaon.com/rastreamento) ou num subdomínio (rastreamento.aguiaon.com).</p>
                         </div>
-                        <button onclick="openLeadsModal()" class="border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase transition-all shrink-0">
+                        <button onclick="openLeadsModal()" class="border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white px-4 py-2 rounded-xl font-black text-xs uppercase transition-all shrink-0">
                             <i class="fa-solid fa-address-book mr-2"></i>Ver Leads
                         </button>
                     </header>
-                    <div id="landings-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                    <div id="landings-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
                 </div>
             </div>
 
@@ -1478,6 +1501,15 @@
             window.location.href = '/login';
         }
 
+        // Recolher/expandir a sidebar (lg+) — estado persistido, restaurado
+        // inline logo depois do <aside> (ver script ali) pra não piscar.
+        function toggleAdminSidebar() {
+            const el = document.getElementById('admin-sidebar');
+            if (!el) return;
+            const collapsed = el.classList.toggle('sidebar-collapsed');
+            localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0');
+        }
+
         // --- HELPER: headers padrão para todas as chamadas admin ---
         function adminHeaders() {
             const token = localStorage.getItem('admin_token') || localStorage.getItem('ag_token') || '';
@@ -2697,40 +2729,40 @@
                 }
 
                 container.innerHTML = modules.map(mod => `
-                    <div class="space-y-4">
-                        <div class="flex items-center gap-3">
-                            <span class="text-2xl">${mod.module_icon}</span>
-                            <h3 class="text-white font-black text-lg">${mod.module_label}</h3>
-                            <span class="text-[10px] font-bold text-slate-500 bg-slate-900 px-3 py-1 rounded-full uppercase tracking-widest">${mod.segments.length} segmento${mod.segments.length!==1?'s':''}</span>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-lg">${mod.module_icon}</span>
+                            <h3 class="text-white font-black text-sm">${mod.module_label}</h3>
+                            <span class="text-[9px] font-bold text-slate-500 bg-slate-900 px-2 py-0.5 rounded-full uppercase tracking-widest">${mod.segments.length} segmento${mod.segments.length!==1?'s':''}</span>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                             ${mod.segments.map(seg => `
-                            <div class="bg-slate-900/40 border ${seg.ativo ? 'border-slate-800' : 'border-slate-800/30 opacity-50'} rounded-[2rem] p-6 space-y-3 relative group">
-                                <div class="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div class="bg-slate-900/40 border ${seg.ativo ? 'border-slate-800' : 'border-slate-800/30 opacity-50'} rounded-xl p-4 space-y-2 relative group">
+                                <div class="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onclick="editSegment(${JSON.stringify(seg).replace(/"/g,'&quot;')})"
-                                        class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-400 hover:text-white flex items-center justify-center transition-all text-[11px]">
+                                        class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-400 hover:text-white flex items-center justify-center transition-all text-[10px]">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
                                     <button onclick="toggleSegmentActive('${seg.id}', ${!seg.ativo})"
-                                        class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-${seg.ativo?'orange':'emerald'}-600 text-slate-400 hover:text-white flex items-center justify-center transition-all text-[11px]">
+                                        class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-${seg.ativo?'orange':'emerald'}-600 text-slate-400 hover:text-white flex items-center justify-center transition-all text-[10px]">
                                         <i class="fa-solid fa-${seg.ativo?'eye-slash':'eye'}"></i>
                                     </button>
                                 </div>
-                                <div class="flex items-center gap-3">
-                                    <span class="text-3xl">${seg.icon}</span>
-                                    <div>
-                                        <p class="text-white font-black">${seg.label}</p>
-                                        <p class="text-slate-500 text-xs">${seg.descricao || ''}</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xl">${seg.icon}</span>
+                                    <div class="min-w-0">
+                                        <p class="text-white font-black text-sm truncate">${seg.label}</p>
+                                        <p class="text-slate-500 text-[11px] truncate">${seg.descricao || ''}</p>
                                     </div>
                                 </div>
-                                <div class="flex flex-wrap gap-1 pt-1">
-                                    ${(seg.features||[]).slice(0,5).map(f => `<span class="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded-full font-bold">${f}</span>`).join('')}
-                                    ${(seg.features||[]).length > 5 ? `<span class="text-[9px] px-2 py-0.5 bg-slate-800 text-slate-500 rounded-full">+${seg.features.length-5}</span>` : ''}
+                                <div class="flex flex-wrap gap-1">
+                                    ${(seg.features||[]).slice(0,5).map(f => `<span class="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded-full font-bold">${f}</span>`).join('')}
+                                    ${(seg.features||[]).length > 5 ? `<span class="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-500 rounded-full">+${seg.features.length-5}</span>` : ''}
                                 </div>
-                                <div class="flex items-center gap-2 text-[10px] text-slate-500 border-t border-slate-800 pt-3 mt-2">
-                                    <div class="w-3 h-3 rounded-full" style="background:${seg.cor_destaque}"></div>
-                                    <span>${(seg.servicos_padrao||[]).length} serviços padrão</span>
-                                    <span class="ml-auto ${seg.ativo ? 'text-emerald-400' : 'text-slate-600'} font-bold">${seg.ativo ? '● Ativo' : '○ Inativo'}</span>
+                                <div class="flex items-center gap-2 text-[10px] text-slate-500 border-t border-slate-800 pt-2 mt-1">
+                                    <div class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${seg.cor_destaque}"></div>
+                                    <span class="truncate">${(seg.servicos_padrao||[]).length} serviços padrão</span>
+                                    <span class="ml-auto shrink-0 ${seg.ativo ? 'text-emerald-400' : 'text-slate-600'} font-bold">${seg.ativo ? '● Ativo' : '○ Inativo'}</span>
                                 </div>
                             </div>`).join('')}
                         </div>
@@ -3004,17 +3036,17 @@
                         ? (l.domain_mode === 'subdomain' ? `${l.domain_value}.aguiaon.com` : `aguiaon.com/${l.domain_value}`)
                         : '—';
                     return `
-                    <div class="bg-slate-900/40 border border-slate-800 rounded-[2rem] p-6 space-y-3">
-                        <div class="flex items-center gap-3">
-                            <span class="text-2xl">${m.vertical_icon || '📦'}</span>
+                    <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl">${m.vertical_icon || '📦'}</span>
                             <div class="flex-1 min-w-0">
-                                <p class="text-white font-black">${m.vertical_label}</p>
-                                <p class="text-slate-500 text-xs font-mono truncate">${domain}</p>
+                                <p class="text-white font-black text-sm truncate">${m.vertical_label}</p>
+                                <p class="text-slate-500 text-[11px] font-mono truncate">${domain}</p>
                             </div>
-                            <span class="text-[10px] font-bold uppercase tracking-widest ${statusColor}">${statusLabel}</span>
+                            <span class="text-[9px] font-bold uppercase tracking-widest shrink-0 ${statusColor}">${statusLabel}</span>
                         </div>
                         <button onclick='openLandingModal(${JSON.stringify(m).replace(/'/g, "&#39;")})'
-                                class="w-full border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white py-2.5 rounded-xl font-black text-xs uppercase transition-all">
+                                class="w-full border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white py-2 rounded-lg font-black text-[11px] uppercase transition-all">
                             <i class="fa-solid fa-pen mr-2"></i>Editar
                         </button>
                     </div>`;
