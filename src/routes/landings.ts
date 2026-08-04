@@ -1,5 +1,5 @@
 /**
- * LANDING PAGES POR MÓDULO — AguiaON (Fase 16)
+ * LANDING PAGES POR MÓDULO — AguiaON (Fase 16 + Fase 17)
  *
  * Implementa a ideia guardada no roadmap ("Landing Page Mãe + landings por
  * módulo"): cada vertical (Rastreamento, Delivery, Agenda...) pode ganhar
@@ -11,6 +11,25 @@
  * Uma linha por vertical_slug (UNIQUE) — se no futuro fizer sentido ter mais
  * de uma landing pro mesmo módulo (ex: uma campanha A/B), essa tabela
  * precisa evoluir; pra essa primeira fatia, um módulo tem uma landing só.
+ *
+ * Fase 17 — conteúdo dinâmico por blocos: a primeira versão (Fase 16) tinha
+ * campos fixos (um hero, uma lista de benefícios, uma de passos, um CTA).
+ * O Carlos achou "engessado" — cada módulo precisa da própria identidade
+ * (planos, recursos, depoimentos, FAQ), em qualquer ordem. A partir daqui o
+ * conteúdo vira uma lista ordenada de blocos (`blocks`, JSONB), cada um com
+ * um `type` (hero/benefits/steps/planos/recursos/depoimentos/faq/cta) e os
+ * campos próprios daquele tipo — ainda "campos prontos", só que modular em
+ * vez de um template fixo. As colunas antigas (`headline`, `benefits` etc.)
+ * continuam no banco por segurança (nenhuma linha real usava ainda), mas o
+ * código não lê/escreve mais nelas.
+ *
+ * Também nasce aqui o fluxo "Contratar" (Fase 17): quando o CTA de um bloco
+ * é do tipo `contratar` (inclusive o botão de cada plano dentro do bloco de
+ * Planos), abre um formulário de lead que gera um contrato a partir de
+ * `contract_template` (texto com placeholders tipo {{nome}}) e registra um
+ * aceite eletrônico simples (nome+CPF digitados, IP, user-agent, timestamp —
+ * sem serviço externo de assinatura). O lead é sempre entre a AguiaON e um
+ * possível novo lojista daquele módulo — não é o CRM de uma loja específica.
  */
 import { Router, Request } from 'express';
 import pool from '../shared/db';
@@ -52,10 +71,47 @@ const router = Router();
       CREATE UNIQUE INDEX IF NOT EXISTS idx_vertical_landings_domain
         ON vertical_landings(domain_mode, domain_value) WHERE published = true
     `);
+
+    // Fase 17 — conteúdo modular por blocos + template de contrato.
+    await pool.query(`ALTER TABLE vertical_landings ADD COLUMN IF NOT EXISTS blocks JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    await pool.query(`ALTER TABLE vertical_landings ADD COLUMN IF NOT EXISTS contract_template TEXT`);
+
+    // Fase 17 — leads capturados no CTA "Contratar" de uma landing, com
+    // aceite eletrônico do contrato (sem serviço externo de assinatura).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS landing_leads (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        vertical_slug     TEXT NOT NULL,
+        plano_nome        TEXT,
+        plano_preco       NUMERIC(10,2),
+        nome              TEXT NOT NULL,
+        empresa           TEXT,
+        whatsapp          TEXT,
+        email             TEXT,
+        cpf_cnpj          TEXT,
+        status            TEXT NOT NULL DEFAULT 'novo' CHECK (status IN ('novo','aceito','convertido','cancelado')),
+        contrato_texto    TEXT,
+        aceite_nome       TEXT,
+        aceite_cpf        TEXT,
+        aceite_ip         TEXT,
+        aceite_user_agent TEXT,
+        aceite_em         TIMESTAMPTZ,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_landing_leads_vertical ON landing_leads(vertical_slug)`);
   } catch (e: any) {
     console.error('[landings migration]', e.message);
   }
 })();
+
+// Preenche o template de contrato com os dados do lead. Placeholders
+// suportados: {{nome}}, {{empresa}}, {{whatsapp}}, {{email}}, {{cpf_cnpj}},
+// {{plano_nome}}, {{plano_preco}}, {{modulo}}, {{data}}.
+function preencherContrato(template: string, dados: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => dados[key] ?? '');
+}
 
 // ─────────────────────────────────────────────────────────────
 // Resolução por Host+path — usada tanto pelo servidor (decidir se serve
@@ -149,9 +205,8 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
   try {
     const verticalSlug = req.params.vertical_slug;
     const {
-      published, domain_mode, domain_value, headline, subheadline,
-      hero_video_url, hero_image_url, benefits, steps,
-      cta_label, cta_type, cta_whatsapp, cta_url,
+      published, domain_mode, domain_value,
+      blocks, contract_template,
       seo_title, seo_description,
     } = req.body;
 
@@ -170,22 +225,17 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
 
     const r = await pool.query(
       `INSERT INTO vertical_landings
-         (vertical_slug, published, domain_mode, domain_value, headline, subheadline,
-          hero_video_url, hero_image_url, benefits, steps, cta_label, cta_type,
-          cta_whatsapp, cta_url, seo_title, seo_description, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+         (vertical_slug, published, domain_mode, domain_value, blocks, contract_template,
+          seo_title, seo_description, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
        ON CONFLICT (vertical_slug) DO UPDATE SET
-         published=$2, domain_mode=$3, domain_value=$4, headline=$5, subheadline=$6,
-         hero_video_url=$7, hero_image_url=$8, benefits=$9, steps=$10, cta_label=$11,
-         cta_type=$12, cta_whatsapp=$13, cta_url=$14, seo_title=$15, seo_description=$16,
-         updated_at=NOW()
+         published=$2, domain_mode=$3, domain_value=$4, blocks=$5, contract_template=$6,
+         seo_title=$7, seo_description=$8, updated_at=NOW()
        RETURNING *`,
       [
-        verticalSlug, !!published, mode, value, headline || null, subheadline || null,
-        hero_video_url || null, hero_image_url || null,
-        JSON.stringify(benefits || []), JSON.stringify(steps || []),
-        cta_label || 'Falar no WhatsApp', cta_type || 'whatsapp',
-        cta_whatsapp || null, cta_url || null, seo_title || null, seo_description || null,
+        verticalSlug, !!published, mode, value,
+        JSON.stringify(blocks || []), contract_template || null,
+        seo_title || null, seo_description || null,
       ]
     );
     res.json(r.rows[0]);
@@ -193,6 +243,114 @@ router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'Esse endereço já está em uso por outra landing publicada.' });
     }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// LEADS — captura pelo CTA "Contratar" de uma landing + aceite eletrônico
+// de contrato (Fase 17). Sempre um lead pra AguiaON (novo lojista em
+// potencial daquele módulo), nunca o CRM de uma loja específica.
+// ─────────────────────────────────────────────────────────────
+
+// POST /public/landing/:vertical_slug/leads — cria o lead e já devolve o
+// contrato preenchido (a partir do contract_template da landing), pronto
+// pra tela de aceite mostrar antes de confirmar.
+router.post('/public/landing/:vertical_slug/leads', async (req, res) => {
+  try {
+    const verticalSlug = req.params.vertical_slug;
+    const { nome, empresa, whatsapp, email, cpf_cnpj, plano_nome, plano_preco } = req.body;
+    if (!nome?.trim()) return res.status(400).json({ error: 'Informe seu nome.' });
+
+    const landingRes = await pool.query(`SELECT contract_template FROM vertical_landings WHERE vertical_slug=$1`, [verticalSlug]);
+    const template = landingRes.rows[0]?.contract_template || '';
+    const bp = listBlueprints().find((b: any) => b.slug === verticalSlug);
+
+    const contratoTexto = template ? preencherContrato(template, {
+      nome: nome.trim(),
+      empresa: empresa || '',
+      whatsapp: whatsapp || '',
+      email: email || '',
+      cpf_cnpj: cpf_cnpj || '',
+      plano_nome: plano_nome || '',
+      plano_preco: plano_preco ? `R$ ${Number(plano_preco).toFixed(2)}` : '',
+      modulo: bp?.label || verticalSlug,
+      data: new Date().toLocaleDateString('pt-BR'),
+    }) : '';
+
+    const r = await pool.query(
+      `INSERT INTO landing_leads
+         (vertical_slug, plano_nome, plano_preco, nome, empresa, whatsapp, email, cpf_cnpj, contrato_texto)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id, contrato_texto`,
+      [verticalSlug, plano_nome || null, plano_preco || null, nome.trim(), empresa || null, whatsapp || null, email || null, cpf_cnpj || null, contratoTexto]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /public/landing/leads/:id/aceitar — aceite eletrônico simples: quem
+// preencher precisa digitar o próprio nome + CPF de novo (mesmo padrão de
+// "confirme seus dados" usado em aceites eletrônicos simples), e o servidor
+// registra IP + user-agent + timestamp como evidência do aceite.
+router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
+  try {
+    const { aceite_nome, aceite_cpf } = req.body;
+    if (!aceite_nome?.trim() || !aceite_cpf?.trim()) {
+      return res.status(400).json({ error: 'Confirme seu nome completo e CPF pra aceitar o contrato.' });
+    }
+    const leadRes = await pool.query(`SELECT id, status FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (leadRes.rows[0].status !== 'novo') {
+      return res.status(409).json({ error: 'Esse contrato já foi tratado antes.' });
+    }
+
+    const ip = (req.headers['x-forwarded-for'] as string || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+    await pool.query(
+      `UPDATE landing_leads SET
+         status='aceito', aceite_nome=$1, aceite_cpf=$2, aceite_ip=$3, aceite_user_agent=$4, aceite_em=NOW(), updated_at=NOW()
+       WHERE id=$5`,
+      [aceite_nome.trim(), aceite_cpf.trim(), ip, req.headers['user-agent'] || null, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/landing-leads — lista pro painel do SuperAdmin (com filtros
+// opcionais por módulo/status).
+router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
+  try {
+    const { vertical_slug, status } = req.query;
+    const conds: string[] = [];
+    const params: any[] = [];
+    if (vertical_slug) { params.push(vertical_slug); conds.push(`vertical_slug=$${params.length}`); }
+    if (status) { params.push(status); conds.push(`status=$${params.length}`); }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const r = await pool.query(`SELECT * FROM landing_leads ${where} ORDER BY created_at DESC`, params);
+    res.json(r.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/landing-leads/:id/converter — marca o lead como convertido
+// (ação manual). A criação da loja de verdade continua pelo fluxo já
+// existente no painel (criar nova loja) — não automatizamos isso aqui pra
+// não duplicar aquela lógica com dados parciais do formulário de lead
+// (falta senha, cidade/estado etc. que o formulário de lead não coleta).
+router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE landing_leads SET status='convertido', updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    res.json(r.rows[0]);
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

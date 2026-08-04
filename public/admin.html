@@ -211,11 +211,16 @@
 
                 <div id="segments-container" class="space-y-8"></div>
 
-                <!-- ════ LANDING PAGES POR MÓDULO (Fase 16) ════ -->
+                <!-- ════ LANDING PAGES POR MÓDULO (Fase 16 + 17) ════ -->
                 <div class="pt-4 border-t border-slate-800/50">
-                    <header class="mb-6">
-                        <h3 class="text-white text-xl md:text-2xl font-black tracking-tight">Landing Pages por Módulo</h3>
-                        <p class="text-slate-500 text-sm mt-2">Cada módulo pode ter uma página de marketing própria, publicada num caminho (aguiaon.com/rastreamento) ou num subdomínio (rastreamento.aguiaon.com).</p>
+                    <header class="mb-6 flex flex-wrap justify-between items-end gap-3">
+                        <div>
+                            <h3 class="text-white text-xl md:text-2xl font-black tracking-tight">Landing Pages por Módulo</h3>
+                            <p class="text-slate-500 text-sm mt-2">Cada módulo pode ter uma página de marketing própria, montada por blocos (hero, benefícios, planos, depoimentos, FAQ...), publicada num caminho (aguiaon.com/rastreamento) ou num subdomínio (rastreamento.aguiaon.com).</p>
+                        </div>
+                        <button onclick="openLeadsModal()" class="border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-white px-5 py-2.5 rounded-xl font-black text-xs uppercase transition-all shrink-0">
+                            <i class="fa-solid fa-address-book mr-2"></i>Ver Leads
+                        </button>
                     </header>
                     <div id="landings-container" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
                 </div>
@@ -223,7 +228,7 @@
 
             <!-- MODAL LANDING PAGE -->
             <div id="landing-modal" class="hidden fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-                <div class="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div class="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
                     <div class="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex justify-between items-center rounded-t-[2.5rem] z-10">
                         <h3 id="landing-modal-title" class="text-white font-black text-xl">Landing Page</h3>
                         <button onclick="closeLandingModal()" class="text-slate-500 hover:text-white w-8 h-8 flex items-center justify-center">
@@ -253,59 +258,35 @@
                             <p id="landing-domain-preview" class="text-slate-500 text-xs mt-1.5 font-mono"></p>
                         </div>
 
-                        <div class="grid grid-cols-1 gap-4">
-                            <div>
-                                <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Título principal</p>
-                                <input type="text" id="landing-headline" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
-                            </div>
-                            <div>
-                                <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Subtítulo</p>
-                                <textarea id="landing-subheadline" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"></textarea>
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div>
-                                    <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Vídeo (opcional)</p>
-                                    <input type="text" id="landing-hero-video" placeholder="URL do YouTube ou .mp4" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                        <div>
+                            <div class="flex justify-between items-center mb-3">
+                                <p class="text-indigo-400 text-xs font-black uppercase tracking-widest">Conteúdo (blocos)</p>
+                                <div class="relative">
+                                    <select onchange="if(this.value){addBlock(this.value); this.value='';}"
+                                            class="bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-lg px-3 py-2 focus:outline-none">
+                                        <option value="">+ Adicionar bloco...</option>
+                                        <option value="hero">Hero (topo)</option>
+                                        <option value="benefits">Benefícios</option>
+                                        <option value="recursos">Recursos/Funcionalidades</option>
+                                        <option value="steps">Como funciona (passos)</option>
+                                        <option value="planos">Planos (preços)</option>
+                                        <option value="depoimentos">Depoimentos</option>
+                                        <option value="faq">Perguntas frequentes</option>
+                                        <option value="cta">CTA (banner de ação)</option>
+                                    </select>
                                 </div>
-                                <div>
-                                    <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Imagem (se sem vídeo)</p>
-                                    <input type="text" id="landing-hero-image" placeholder="URL da imagem" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
-                                </div>
                             </div>
+                            <div id="landing-blocks-list" class="space-y-3"></div>
                         </div>
 
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <p class="text-indigo-400 text-xs font-black uppercase tracking-widest">Benefícios</p>
-                                <button onclick="addLandingRow('benefits')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-plus mr-1"></i>Adicionar</button>
-                            </div>
-                            <div id="landing-benefits-list" class="space-y-2"></div>
+                        <div class="border-t border-slate-800 pt-5">
+                            <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Contrato (quando o CTA for "Contratar")</p>
+                            <p class="text-slate-500 text-xs mb-2">Placeholders disponíveis: {{nome}}, {{empresa}}, {{whatsapp}}, {{email}}, {{cpf_cnpj}}, {{plano_nome}}, {{plano_preco}}, {{modulo}}, {{data}}</p>
+                            <textarea id="landing-contract-template" rows="6" placeholder="Contrato de prestação de serviço entre AguiaON e {{empresa}}..."
+                                      class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-indigo-500"></textarea>
                         </div>
 
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <p class="text-indigo-400 text-xs font-black uppercase tracking-widest">Como funciona (passo a passo)</p>
-                                <button onclick="addLandingRow('steps')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-plus mr-1"></i>Adicionar</button>
-                            </div>
-                            <div id="landing-steps-list" class="space-y-2"></div>
-                        </div>
-
-                        <div>
-                            <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Botão de ação (CTA)</p>
-                            <div class="grid grid-cols-2 gap-3 mb-2">
-                                <input type="text" id="landing-cta-label" placeholder="Texto do botão" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
-                                <select id="landing-cta-type" onchange="updateCtaFields()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
-                                    <option value="whatsapp">Abrir WhatsApp</option>
-                                    <option value="marketplace">Ver lojas (marketplace)</option>
-                                    <option value="pwa_install">Instalar o app (PWA)</option>
-                                    <option value="custom_url">Link personalizado</option>
-                                </select>
-                            </div>
-                            <input type="text" id="landing-cta-whatsapp" placeholder="Número do WhatsApp (só dígitos, com DDD)" class="hidden w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
-                            <input type="text" id="landing-cta-url" placeholder="https://..." class="hidden w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
-                        </div>
-
-                        <div class="grid grid-cols-1 gap-3">
+                        <div class="grid grid-cols-1 gap-3 border-t border-slate-800 pt-5">
                             <div>
                                 <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">SEO — título da aba</p>
                                 <input type="text" id="landing-seo-title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
@@ -324,6 +305,21 @@
                                 <i class="fa fa-save mr-2"></i>Salvar
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL LEADS DE LANDING -->
+            <div id="leads-modal" class="hidden fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                    <div class="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex justify-between items-center rounded-t-[2.5rem] z-10">
+                        <h3 class="text-white font-black text-xl">Leads das Landing Pages</h3>
+                        <button onclick="document.getElementById('leads-modal').classList.add('hidden')" class="text-slate-500 hover:text-white w-8 h-8 flex items-center justify-center">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="p-8">
+                        <div id="leads-list" class="space-y-3"></div>
                     </div>
                 </div>
             </div>
@@ -2741,9 +2737,235 @@
             }
         }
 
-        // ════ LANDING PAGES POR MÓDULO (Fase 16) ════
-        let landingRows = { benefits: [], steps: [] };
+        // ════ LANDING PAGES POR MÓDULO (Fase 16 + 17 — blocos dinâmicos) ════
+        let currentBlocks = [];
         let currentLandingVerticalLabel = '';
+
+        const BLOCK_LABELS = {
+            hero: 'Hero (topo)', benefits: 'Benefícios', recursos: 'Recursos/Funcionalidades',
+            steps: 'Como funciona', planos: 'Planos', depoimentos: 'Depoimentos', faq: 'Perguntas frequentes', cta: 'CTA (banner)',
+        };
+        const BLOCK_DEFAULTS = {
+            hero: { type: 'hero', headline: '', subheadline: '', hero_video_url: '', hero_image_url: '', cta_label: '', cta_type: 'whatsapp', cta_whatsapp: '', cta_url: '' },
+            benefits: { type: 'benefits', title: '', items: [] },
+            recursos: { type: 'recursos', title: '', items: [] },
+            steps: { type: 'steps', title: '', items: [] },
+            planos: { type: 'planos', title: '', items: [] },
+            depoimentos: { type: 'depoimentos', title: '', items: [] },
+            faq: { type: 'faq', title: '', items: [] },
+            cta: { type: 'cta', headline: '', cta_label: '', cta_type: 'whatsapp', cta_whatsapp: '', cta_url: '' },
+        };
+        const ITEM_DEFAULTS = {
+            benefits: { icon: '', title: '', text: '' },
+            recursos: { icon: '', title: '', text: '' },
+            steps: { title: '', text: '' },
+            planos: { nome: '', preco: 0, periodo: '/mês', descricao: '', recursos: [], destaque: false, cta_label: 'Contratar' },
+            depoimentos: { nome: '', cargo: '', foto_url: '', texto: '' },
+            faq: { pergunta: '', resposta: '' },
+        };
+
+        function escAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
+        function inp(i, field, value, placeholder, extra) {
+            return `<input value="${escAttr(value)}" placeholder="${escAttr(placeholder)}" oninput="updateBlockField(${i},'${field}',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 ${extra||''}" />`;
+        }
+        function ctaTypeSelect(i, field, value) {
+            return `<select onchange="updateBlockField(${i},'${field}',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+                ${['whatsapp','contratar','marketplace','pwa_install','custom_url'].map(t => `<option value="${t}" ${value===t?'selected':''}>${
+                    {whatsapp:'Abrir WhatsApp',contratar:'Contratar (lead + contrato)',marketplace:'Ver lojas',pwa_install:'Instalar app',custom_url:'Link personalizado'}[t]
+                }</option>`).join('')}
+            </select>`;
+        }
+
+        function addBlock(type) {
+            if (!BLOCK_DEFAULTS[type]) return;
+            currentBlocks.push(JSON.parse(JSON.stringify(BLOCK_DEFAULTS[type])));
+            renderBlocksList();
+        }
+        function removeBlock(i) { if (confirm('Remover esse bloco?')) { currentBlocks.splice(i, 1); renderBlocksList(); } }
+        function moveBlock(i, dir) {
+            const j = i + dir;
+            if (j < 0 || j >= currentBlocks.length) return;
+            const tmp = currentBlocks[i]; currentBlocks[i] = currentBlocks[j]; currentBlocks[j] = tmp;
+            renderBlocksList();
+        }
+        function updateBlockField(i, field, value) { currentBlocks[i][field] = value; }
+        function updateBlockCheckbox(i, field, checked) { currentBlocks[i][field] = checked; }
+        function addBlockItem(i) {
+            const type = currentBlocks[i].type;
+            currentBlocks[i].items = currentBlocks[i].items || [];
+            currentBlocks[i].items.push(JSON.parse(JSON.stringify(ITEM_DEFAULTS[type])));
+            renderBlocksList();
+        }
+        function removeBlockItem(i, j) { currentBlocks[i].items.splice(j, 1); renderBlocksList(); }
+        function updateBlockItem(i, j, field, value) { currentBlocks[i].items[j][field] = value; }
+        function updateBlockItemNumber(i, j, field, value) { currentBlocks[i].items[j][field] = parseFloat(value) || 0; }
+        function updateBlockItemBool(i, j, field, checked) { currentBlocks[i].items[j][field] = checked; }
+        function updateBlockItemList(i, j, field, value) { currentBlocks[i].items[j][field] = value.split('\n').map(s => s.trim()).filter(Boolean); }
+
+        function itemsWrap(i, addLabel, rowsHtml) {
+            return `<div class="space-y-2 mt-2">
+                ${rowsHtml}
+                <button onclick="addBlockItem(${i})" class="text-indigo-400 text-xs font-bold"><i class="fa fa-plus mr-1"></i>${addLabel}</button>
+            </div>`;
+        }
+
+        function blockEditorBody(b, i) {
+            if (b.type === 'hero' || b.type === 'cta') {
+                const showWa = b.cta_type === 'whatsapp';
+                const showUrl = b.cta_type === 'custom_url';
+                return `
+                    ${b.type === 'hero' ? `
+                        <div class="grid grid-cols-1 gap-2 mb-2">
+                            ${inp(i,'headline',b.headline,'Título principal')}
+                            ${inp(i,'subheadline',b.subheadline,'Subtítulo')}
+                            <div class="grid grid-cols-2 gap-2">
+                                ${inp(i,'hero_video_url',b.hero_video_url,'URL do vídeo (YouTube ou .mp4)')}
+                                ${inp(i,'hero_image_url',b.hero_image_url,'URL da imagem (se sem vídeo)')}
+                            </div>
+                        </div>` : `
+                        <div class="mb-2">${inp(i,'headline',b.headline,'Título do banner (opcional)')}</div>`}
+                    <div class="grid grid-cols-2 gap-2">
+                        ${inp(i,'cta_label',b.cta_label,'Texto do botão')}
+                        ${ctaTypeSelect(i,'cta_type',b.cta_type)}
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <div class="${showWa?'':'hidden'}">${inp(i,'cta_whatsapp',b.cta_whatsapp,'WhatsApp (só dígitos, com DDD)')}</div>
+                        <div class="${showUrl?'':'hidden'}">${inp(i,'cta_url',b.cta_url,'https://...')}</div>
+                    </div>`;
+            }
+
+            if (b.type === 'benefits' || b.type === 'recursos') {
+                const rows = (b.items||[]).map((it,j) => `
+                    <div class="flex gap-2 items-center">
+                        <input value="${escAttr(it.icon)}" placeholder="🎯" oninput="updateBlockItem(${i},${j},'icon',this.value)" class="w-12 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white text-center" />
+                        <input value="${escAttr(it.title)}" placeholder="Título" oninput="updateBlockItem(${i},${j},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <input value="${escAttr(it.text)}" placeholder="Descrição" oninput="updateBlockItem(${i},${j},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <button onclick="removeBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                    </div>`).join('');
+                return `<div class="mb-2">${inp(i,'title',b.title,'Título da seção')}</div>${itemsWrap(i,'Adicionar item',rows)}`;
+            }
+
+            if (b.type === 'steps') {
+                const rows = (b.items||[]).map((it,j) => `
+                    <div class="flex gap-2 items-center">
+                        <input value="${escAttr(it.title)}" placeholder="Título do passo" oninput="updateBlockItem(${i},${j},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <input value="${escAttr(it.text)}" placeholder="Descrição" oninput="updateBlockItem(${i},${j},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <button onclick="removeBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                    </div>`).join('');
+                return `<div class="mb-2">${inp(i,'title',b.title,'Título da seção (ex: Como funciona)')}</div>${itemsWrap(i,'Adicionar passo',rows)}`;
+            }
+
+            if (b.type === 'depoimentos') {
+                const rows = (b.items||[]).map((it,j) => `
+                    <div class="border border-slate-800 rounded-lg p-2 space-y-1.5">
+                        <div class="flex gap-2">
+                            <input value="${escAttr(it.nome)}" placeholder="Nome" oninput="updateBlockItem(${i},${j},'nome',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <input value="${escAttr(it.cargo)}" placeholder="Cargo/Empresa" oninput="updateBlockItem(${i},${j},'cargo',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <button onclick="removeBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                        </div>
+                        <input value="${escAttr(it.foto_url)}" placeholder="URL da foto (opcional)" oninput="updateBlockItem(${i},${j},'foto_url',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <textarea placeholder="Depoimento" oninput="updateBlockItem(${i},${j},'texto',this.value)" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${escAttr(it.texto)}</textarea>
+                    </div>`).join('');
+                return `<div class="mb-2">${inp(i,'title',b.title,'Título da seção')}</div>${itemsWrap(i,'Adicionar depoimento',rows)}`;
+            }
+
+            if (b.type === 'faq') {
+                const rows = (b.items||[]).map((it,j) => `
+                    <div class="flex gap-2 items-start">
+                        <div class="flex-1 space-y-1.5">
+                            <input value="${escAttr(it.pergunta)}" placeholder="Pergunta" oninput="updateBlockItem(${i},${j},'pergunta',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <textarea placeholder="Resposta" oninput="updateBlockItem(${i},${j},'resposta',this.value)" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${escAttr(it.resposta)}</textarea>
+                        </div>
+                        <button onclick="removeBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                    </div>`).join('');
+                return `<div class="mb-2">${inp(i,'title',b.title,'Título da seção')}</div>${itemsWrap(i,'Adicionar pergunta',rows)}`;
+            }
+
+            if (b.type === 'planos') {
+                const rows = (b.items||[]).map((p,j) => `
+                    <div class="border border-slate-800 rounded-lg p-3 space-y-1.5">
+                        <div class="flex gap-2">
+                            <input value="${escAttr(p.nome)}" placeholder="Nome do plano" oninput="updateBlockItem(${i},${j},'nome',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <input type="number" step="0.01" value="${p.preco||0}" placeholder="Preço" oninput="updateBlockItemNumber(${i},${j},'preco',this.value)" class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <input value="${escAttr(p.periodo)}" placeholder="/mês" oninput="updateBlockItem(${i},${j},'periodo',this.value)" class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                            <button onclick="removeBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                        </div>
+                        <input value="${escAttr(p.descricao)}" placeholder="Descrição curta" oninput="updateBlockItem(${i},${j},'descricao',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        <textarea placeholder="Recursos inclusos (um por linha)" oninput="updateBlockItemList(${i},${j},'recursos',this.value)" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${escAttr((p.recursos||[]).join('\n'))}</textarea>
+                        <div class="flex items-center gap-4">
+                            <label class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                                <input type="checkbox" ${p.destaque?'checked':''} onchange="updateBlockItemBool(${i},${j},'destaque',this.checked)" class="accent-indigo-500" /> Mais popular
+                            </label>
+                            <input value="${escAttr(p.cta_label||'Contratar')}" placeholder="Texto do botão" oninput="updateBlockItem(${i},${j},'cta_label',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                        </div>
+                    </div>`).join('');
+                return `<div class="mb-2">${inp(i,'title',b.title,'Título da seção (ex: Planos)')}</div>${itemsWrap(i,'Adicionar plano',rows)}`;
+            }
+
+            return '';
+        }
+
+        function renderBlocksList() {
+            const wrap = document.getElementById('landing-blocks-list');
+            if (!currentBlocks.length) {
+                wrap.innerHTML = '<p class="text-slate-600 text-xs text-center py-4">Nenhum bloco ainda — adiciona pelo menu acima.</p>';
+                return;
+            }
+            wrap.innerHTML = currentBlocks.map((b, i) => `
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-black text-indigo-400 uppercase tracking-widest">${BLOCK_LABELS[b.type] || b.type}</span>
+                        <div class="flex items-center gap-1">
+                            <button onclick="moveBlock(${i},-1)" class="w-7 h-7 text-slate-500 hover:text-white"><i class="fa fa-arrow-up"></i></button>
+                            <button onclick="moveBlock(${i},1)" class="w-7 h-7 text-slate-500 hover:text-white"><i class="fa fa-arrow-down"></i></button>
+                            <button onclick="removeBlock(${i})" class="w-7 h-7 text-red-400 hover:text-red-300"><i class="fa fa-trash"></i></button>
+                        </div>
+                    </div>
+                    ${blockEditorBody(b, i)}
+                </div>`).join('');
+        }
+
+        // ════ LEADS DE LANDING ════
+        async function openLeadsModal() {
+            document.getElementById('leads-modal').classList.remove('hidden');
+            const list = document.getElementById('leads-list');
+            list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
+            try {
+                const res = await fetch('/admin/landing-leads', { headers: adminHeaders() });
+                const leads = await res.json();
+                if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
+
+                const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
+                list.innerHTML = leads.map(l => `
+                    <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-2">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-white font-bold text-sm">${l.nome}${l.empresa ? ' — ' + l.empresa : ''}</p>
+                                <p class="text-slate-500 text-xs">${l.vertical_slug}${l.plano_nome ? ' · plano ' + l.plano_nome : ''} · ${new Date(l.created_at).toLocaleDateString('pt-BR')}</p>
+                            </div>
+                            <span class="text-[10px] font-bold uppercase tracking-widest ${statusColor[l.status]||''}">${l.status}</span>
+                        </div>
+                        <div class="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                            ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
+                            ${l.email ? `<span><i class="fa fa-envelope mr-1"></i>${l.email}</span>` : ''}
+                            ${l.cpf_cnpj ? `<span><i class="fa fa-id-card mr-1"></i>${l.cpf_cnpj}</span>` : ''}
+                        </div>
+                        ${l.status === 'aceito' ? `
+                            <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Contrato aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
+                            <button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>
+                        ` : ''}
+                    </div>`).join('');
+            } catch (e) {
+                list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
+            }
+        }
+
+        async function converterLead(id) {
+            try {
+                await fetch(`/admin/landing-leads/${id}/converter`, { method: 'POST', headers: adminHeaders() });
+                openLeadsModal();
+            } catch (e) { alert('❌ ' + e.message); }
+        }
 
         async function loadLandings() {
             try {
@@ -2787,21 +3009,12 @@
             document.getElementById('landing-published').checked = l.published || false;
             document.querySelector(`input[name="landing-domain-mode"][value="${l.domain_mode || 'path'}"]`).checked = true;
             document.getElementById('landing-domain-value').value = l.domain_value || mod.vertical_slug;
-            document.getElementById('landing-headline').value = l.headline || '';
-            document.getElementById('landing-subheadline').value = l.subheadline || '';
-            document.getElementById('landing-hero-video').value = l.hero_video_url || '';
-            document.getElementById('landing-hero-image').value = l.hero_image_url || '';
-            document.getElementById('landing-cta-label').value = l.cta_label || 'Falar no WhatsApp';
-            document.getElementById('landing-cta-type').value = l.cta_type || 'whatsapp';
-            document.getElementById('landing-cta-whatsapp').value = l.cta_whatsapp || '';
-            document.getElementById('landing-cta-url').value = l.cta_url || '';
+            document.getElementById('landing-contract-template').value = l.contract_template || '';
             document.getElementById('landing-seo-title').value = l.seo_title || '';
             document.getElementById('landing-seo-description').value = l.seo_description || '';
 
-            landingRows = { benefits: l.benefits || [], steps: l.steps || [] };
-            renderLandingRows('benefits');
-            renderLandingRows('steps');
-            updateCtaFields();
+            currentBlocks = JSON.parse(JSON.stringify(l.blocks || []));
+            renderBlocksList();
             updateDomainPreview();
 
             document.getElementById('landing-modal').classList.remove('hidden');
@@ -2818,63 +3031,13 @@
                 mode === 'subdomain' ? `${value}.aguiaon.com` : `aguiaon.com/${value}`;
         }
 
-        function updateCtaFields() {
-            const type = document.getElementById('landing-cta-type').value;
-            document.getElementById('landing-cta-whatsapp').classList.toggle('hidden', type !== 'whatsapp');
-            document.getElementById('landing-cta-url').classList.toggle('hidden', type !== 'custom_url');
-        }
-
-        function renderLandingRows(kind) {
-            const list = document.getElementById(`landing-${kind}-list`);
-            const rows = landingRows[kind];
-            if (!rows.length) {
-                list.innerHTML = `<p class="text-slate-600 text-xs">Nenhum ${kind === 'benefits' ? 'benefício' : 'passo'} ainda.</p>`;
-                return;
-            }
-            list.innerHTML = rows.map((r, i) => kind === 'benefits' ? `
-                <div class="flex gap-2 items-center">
-                    <input value="${(r.icon||'').replace(/"/g,'&quot;')}" placeholder="🎯" oninput="updateLandingRow('benefits',${i},'icon',this.value)" class="w-14 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white text-center" />
-                    <input value="${(r.title||'').replace(/"/g,'&quot;')}" placeholder="Título" oninput="updateLandingRow('benefits',${i},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white" />
-                    <input value="${(r.text||'').replace(/"/g,'&quot;')}" placeholder="Descrição" oninput="updateLandingRow('benefits',${i},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white" />
-                    <button onclick="removeLandingRow('benefits',${i})" class="text-red-400 hover:text-red-300 w-8 h-8 flex items-center justify-center shrink-0"><i class="fa fa-trash"></i></button>
-                </div>` : `
-                <div class="flex gap-2 items-center">
-                    <input value="${(r.title||'').replace(/"/g,'&quot;')}" placeholder="Título do passo" oninput="updateLandingRow('steps',${i},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white" />
-                    <input value="${(r.text||'').replace(/"/g,'&quot;')}" placeholder="Descrição" oninput="updateLandingRow('steps',${i},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white" />
-                    <button onclick="removeLandingRow('steps',${i})" class="text-red-400 hover:text-red-300 w-8 h-8 flex items-center justify-center shrink-0"><i class="fa fa-trash"></i></button>
-                </div>`
-            ).join('');
-        }
-
-        function addLandingRow(kind) {
-            landingRows[kind].push(kind === 'benefits' ? { icon: '', title: '', text: '' } : { title: '', text: '' });
-            renderLandingRows(kind);
-        }
-
-        function removeLandingRow(kind, i) {
-            landingRows[kind].splice(i, 1);
-            renderLandingRows(kind);
-        }
-
-        function updateLandingRow(kind, i, field, value) {
-            landingRows[kind][i][field] = value;
-        }
-
         function collectLandingPayload() {
             return {
                 published: document.getElementById('landing-published').checked,
                 domain_mode: document.querySelector('input[name="landing-domain-mode"]:checked').value,
                 domain_value: document.getElementById('landing-domain-value').value.trim(),
-                headline: document.getElementById('landing-headline').value,
-                subheadline: document.getElementById('landing-subheadline').value,
-                hero_video_url: document.getElementById('landing-hero-video').value,
-                hero_image_url: document.getElementById('landing-hero-image').value,
-                benefits: landingRows.benefits.filter(r => r.title || r.text),
-                steps: landingRows.steps.filter(r => r.title || r.text),
-                cta_label: document.getElementById('landing-cta-label').value,
-                cta_type: document.getElementById('landing-cta-type').value,
-                cta_whatsapp: document.getElementById('landing-cta-whatsapp').value,
-                cta_url: document.getElementById('landing-cta-url').value,
+                blocks: currentBlocks,
+                contract_template: document.getElementById('landing-contract-template').value,
                 seo_title: document.getElementById('landing-seo-title').value,
                 seo_description: document.getElementById('landing-seo-description').value,
             };
