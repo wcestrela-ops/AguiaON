@@ -33,8 +33,9 @@
  */
 import { Router, Request } from 'express';
 import nodemailer from 'nodemailer';
+import jwt from 'jsonwebtoken';
 import pool from '../shared/db';
-import { requireAdmin } from '../shared/authMiddleware';
+import { requireAdmin, requireAuth, requireRole, TokenPayload } from '../shared/authMiddleware';
 import { listBlueprints } from '../verticals/blueprints';
 import { extractSubdomainSlug } from '../shared/tenantResolver';
 import { findOrCreateClienteUser, ensureTables as ensureAgendaTables } from './agenda/index';
@@ -47,6 +48,10 @@ const router = Router();
 // vertical precisar desse mesmo comportamento "singleton", isso vira um campo
 // no blueprint em vez de uma constante — por ora só o Rastreamento usa.
 const RASTREAMENTO_SINGLETON_SLUG = 'aguia-gestao-veicular';
+// Mesma ideia, mas o slug da VERTICAL (não da loja) — usado pra restringir a
+// edição da landing pelo painel da loja (Fix de produção 11) só a quem é
+// desse módulo.
+const RASTREAMENTO_VERTICAL_SLUG = 'rastreamento';
 
 // ── Migração (executa na inicialização, mesmo padrão dos outros módulos) ──
 (async () => {
@@ -264,15 +269,92 @@ router.get('/public/landing/resolve', async (req, res) => {
   }
 });
 
+// Aceita o SuperAdmin de sempre (JWT role SUPERADMIN ou x-admin-key legacy —
+// mesma lógica de requireAdmin) OU um LOJISTA cuja própria loja seja da
+// vertical pedida no :vertical_slug (Fix de produção 11 — o Rastreamento
+// agora edita a própria landing pelo painel da loja, não só pelo SuperAdmin).
+// Fica aqui, não em shared/authMiddleware.ts, porque é uma regra específica
+// dessa rota de preview (não um padrão de auth reutilizável em outro lugar).
+async function requireAdminOrOwnVerticalLojista(req: Request, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const secret = process.env.JWT_SECRET!;
+      const payload = jwt.verify(authHeader.split(' ')[1], secret) as TokenPayload;
+      if (payload.role === 'SUPERADMIN') {
+        req.user = payload;
+        return next();
+      }
+      if (payload.role === 'LOJISTA' && payload.establishmentId) {
+        const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [payload.establishmentId]);
+        if (estab.rows[0]?.vertical_slug === req.params.vertical_slug) {
+          req.user = payload;
+          return next();
+        }
+      }
+    } catch { /* cai pro check de key abaixo */ }
+  }
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey && adminKey === process.env.ADMIN_SECRET_KEY) return next();
+  return res.status(403).json({ error: 'Acesso negado.' });
+}
+
 // GET /public/landing/preview/:vertical_slug — pré-visualização pro
-// SuperAdmin ver o rascunho antes de publicar (não exige `published=true`).
-router.get('/public/landing/preview/:vertical_slug', requireAdmin, async (req, res) => {
+// SuperAdmin (ou pro lojista dono daquela vertical) ver o rascunho antes de
+// publicar (não exige `published=true`).
+router.get('/public/landing/preview/:vertical_slug', requireAdminOrOwnVerticalLojista, async (req, res) => {
   try {
     const r = await pool.query(`SELECT * FROM vertical_landings WHERE vertical_slug=$1`, [req.params.vertical_slug]);
     if (!r.rows.length) return res.status(404).json({ error: 'Landing ainda não criada pra esse módulo.' });
     res.json(r.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Painel da loja (LOJISTA) editando a própria landing — Fix de produção 11.
+// Carlos: o Rastreamento não tem "Catálogo" (não é um negócio de produto),
+// então em vez de deixar essa aba genérica lá sem sentido, a loja única do
+// módulo (aguia-gestao-veicular) ganha uma aba "Landing Page" no lugar,
+// editando a própria landing (vertical_slug = a da própria loja) sem passar
+// pelo painel do SuperAdmin. Restrito a quem já é da vertical 'rastreamento'
+// — outras verticais são multiloja, e deixar qualquer lojista editar a
+// landing (compartilhada por todas as lojas daquele módulo) seria arriscado.
+router.get('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, res) => {
+  try {
+    const eid = (req.user as TokenPayload).establishmentId;
+    if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
+    const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
+    const verticalSlug = estab.rows[0]?.vertical_slug;
+    if (verticalSlug !== RASTREAMENTO_VERTICAL_SLUG) {
+      return res.status(403).json({ error: 'A edição da landing pelo painel da loja ainda só está disponível pro módulo de Rastreamento.' });
+    }
+    const bp = listBlueprints().find((b: any) => b.slug === verticalSlug);
+    const r = await pool.query(`SELECT * FROM vertical_landings WHERE vertical_slug=$1`, [verticalSlug]);
+    res.json({ vertical_slug: verticalSlug, vertical_label: bp?.label || verticalSlug, landing: r.rows[0] || null });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /lojista/landing — mesma validação/upsert do PUT /admin/landings/:vertical_slug
+// (reaproveita upsertVerticalLanding), só que o vertical_slug vem do próprio
+// estabelecimento logado, não de um parâmetro na URL — um lojista não escolhe
+// qual landing editar, só edita a da própria loja.
+router.put('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, res) => {
+  try {
+    const eid = (req.user as TokenPayload).establishmentId;
+    if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
+    const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
+    const verticalSlug = estab.rows[0]?.vertical_slug;
+    if (verticalSlug !== RASTREAMENTO_VERTICAL_SLUG) {
+      return res.status(403).json({ error: 'A edição da landing pelo painel da loja ainda só está disponível pro módulo de Rastreamento.' });
+    }
+    const row = await upsertVerticalLanding(verticalSlug, req.body);
+    res.json(row);
+  } catch (err: any) {
+    handleUpsertError(err, res);
   }
 });
 
@@ -296,6 +378,61 @@ router.get('/admin/landings', requireAdmin, async (_req, res) => {
   }
 });
 
+// Erro tipado pra distinguir "requisição inválida do usuário" (400/409) de
+// erro de servidor de verdade (500) — usado por upsertVerticalLanding, que
+// agora serve tanto o PUT do SuperAdmin quanto o PUT do painel da loja
+// (Fix de produção 11), pra não duplicar a mesma validação nos dois lugares.
+class LandingUpsertError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
+
+async function upsertVerticalLanding(verticalSlug: string, body: any) {
+  const {
+    published, domain_mode, domain_value,
+    blocks, contract_template, contato_whatsapp,
+    seo_title, seo_description,
+  } = body;
+
+  const mode = domain_mode === 'subdomain' ? 'subdomain' : 'path';
+  const value = (domain_value || '').toLowerCase().trim().replace(/^\/+|\/+$/g, '');
+
+  if (published && !value) {
+    throw new LandingUpsertError(400, 'Informe o endereço (caminho ou subdomínio) antes de publicar.');
+  }
+  if (value) {
+    const collision = await pool.query(`SELECT 1 FROM establishments WHERE slug=$1`, [value]);
+    if (collision.rows.length) {
+      throw new LandingUpsertError(409, `Esse endereço ("${value}") já é usado por uma loja cadastrada — escolha outro.`);
+    }
+  }
+
+  const r = await pool.query(
+    `INSERT INTO vertical_landings
+       (vertical_slug, published, domain_mode, domain_value, blocks, contract_template,
+        contato_whatsapp, seo_title, seo_description, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+     ON CONFLICT (vertical_slug) DO UPDATE SET
+       published=$2, domain_mode=$3, domain_value=$4, blocks=$5, contract_template=$6,
+       contato_whatsapp=$7, seo_title=$8, seo_description=$9, updated_at=NOW()
+     RETURNING *`,
+    [
+      verticalSlug, !!published, mode, value,
+      JSON.stringify(blocks || []), contract_template || null, contato_whatsapp || null,
+      seo_title || null, seo_description || null,
+    ]
+  );
+  return r.rows[0];
+}
+
+function handleUpsertError(err: any, res: any) {
+  if (err instanceof LandingUpsertError) return res.status(err.status).json({ error: err.message });
+  if (err.code === '23505') {
+    return res.status(409).json({ error: 'Esse endereço já está em uso por outra landing publicada.' });
+  }
+  return res.status(500).json({ error: err.message });
+}
+
 // PUT /admin/landings/:vertical_slug — cria ou atualiza (upsert) a landing
 // de um módulo. Validações: domain_value obrigatório se for publicar, e não
 // pode colidir com o slug de uma loja real já cadastrada (senão a landing
@@ -303,47 +440,10 @@ router.get('/admin/landings', requireAdmin, async (_req, res) => {
 // já que os dois competem pelo mesmo espaço de nomes de `establishments.slug`.
 router.put('/admin/landings/:vertical_slug', requireAdmin, async (req, res) => {
   try {
-    const verticalSlug = req.params.vertical_slug;
-    const {
-      published, domain_mode, domain_value,
-      blocks, contract_template, contato_whatsapp,
-      seo_title, seo_description,
-    } = req.body;
-
-    const mode = domain_mode === 'subdomain' ? 'subdomain' : 'path';
-    const value = (domain_value || '').toLowerCase().trim().replace(/^\/+|\/+$/g, '');
-
-    if (published && !value) {
-      return res.status(400).json({ error: 'Informe o endereço (caminho ou subdomínio) antes de publicar.' });
-    }
-    if (value) {
-      const collision = await pool.query(`SELECT 1 FROM establishments WHERE slug=$1`, [value]);
-      if (collision.rows.length) {
-        return res.status(409).json({ error: `Esse endereço ("${value}") já é usado por uma loja cadastrada — escolha outro.` });
-      }
-    }
-
-    const r = await pool.query(
-      `INSERT INTO vertical_landings
-         (vertical_slug, published, domain_mode, domain_value, blocks, contract_template,
-          contato_whatsapp, seo_title, seo_description, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-       ON CONFLICT (vertical_slug) DO UPDATE SET
-         published=$2, domain_mode=$3, domain_value=$4, blocks=$5, contract_template=$6,
-         contato_whatsapp=$7, seo_title=$8, seo_description=$9, updated_at=NOW()
-       RETURNING *`,
-      [
-        verticalSlug, !!published, mode, value,
-        JSON.stringify(blocks || []), contract_template || null, contato_whatsapp || null,
-        seo_title || null, seo_description || null,
-      ]
-    );
-    res.json(r.rows[0]);
+    const row = await upsertVerticalLanding(req.params.vertical_slug, req.body);
+    res.json(row);
   } catch (err: any) {
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'Esse endereço já está em uso por outra landing publicada.' });
-    }
-    res.status(500).json({ error: err.message });
+    handleUpsertError(err, res);
   }
 });
 

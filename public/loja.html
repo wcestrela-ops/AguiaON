@@ -1575,6 +1575,85 @@
       </div>
     </div>
 
+    <!-- ─── LANDING PAGE DO MÓDULO (só Rastreamento — Fix de produção 11) ─── -->
+    <div id="tab-landing_modulo" class="tab-content">
+      <div class="flex justify-between items-center mb-5">
+        <div>
+          <h2 class="text-xl font-black text-white">Landing Page</h2>
+          <p class="text-slate-500 text-sm">Página de marketing do módulo de Rastreamento — edite o conteúdo, o endereço público e o termo de adesão daqui.</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-6">
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="lj-landing-published" class="w-4 h-4 accent-[var(--accent)]" />
+          <label for="lj-landing-published" class="text-sm text-slate-300 font-bold">Publicada (visível ao público)</label>
+        </div>
+
+        <div>
+          <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Endereço</p>
+          <div class="flex gap-3 mb-2">
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <input type="radio" name="lj-landing-domain-mode" value="path" checked onchange="ljUpdateDomainPreview()"> Caminho (aguiaon.com/x)
+            </label>
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <input type="radio" name="lj-landing-domain-mode" value="subdomain" onchange="ljUpdateDomainPreview()"> Subdomínio (x.aguiaon.com)
+            </label>
+          </div>
+          <input type="text" id="lj-landing-domain-value" placeholder="ex: rastreamento" oninput="ljUpdateDomainPreview()"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]" />
+          <p id="lj-landing-domain-preview" class="text-slate-500 text-xs mt-1.5 font-mono"></p>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-3">
+            <p class="text-indigo-400 text-xs font-black uppercase tracking-widest">Conteúdo (blocos)</p>
+            <div class="relative">
+              <select onchange="if(this.value){ljAddBlock(this.value); this.value='';}"
+                      class="bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-lg px-3 py-2 focus:outline-none">
+                <option value="">+ Adicionar bloco...</option>
+                <option value="hero">Hero (topo)</option>
+                <option value="benefits">Benefícios</option>
+                <option value="recursos">Recursos/Funcionalidades</option>
+                <option value="steps">Como funciona (passos)</option>
+                <option value="planos">Planos (preços)</option>
+                <option value="depoimentos">Depoimentos</option>
+                <option value="faq">Perguntas frequentes</option>
+                <option value="cta">CTA (banner de ação)</option>
+              </select>
+            </div>
+          </div>
+          <div id="lj-landing-blocks-list" class="space-y-3"></div>
+        </div>
+
+        <div class="border-t border-slate-800 pt-5">
+          <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">Termo de Adesão (quando o CTA for "Contratar")</p>
+          <p class="text-slate-500 text-xs mb-2">Placeholders disponíveis: {{nome}}, {{empresa}}, {{whatsapp}}, {{email}}, {{cpf_cnpj}}, {{plano_nome}}, {{plano_preco}}, {{modulo}}, {{data}}</p>
+          <textarea id="lj-landing-contract-template" rows="6" placeholder="Termo de adesão entre AguiaON e {{empresa}}..."
+                    class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-[var(--accent)]"></textarea>
+          <p class="text-slate-500 text-xs mt-3 mb-2">WhatsApp de contato — usado no botão "Continuar no WhatsApp" que aparece pro visitante depois de aceitar o termo</p>
+          <input type="text" id="lj-landing-contato-whatsapp" placeholder="Ex: 5511999999999"
+                 class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]" />
+        </div>
+
+        <div>
+          <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2">SEO — título da aba</p>
+          <input type="text" id="lj-landing-seo-title" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]" />
+          <p class="text-indigo-400 text-xs font-black uppercase tracking-widest mb-2 mt-4">SEO — descrição</p>
+          <textarea id="lj-landing-seo-description" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]"></textarea>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button onclick="ljPreviewLanding()" class="flex-1 border border-slate-700 text-slate-300 hover:border-[var(--accent)] hover:text-white py-3 rounded-xl font-black text-xs uppercase transition-all">
+            <i class="fa fa-eye mr-2"></i>Visualizar
+          </button>
+          <button onclick="ljSaveLanding()" class="flex-1 bg-[var(--accent)] hover:opacity-90 text-white py-3 rounded-xl font-black text-xs uppercase transition-all">
+            <i class="fa fa-save mr-2"></i>Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── CATÁLOGO UNIVERSAL ─── -->
     <div id="tab-catalogo" class="tab-content">
       <!-- Sub-tabs: Catálogo | Adicionais | Up-Selling -->
@@ -3173,6 +3252,9 @@ const NAV_CONFIG = [
   { id: 'configuracoes', label: 'Minha Loja',      icon: 'fa-cog',        features: null },
   { id: 'horarios',      label: 'Horários',        icon: 'fa-clock',      features: null },
   { id: 'catalogo',      label: 'Catálogo',        icon: 'fa-box',        features: null },
+  // Rastreamento não é multiloja e não vende produto de catálogo (Fix de
+  // produção 11) — no lugar do Catálogo, essa loja edita a própria landing.
+  { id: 'landing_modulo', label: 'Landing Page',   icon: 'fa-window-restore', features: null, onlyVertical: 'rastreamento' },
   { id: 'whatsapp',      label: 'WhatsApp',        icon: 'fa-brands fa-whatsapp', features: null },
   { id: 'ia',            label: 'Ágata AI',        icon: 'fa-robot',      features: null },
   { id: 'automacao_wa',  label: 'Automação WA',    icon: 'fa-robot',      features: null },
@@ -3391,6 +3473,7 @@ function showTab(id) {
   else if (id === 'whatsapp') loadWhatsappStatus(); // carrega credenciais salvas + testa silenciosamente
   else if (id === 'automacao_wa') loadWAAutomation();
   else if (id === 'catalogo') { setCatalogSubTab('catalog'); loadUniversalCatalog(); }
+  else if (id === 'landing_modulo') loadLojistaLanding();
   else if (id === 'pedidos') { loadPedidos(); _orderBadgeCount = 0; updateOrderBadge(0); startPedidosPolling(); loadOrderSettings(); }
   else if (id === 'entregadores')  { loadStaff(); loadStaffSettings(); }
   else if (id === 'clientes')      { loadGymClients(); loadGymNotifySettings(); }
@@ -3406,7 +3489,15 @@ function buildNav() {
     if (n.id === 'servicos')      return { ...n, label: lbl.servico === 'Consulta/Procedimento' ? 'Consultas' : (lbl.servico + 's') };
     return n;
   });
-  const visible = navWithLabels.filter(n => !n.features || n.features.some(f => activeFeatures.includes(f)));
+  const visible = navWithLabels.filter(n => {
+    // 'onlyVertical' restringe a aba a um vertical_slug específico (Fix de
+    // produção 11 — aba "Landing Page", só pro Rastreamento).
+    if (n.onlyVertical && establishment?.vertical_slug !== n.onlyVertical) return false;
+    // Rastreamento não vende produto de catálogo — some com a aba genérica
+    // de Catálogo pra essa vertical (a landing entra no lugar dela).
+    if (n.id === 'catalogo' && establishment?.vertical_slug === 'rastreamento') return false;
+    return !n.features || n.features.some(f => activeFeatures.includes(f));
+  });
 
   // Sidebar + drawer
   const sidebarHtml = visible.map(n => `
@@ -6029,6 +6120,253 @@ async function deleteBloqueio(id) {
   if (!confirm('Remover bloqueio?')) return;
   try { await api(`/agenda/bloqueios/${id}`, { method: 'DELETE' }); loadBloqueios(); }
   catch (e) { alert(e.message); }
+}
+
+// ════════ LANDING PAGE DO MÓDULO (só Rastreamento — Fix de produção 11) ════════
+// Mesma lógica de construtor de blocos do admin.html (Landing Pages por
+// Módulo), só que aqui a loja edita a própria landing direto pelo painel
+// dela — sem passar pelo SuperAdmin — porque o Rastreamento não é multiloja
+// (é uma loja só, "aguia-gestao-veicular"), então não faz sentido essa
+// edição ficar só no painel global. Rotas: GET/PUT /lojista/landing
+// (src/routes/landings.ts), restritas a LOJISTA + vertical_slug='rastreamento'.
+let ljCurrentBlocks = [];
+let ljLandingVerticalSlug = '';
+
+const LJ_BLOCK_LABELS = {
+    hero: 'Hero (topo)', benefits: 'Benefícios', recursos: 'Recursos/Funcionalidades',
+    steps: 'Como funciona', planos: 'Planos', depoimentos: 'Depoimentos', faq: 'Perguntas frequentes', cta: 'CTA (banner)',
+};
+const LJ_BLOCK_DEFAULTS = {
+    hero: { type: 'hero', headline: '', subheadline: '', hero_video_url: '', hero_image_url: '', cta_label: '', cta_type: 'whatsapp', cta_whatsapp: '', cta_url: '' },
+    benefits: { type: 'benefits', title: '', items: [] },
+    recursos: { type: 'recursos', title: '', items: [] },
+    steps: { type: 'steps', title: '', items: [] },
+    planos: { type: 'planos', title: '', items: [] },
+    depoimentos: { type: 'depoimentos', title: '', items: [] },
+    faq: { type: 'faq', title: '', items: [] },
+    cta: { type: 'cta', headline: '', cta_label: '', cta_type: 'whatsapp', cta_whatsapp: '', cta_url: '' },
+};
+const LJ_ITEM_DEFAULTS = {
+    benefits: { icon: '', title: '', text: '' },
+    recursos: { icon: '', title: '', text: '' },
+    steps: { title: '', text: '' },
+    planos: { nome: '', preco: 0, periodo: '/mês', descricao: '', recursos: [], destaque: false, cta_label: 'Contratar' },
+    depoimentos: { nome: '', cargo: '', foto_url: '', texto: '' },
+    faq: { pergunta: '', resposta: '' },
+};
+
+function ljEscAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
+function ljInp(i, field, value, placeholder, extra) {
+    return `<input value="${ljEscAttr(value)}" placeholder="${ljEscAttr(placeholder)}" oninput="ljUpdateBlockField(${i},'${field}',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[var(--accent)] ${extra||''}" />`;
+}
+function ljCtaTypeSelect(i, field, value) {
+    return `<select onchange="ljUpdateBlockField(${i},'${field}',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none">
+        ${['whatsapp','contratar','marketplace','pwa_install','custom_url'].map(t => `<option value="${t}" ${value===t?'selected':''}>${
+            {whatsapp:'Abrir WhatsApp',contratar:'Contratar (lead + termo)',marketplace:'Ver lojas',pwa_install:'Instalar app',custom_url:'Link personalizado'}[t]
+        }</option>`).join('')}
+    </select>`;
+}
+
+function ljAddBlock(type) {
+    if (!LJ_BLOCK_DEFAULTS[type]) return;
+    ljCurrentBlocks.push(JSON.parse(JSON.stringify(LJ_BLOCK_DEFAULTS[type])));
+    ljRenderBlocksList();
+}
+function ljRemoveBlock(i) { if (confirm('Remover esse bloco?')) { ljCurrentBlocks.splice(i, 1); ljRenderBlocksList(); } }
+function ljMoveBlock(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= ljCurrentBlocks.length) return;
+    const tmp = ljCurrentBlocks[i]; ljCurrentBlocks[i] = ljCurrentBlocks[j]; ljCurrentBlocks[j] = tmp;
+    ljRenderBlocksList();
+}
+function ljUpdateBlockField(i, field, value) { ljCurrentBlocks[i][field] = value; }
+function ljUpdateBlockCheckbox(i, field, checked) { ljCurrentBlocks[i][field] = checked; }
+function ljAddBlockItem(i) {
+    const type = ljCurrentBlocks[i].type;
+    ljCurrentBlocks[i].items = ljCurrentBlocks[i].items || [];
+    ljCurrentBlocks[i].items.push(JSON.parse(JSON.stringify(LJ_ITEM_DEFAULTS[type])));
+    ljRenderBlocksList();
+}
+function ljRemoveBlockItem(i, j) { ljCurrentBlocks[i].items.splice(j, 1); ljRenderBlocksList(); }
+function ljUpdateBlockItem(i, j, field, value) { ljCurrentBlocks[i].items[j][field] = value; }
+function ljUpdateBlockItemNumber(i, j, field, value) { ljCurrentBlocks[i].items[j][field] = parseFloat(value) || 0; }
+function ljUpdateBlockItemBool(i, j, field, checked) { ljCurrentBlocks[i].items[j][field] = checked; }
+function ljUpdateBlockItemList(i, j, field, value) { ljCurrentBlocks[i].items[j][field] = value.split('\n').map(s => s.trim()).filter(Boolean); }
+
+function ljItemsWrap(i, addLabel, rowsHtml) {
+    return `<div class="space-y-2 mt-2">
+        ${rowsHtml}
+        <button onclick="ljAddBlockItem(${i})" class="text-[var(--accent)] text-xs font-bold"><i class="fa fa-plus mr-1"></i>${addLabel}</button>
+    </div>`;
+}
+
+function ljBlockEditorBody(b, i) {
+    if (b.type === 'hero' || b.type === 'cta') {
+        const showWa = b.cta_type === 'whatsapp';
+        const showUrl = b.cta_type === 'custom_url';
+        return `
+            ${b.type === 'hero' ? `
+                <div class="grid grid-cols-1 gap-2 mb-2">
+                    ${ljInp(i,'headline',b.headline,'Título principal')}
+                    ${ljInp(i,'subheadline',b.subheadline,'Subtítulo')}
+                    <div class="grid grid-cols-2 gap-2">
+                        ${ljInp(i,'hero_video_url',b.hero_video_url,'URL do vídeo (YouTube ou .mp4)')}
+                        ${ljInp(i,'hero_image_url',b.hero_image_url,'URL da imagem (se sem vídeo)')}
+                    </div>
+                </div>` : `
+                <div class="mb-2">${ljInp(i,'headline',b.headline,'Título do banner (opcional)')}</div>`}
+            <div class="grid grid-cols-2 gap-2">
+                ${ljInp(i,'cta_label',b.cta_label,'Texto do botão')}
+                ${ljCtaTypeSelect(i,'cta_type',b.cta_type)}
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+                <div class="${showWa?'':'hidden'}">${ljInp(i,'cta_whatsapp',b.cta_whatsapp,'WhatsApp (só dígitos, com DDD)')}</div>
+                <div class="${showUrl?'':'hidden'}">${ljInp(i,'cta_url',b.cta_url,'https://...')}</div>
+            </div>`;
+    }
+
+    if (b.type === 'benefits' || b.type === 'recursos') {
+        const rows = (b.items||[]).map((it,j) => `
+            <div class="flex gap-2 items-center">
+                <input value="${ljEscAttr(it.icon)}" placeholder="🎯" oninput="ljUpdateBlockItem(${i},${j},'icon',this.value)" class="w-12 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white text-center" />
+                <input value="${ljEscAttr(it.title)}" placeholder="Título" oninput="ljUpdateBlockItem(${i},${j},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <input value="${ljEscAttr(it.text)}" placeholder="Descrição" oninput="ljUpdateBlockItem(${i},${j},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <button onclick="ljRemoveBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+            </div>`).join('');
+        return `<div class="mb-2">${ljInp(i,'title',b.title,'Título da seção')}</div>${ljItemsWrap(i,'Adicionar item',rows)}`;
+    }
+
+    if (b.type === 'steps') {
+        const rows = (b.items||[]).map((it,j) => `
+            <div class="flex gap-2 items-center">
+                <input value="${ljEscAttr(it.title)}" placeholder="Título do passo" oninput="ljUpdateBlockItem(${i},${j},'title',this.value)" class="w-1/3 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <input value="${ljEscAttr(it.text)}" placeholder="Descrição" oninput="ljUpdateBlockItem(${i},${j},'text',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <button onclick="ljRemoveBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+            </div>`).join('');
+        return `<div class="mb-2">${ljInp(i,'title',b.title,'Título da seção (ex: Como funciona)')}</div>${ljItemsWrap(i,'Adicionar passo',rows)}`;
+    }
+
+    if (b.type === 'depoimentos') {
+        const rows = (b.items||[]).map((it,j) => `
+            <div class="border border-slate-800 rounded-lg p-2 space-y-1.5">
+                <div class="flex gap-2">
+                    <input value="${ljEscAttr(it.nome)}" placeholder="Nome" oninput="ljUpdateBlockItem(${i},${j},'nome',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <input value="${ljEscAttr(it.cargo)}" placeholder="Cargo/Empresa" oninput="ljUpdateBlockItem(${i},${j},'cargo',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <button onclick="ljRemoveBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                </div>
+                <input value="${ljEscAttr(it.foto_url)}" placeholder="URL da foto (opcional)" oninput="ljUpdateBlockItem(${i},${j},'foto_url',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <textarea placeholder="Depoimento" oninput="ljUpdateBlockItem(${i},${j},'texto',this.value)" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${ljEscAttr(it.texto)}</textarea>
+            </div>`).join('');
+        return `<div class="mb-2">${ljInp(i,'title',b.title,'Título da seção')}</div>${ljItemsWrap(i,'Adicionar depoimento',rows)}`;
+    }
+
+    if (b.type === 'faq') {
+        const rows = (b.items||[]).map((it,j) => `
+            <div class="flex gap-2 items-start">
+                <div class="flex-1 space-y-1.5">
+                    <input value="${ljEscAttr(it.pergunta)}" placeholder="Pergunta" oninput="ljUpdateBlockItem(${i},${j},'pergunta',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <textarea placeholder="Resposta" oninput="ljUpdateBlockItem(${i},${j},'resposta',this.value)" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${ljEscAttr(it.resposta)}</textarea>
+                </div>
+                <button onclick="ljRemoveBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+            </div>`).join('');
+        return `<div class="mb-2">${ljInp(i,'title',b.title,'Título da seção')}</div>${ljItemsWrap(i,'Adicionar pergunta',rows)}`;
+    }
+
+    if (b.type === 'planos') {
+        const rows = (b.items||[]).map((p,j) => `
+            <div class="border border-slate-800 rounded-lg p-3 space-y-1.5">
+                <div class="flex gap-2">
+                    <input value="${ljEscAttr(p.nome)}" placeholder="Nome do plano" oninput="ljUpdateBlockItem(${i},${j},'nome',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <input type="number" step="0.01" value="${p.preco||0}" placeholder="Preço" oninput="ljUpdateBlockItemNumber(${i},${j},'preco',this.value)" class="w-24 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <input value="${ljEscAttr(p.periodo)}" placeholder="/mês" oninput="ljUpdateBlockItem(${i},${j},'periodo',this.value)" class="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                    <button onclick="ljRemoveBlockItem(${i},${j})" class="text-red-400 w-7 h-7 shrink-0"><i class="fa fa-trash"></i></button>
+                </div>
+                <input value="${ljEscAttr(p.descricao)}" placeholder="Descrição curta" oninput="ljUpdateBlockItem(${i},${j},'descricao',this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                <textarea placeholder="Recursos inclusos (um por linha)" oninput="ljUpdateBlockItemList(${i},${j},'recursos',this.value)" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white">${ljEscAttr((p.recursos||[]).join('\n'))}</textarea>
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <input type="checkbox" ${p.destaque?'checked':''} onchange="ljUpdateBlockItemBool(${i},${j},'destaque',this.checked)" class="accent-[var(--accent)]" /> Mais popular
+                    </label>
+                    <input value="${ljEscAttr(p.cta_label||'Contratar')}" placeholder="Texto do botão" oninput="ljUpdateBlockItem(${i},${j},'cta_label',this.value)" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white" />
+                </div>
+            </div>`).join('');
+        return `<div class="mb-2">${ljInp(i,'title',b.title,'Título da seção (ex: Planos)')}</div>${ljItemsWrap(i,'Adicionar plano',rows)}`;
+    }
+
+    return '';
+}
+
+function ljRenderBlocksList() {
+    const wrap = document.getElementById('lj-landing-blocks-list');
+    if (!wrap) return;
+    if (!ljCurrentBlocks.length) {
+        wrap.innerHTML = '<p class="text-slate-600 text-xs text-center py-4">Nenhum bloco ainda — adiciona pelo menu acima.</p>';
+        return;
+    }
+    wrap.innerHTML = ljCurrentBlocks.map((b, i) => `
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-black text-[var(--accent)] uppercase tracking-widest">${LJ_BLOCK_LABELS[b.type] || b.type}</span>
+                <div class="flex items-center gap-1">
+                    <button onclick="ljMoveBlock(${i},-1)" class="w-7 h-7 text-slate-500 hover:text-white"><i class="fa fa-arrow-up"></i></button>
+                    <button onclick="ljMoveBlock(${i},1)" class="w-7 h-7 text-slate-500 hover:text-white"><i class="fa fa-arrow-down"></i></button>
+                    <button onclick="ljRemoveBlock(${i})" class="w-7 h-7 text-red-400 hover:text-red-300"><i class="fa fa-trash"></i></button>
+                </div>
+            </div>
+            ${ljBlockEditorBody(b, i)}
+        </div>`).join('');
+}
+
+function ljUpdateDomainPreview() {
+    const mode = document.querySelector('input[name="lj-landing-domain-mode"]:checked').value;
+    const value = document.getElementById('lj-landing-domain-value').value.trim() || '...';
+    document.getElementById('lj-landing-domain-preview').textContent =
+        mode === 'subdomain' ? `${value}.aguiaon.com` : `aguiaon.com/${value}`;
+}
+
+async function loadLojistaLanding() {
+    try {
+        const data = await api('/lojista/landing');
+        const l = data.landing || {};
+        ljLandingVerticalSlug = data.vertical_slug;
+
+        document.getElementById('lj-landing-published').checked = l.published || false;
+        document.querySelector(`input[name="lj-landing-domain-mode"][value="${l.domain_mode || 'path'}"]`).checked = true;
+        document.getElementById('lj-landing-domain-value').value = l.domain_value || data.vertical_slug;
+        document.getElementById('lj-landing-contract-template').value = l.contract_template || '';
+        document.getElementById('lj-landing-contato-whatsapp').value = l.contato_whatsapp || '';
+        document.getElementById('lj-landing-seo-title').value = l.seo_title || '';
+        document.getElementById('lj-landing-seo-description').value = l.seo_description || '';
+
+        ljCurrentBlocks = JSON.parse(JSON.stringify(l.blocks || []));
+        ljRenderBlocksList();
+        ljUpdateDomainPreview();
+    } catch (e) { alert('❌ ' + e.message); }
+}
+
+function ljCollectLandingPayload() {
+    return {
+        published: document.getElementById('lj-landing-published').checked,
+        domain_mode: document.querySelector('input[name="lj-landing-domain-mode"]:checked').value,
+        domain_value: document.getElementById('lj-landing-domain-value').value.trim(),
+        blocks: ljCurrentBlocks,
+        contract_template: document.getElementById('lj-landing-contract-template').value,
+        contato_whatsapp: document.getElementById('lj-landing-contato-whatsapp').value.trim(),
+        seo_title: document.getElementById('lj-landing-seo-title').value,
+        seo_description: document.getElementById('lj-landing-seo-description').value,
+    };
+}
+
+async function ljSaveLanding() {
+    try {
+        await api('/lojista/landing', { method: 'PUT', body: ljCollectLandingPayload() });
+        alert('✅ Landing salva com sucesso!');
+    } catch (e) { alert('❌ ' + e.message); }
+}
+
+function ljPreviewLanding() {
+    if (!ljLandingVerticalSlug) return;
+    window.open(`/landing.html?preview_slug=${encodeURIComponent(ljLandingVerticalSlug)}`, '_blank');
 }
 
 // ════════ CATÁLOGO UNIVERSAL ════════

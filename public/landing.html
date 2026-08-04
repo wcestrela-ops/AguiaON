@@ -85,10 +85,16 @@
             <input id="lead-endereco-estado" class="input" placeholder="UF" />
           </div>
           <p class="text-slate-500 text-[11px] uppercase tracking-widest font-bold pt-1">Outros dados</p>
-          <input id="lead-nascimento" type="date" class="input" placeholder="Data de nascimento" />
-          <div class="grid grid-cols-2 gap-2">
-            <input id="lead-emergencia-nome" class="input" placeholder="Contato de emergência (nome)" />
-            <input id="lead-emergencia-telefone" class="input" placeholder="Telefone" />
+          <div>
+            <label for="lead-nascimento" class="block text-slate-400 text-xs mb-1">Data de nascimento (ex: 10/01/2000)</label>
+            <input id="lead-nascimento" type="date" class="input w-full" />
+          </div>
+          <div>
+            <p class="text-slate-400 text-xs mb-1">Contato de emergência</p>
+            <div class="grid grid-cols-2 gap-2">
+              <input id="lead-emergencia-nome" class="input" placeholder="Nome" />
+              <input id="lead-emergencia-telefone" class="input" placeholder="WhatsApp" />
+            </div>
           </div>
         </div>
 
