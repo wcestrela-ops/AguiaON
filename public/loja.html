@@ -3252,9 +3252,10 @@ const NAV_CONFIG = [
   { id: 'configuracoes', label: 'Minha Loja',      icon: 'fa-cog',        features: null },
   { id: 'horarios',      label: 'Horários',        icon: 'fa-clock',      features: null },
   { id: 'catalogo',      label: 'Catálogo',        icon: 'fa-box',        features: null },
-  // Rastreamento não é multiloja e não vende produto de catálogo (Fix de
-  // produção 11) — no lugar do Catálogo, essa loja edita a própria landing.
-  { id: 'landing_modulo', label: 'Landing Page',   icon: 'fa-window-restore', features: null, onlyVertical: 'rastreamento' },
+  // Módulos "serviço único" (Fix de produção 11, generalizado no Fix 12 via
+  // establishment.modelo_negocio) não são multiloja e não vendem produto de
+  // catálogo — no lugar do Catálogo, essa loja edita a própria landing.
+  { id: 'landing_modulo', label: 'Landing Page',   icon: 'fa-window-restore', features: null, onlyModeloNegocio: 'servico_unico' },
   { id: 'whatsapp',      label: 'WhatsApp',        icon: 'fa-brands fa-whatsapp', features: null },
   { id: 'ia',            label: 'Ágata AI',        icon: 'fa-robot',      features: null },
   { id: 'automacao_wa',  label: 'Automação WA',    icon: 'fa-robot',      features: null },
@@ -3490,12 +3491,13 @@ function buildNav() {
     return n;
   });
   const visible = navWithLabels.filter(n => {
-    // 'onlyVertical' restringe a aba a um vertical_slug específico (Fix de
-    // produção 11 — aba "Landing Page", só pro Rastreamento).
-    if (n.onlyVertical && establishment?.vertical_slug !== n.onlyVertical) return false;
-    // Rastreamento não vende produto de catálogo — some com a aba genérica
-    // de Catálogo pra essa vertical (a landing entra no lugar dela).
-    if (n.id === 'catalogo' && establishment?.vertical_slug === 'rastreamento') return false;
+    // 'onlyModeloNegocio' restringe a aba a um modelo_negocio específico do
+    // blueprint (Fix de produção 11, generalizado no Fix 12) — aba "Landing
+    // Page", só pra módulos "serviço único" (hoje só o Rastreamento).
+    if (n.onlyModeloNegocio && establishment?.modelo_negocio !== n.onlyModeloNegocio) return false;
+    // Módulo "serviço único" não vende produto de catálogo — some com a aba
+    // genérica de Catálogo (a landing entra no lugar dela).
+    if (n.id === 'catalogo' && establishment?.modelo_negocio === 'servico_unico') return false;
     return !n.features || n.features.some(f => activeFeatures.includes(f));
   });
 

@@ -42,16 +42,13 @@ import { findOrCreateClienteUser, ensureTables as ensureAgendaTables } from './a
 
 const router = Router();
 
-// Fase 17 (Fix 8) — o Rastreamento não é multiloja: existe uma única loja de
-// gestão veicular (não uma por lead), e converter um lead vira um cliente
-// (agenda_clientes) dentro dela, não uma loja nova. Se algum dia mais de uma
-// vertical precisar desse mesmo comportamento "singleton", isso vira um campo
-// no blueprint em vez de uma constante — por ora só o Rastreamento usa.
-const RASTREAMENTO_SINGLETON_SLUG = 'aguia-gestao-veicular';
-// Mesma ideia, mas o slug da VERTICAL (não da loja) — usado pra restringir a
-// edição da landing pelo painel da loja (Fix de produção 11) só a quem é
-// desse módulo.
-const RASTREAMENTO_VERTICAL_SLUG = 'rastreamento';
+// Fase 17 (Fix 8) — módulos "serviço único" (uma loja só, gerenciando muitos
+// clientes, em vez de multiloja) usam um comportamento diferente de conversão
+// de lead e de edição de landing. Generalizado no Fix de produção 12: em vez
+// de constantes com o slug fixo do Rastreamento, isso agora é um campo no
+// blueprint (`modelo_negocio`, ver verticals/blueprints.ts) e a loja de cada
+// módulo é achada dinamicamente por `vertical_slug` — ver `isServicoUnico()`
+// mais abaixo.
 
 // ── Migração (executa na inicialização, mesmo padrão dos outros módulos) ──
 (async () => {
@@ -313,22 +310,33 @@ router.get('/public/landing/preview/:vertical_slug', requireAdminOrOwnVerticalLo
 });
 
 // ─────────────────────────────────────────────────────────────
+// Fix de produção 12 — generaliza a checagem de "módulo de serviço único"
+// (antes hardcoded pra 'rastreamento'): agora olha o campo `modelo_negocio`
+// do blueprint (ver verticals/blueprints.ts). Qualquer vertical futura que
+// marque `modelo_negocio: 'servico_unico'` ganha esse mesmo comportamento
+// automaticamente, sem precisar mexer em landings.ts de novo.
+function isServicoUnico(verticalSlug: string | undefined): boolean {
+  if (!verticalSlug) return false;
+  const bp = listBlueprints().find((b: any) => b.slug === verticalSlug);
+  return bp?.modelo_negocio === 'servico_unico';
+}
+
 // Painel da loja (LOJISTA) editando a própria landing — Fix de produção 11.
 // Carlos: o Rastreamento não tem "Catálogo" (não é um negócio de produto),
 // então em vez de deixar essa aba genérica lá sem sentido, a loja única do
-// módulo (aguia-gestao-veicular) ganha uma aba "Landing Page" no lugar,
-// editando a própria landing (vertical_slug = a da própria loja) sem passar
-// pelo painel do SuperAdmin. Restrito a quem já é da vertical 'rastreamento'
-// — outras verticais são multiloja, e deixar qualquer lojista editar a
-// landing (compartilhada por todas as lojas daquele módulo) seria arriscado.
+// módulo ganha uma aba "Landing Page" no lugar, editando a própria landing
+// (vertical_slug = a da própria loja) sem passar pelo painel do SuperAdmin.
+// Restrito a módulos "serviço único" — outras verticais são multiloja, e
+// deixar qualquer lojista editar a landing (compartilhada por todas as
+// lojas daquele módulo) seria arriscado.
 router.get('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, res) => {
   try {
     const eid = (req.user as TokenPayload).establishmentId;
     if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
     const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
     const verticalSlug = estab.rows[0]?.vertical_slug;
-    if (verticalSlug !== RASTREAMENTO_VERTICAL_SLUG) {
-      return res.status(403).json({ error: 'A edição da landing pelo painel da loja ainda só está disponível pro módulo de Rastreamento.' });
+    if (!isServicoUnico(verticalSlug)) {
+      return res.status(403).json({ error: 'A edição da landing pelo painel da loja só está disponível pra módulos de serviço único.' });
     }
     const bp = listBlueprints().find((b: any) => b.slug === verticalSlug);
     const r = await pool.query(`SELECT * FROM vertical_landings WHERE vertical_slug=$1`, [verticalSlug]);
@@ -348,8 +356,8 @@ router.put('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, 
     if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
     const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
     const verticalSlug = estab.rows[0]?.vertical_slug;
-    if (verticalSlug !== RASTREAMENTO_VERTICAL_SLUG) {
-      return res.status(403).json({ error: 'A edição da landing pelo painel da loja ainda só está disponível pro módulo de Rastreamento.' });
+    if (!isServicoUnico(verticalSlug)) {
+      return res.status(403).json({ error: 'A edição da landing pelo painel da loja só está disponível pra módulos de serviço único.' });
     }
     const row = await upsertVerticalLanding(verticalSlug, req.body);
     res.json(row);
@@ -578,15 +586,17 @@ router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
 // não automatizamos isso aqui pra não duplicar aquela lógica com dados
 // parciais do formulário de lead (falta senha, cidade/estado etc.).
 //
-// Exceção — Rastreamento (Fix de produção 8): o Rastreamento não é multiloja,
-// é uma única loja de gestão veicular gerenciando muitos clientes. Então
-// converter um lead de Rastreamento não cria uma loja nova — cria um cliente
-// (agenda_clientes) dentro da loja única (`aguia-gestao-veicular`), com login
-// (findOrCreateClienteUser, mesmo mecanismo do Fase 14) pra ele poder acessar
-// o painel de cliente e completar a senha por "Esqueci minha senha" no
-// primeiro acesso. O veículo (placa, modelo, ano, cor — o que vier do
-// formulário) vira um agenda_frota vinculado a esse cliente; o que o
-// formulário não coleta (IMEI, data de instalação) fica pro onboarding.
+// Exceção — módulos "serviço único" (Fix de produção 8, generalizado no Fix
+// 12): esses módulos não são multiloja, existe uma única loja gerenciando
+// muitos clientes (hoje só o Rastreamento se qualifica — ver `modelo_negocio`
+// no blueprint). Então converter um lead desses não cria uma loja nova — cria
+// um cliente (agenda_clientes) dentro da loja única daquele módulo (achada
+// dinamicamente por `vertical_slug`, não por um slug de loja fixo no código),
+// com login (findOrCreateClienteUser, mesmo mecanismo do Fase 14) pra ele
+// poder acessar o painel de cliente e completar a senha por "Esqueci minha
+// senha" no primeiro acesso. Dados de veículo (placa, modelo, ano, cor) são
+// específicos do formulário do Rastreamento — viram um agenda_frota só nesse
+// caso; um módulo de serviço único diferente não teria esses campos.
 router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res) => {
   try {
     const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
@@ -600,16 +610,23 @@ router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res)
     let clienteId: string | null = null;
     let loginDisponivel = false;
 
-    if (lead.vertical_slug === 'rastreamento') {
+    if (isServicoUnico(lead.vertical_slug)) {
       // Garante que agenda_clientes (e o CHECK de origem atualizado) já
       // existam — essa migração normalmente só roda no primeiro request a
       // /agenda/*, e essa rota não passa por lá.
       await ensureAgendaTables();
 
-      const estab = await pool.query(`SELECT id FROM establishments WHERE slug=$1`, [RASTREAMENTO_SINGLETON_SLUG]);
+      // A loja desse módulo é achada pelo próprio vertical_slug (um módulo
+      // "serviço único" só tem uma, por definição) — não por um slug de loja
+      // fixo no código, o que deixa isso pronto pra qualquer módulo futuro
+      // marcado como serviço único, sem precisar tocar nesse arquivo de novo.
+      const estab = await pool.query(
+        `SELECT id FROM establishments WHERE vertical_slug=$1 ORDER BY created_at ASC LIMIT 1`,
+        [lead.vertical_slug]
+      );
       if (!estab.rows.length) {
         return res.status(500).json({
-          error: `Loja de Rastreamento ("${RASTREAMENTO_SINGLETON_SLUG}") não encontrada. Confirme o slug antes de converter.`,
+          error: `Nenhuma loja encontrada pro módulo "${lead.vertical_slug}". Confirme se a loja única desse módulo já foi criada antes de converter.`,
         });
       }
       const eid = estab.rows[0].id;
@@ -622,7 +639,7 @@ router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res)
            (establishment_id, nome, telefone, email, cpf_cnpj, observacoes, origem, user_id,
             endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
             data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
-         VALUES ($1,$2,$3,$4,$5,$6,'landing_rastreamento',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         VALUES ($1,$2,$3,$4,$5,$6,'landing_modulo',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          RETURNING id`,
         [
           eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null,
@@ -634,10 +651,11 @@ router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res)
       );
       clienteId = clienteRes.rows[0].id;
 
-      // Veículo — só cria se algum dado do veículo veio preenchido no lead
-      // (placa é opcional de propósito: às vezes o cliente ainda não tem
-      // placa/rastreador instalado no momento da contratação).
-      if (lead.veiculo_placa || lead.veiculo_modelo || lead.veiculo_ano || lead.veiculo_cor) {
+      // Veículo — específico do formulário do Rastreamento (placa/modelo/
+      // ano/cor não existem no formulário de outro módulo de serviço único).
+      // Só cria se algum dado veio preenchido (placa é opcional de propósito:
+      // às vezes o cliente ainda não tem placa/rastreador instalado).
+      if (lead.vertical_slug === 'rastreamento' && (lead.veiculo_placa || lead.veiculo_modelo || lead.veiculo_ano || lead.veiculo_cor)) {
         const anoNum = lead.veiculo_ano ? parseInt(lead.veiculo_ano, 10) : null;
         await pool.query(
           `INSERT INTO agenda_frota (establishment_id, cliente_id, cliente_nome, cliente_telefone, placa, modelo, ano, cor, status)

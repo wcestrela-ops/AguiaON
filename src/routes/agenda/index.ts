@@ -277,8 +277,12 @@ export async function ensureTables() {
   // Fica aqui, não em landings.ts, porque essa migração roda logo depois da
   // CREATE TABLE acima, no mesmo arquivo — sem depender de ordem entre
   // migrações de arquivos diferentes.
+  // 'landing_rastreamento' era o valor original (Fix 8); generalizado pra
+  // 'landing_modulo' no Fix de produção 12 (vale pra qualquer módulo
+  // "serviço único", não só Rastreamento) — mantido na lista por segurança,
+  // caso algum registro de teste já tenha usado o valor antigo.
   await pool.query(`ALTER TABLE agenda_clientes DROP CONSTRAINT IF EXISTS agenda_clientes_origem_check`);
-  await pool.query(`ALTER TABLE agenda_clientes ADD CONSTRAINT agenda_clientes_origem_check CHECK (origem IN ('manual','asaas_sync','landing_rastreamento'))`);
+  await pool.query(`ALTER TABLE agenda_clientes ADD CONSTRAINT agenda_clientes_origem_check CHECK (origem IN ('manual','asaas_sync','landing_rastreamento','landing_modulo'))`);
   // Fix de produção 9 — endereço, data de nascimento e contato de emergência
   // coletados no formulário "Contratar" da landing (routes/landings.ts), pra
   // já vir preenchido no cadastro do cliente sem precisar redigitar. Dados

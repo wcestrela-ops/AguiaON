@@ -49,6 +49,13 @@ export interface Blueprint {
   servicos_padrao: ServicoBlueprint[];
   tipos_profissionais: string[];
   business_config: Record<string, any>;
+  // 'marketplace' (padrão, implícito se omitido): várias lojas independentes
+  // usam esse módulo, cada uma com o próprio catálogo/vitrine (Delivery,
+  // Agenda, Academia...). 'servico_unico': só existe UMA loja desse módulo,
+  // operada pela própria AguiaON, gerindo clientes finais direto (caso do
+  // Rastreamento) — habilita a loja a editar a própria landing pelo painel
+  // dela (em vez do Catálogo) e a conversão automática de lead em cliente.
+  modelo_negocio?: 'marketplace' | 'servico_unico';
 }
 
 export const BLUEPRINTS: Record<string, Blueprint> = {
@@ -156,6 +163,7 @@ export const BLUEPRINTS: Record<string, Blueprint> = {
       aceita_agendamento: false,
       campos_veiculo: ['placa', 'modelo', 'ano', 'cor', 'data_instalacao', 'imei_rastreador'],
     },
+    modelo_negocio: 'servico_unico',
   },
 
   personal_trainer: {
@@ -320,6 +328,7 @@ export function listBlueprints() {
     icon:        bp.icon,
     fa_icon:     bp.fa_icon,
     cor_destaque: bp.cor_destaque,
+    modelo_negocio: bp.modelo_negocio || 'marketplace',
   }));
 }
 

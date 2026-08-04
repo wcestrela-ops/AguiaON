@@ -392,6 +392,12 @@ router.get('/me', async (req, res) => {
       }
     }
 
+    // 'marketplace' (várias lojas independentes) x 'servico_unico' (uma loja
+    // só, operada pela AguiaON — caso do Rastreamento) — o painel usa isso
+    // pra decidir se mostra a aba de Landing Page no lugar do Catálogo.
+    const bp = listBlueprints().find((b: any) => b.slug === establishment.vertical_slug);
+    establishment.modelo_negocio = bp?.modelo_negocio || 'marketplace';
+
     res.json(establishment);
   } catch (err: any) {
     // Só cai aqui se a busca das colunas CRÍTICAS falhar de verdade — nesse
