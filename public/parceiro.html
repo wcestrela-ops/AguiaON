@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Águia-ON | Comece Agora</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#6366f1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    ::-webkit-scrollbar { width:5px }
+    ::-webkit-scrollbar-track { background:#020617 }
+    ::-webkit-scrollbar-thumb { background:#1e293b; border-radius:10px }
+    body { background:#020617; color:#cbd5e1; font-family:'Inter',sans-serif }
+    input, textarea, select {
+      background:#0f172a !important; border:1px solid #1e293b !important;
+      color:#cbd5e1 !important; transition:all .3s; border-radius:12px;
+    }
+    input:focus, textarea:focus { border-color:#6366f1 !important; outline:none; box-shadow:0 0 0 1px rgba(99,102,241,.2) }
+
+    /* Passo */
+    .step { display:none }
+    .step.active { display:block; animation:fadeUp .4s ease forwards }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Cards de seleção */
+    .sel-card {
+      cursor:pointer; transition:all .2s; border:2px solid #1e293b;
+      border-radius:20px; background:#0f172a; position:relative;
+    }
+    .sel-card:hover { border-color:#6366f1; background:rgba(99,102,241,.06); transform:translateY(-3px) }
+    .sel-card.selected { border-color:#6366f1 !important; background:rgba(99,102,241,.12) !important }
+    .sel-card.selected .check-dot { opacity:1 }
+    .check-dot {
+      opacity:0; transition:opacity .2s; position:absolute; top:10px; right:10px;
+      width:20px; height:20px; background:#6366f1; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+    }
+
+    /* Progress bar */
+    .progress-step { transition:all .3s }
+    .progress-step.done { background:#6366f1 }
+    .progress-step.active { background:#6366f1 }
+    .progress-step.pending { background:#1e293b }
+
+    /* Segmento expandido */
+    .module-panel { overflow:hidden; max-height:0; transition:max-height .35s ease }
+    .module-panel.open { max-height:1000px }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- HEADER -->
+<header class="border-b border-slate-800/50 sticky top-0 z-50 bg-[#020617]/95 backdrop-blur">
+  <div class="max-w-2xl mx-auto px-5 py-4 flex items-center justify-between">
+    <a href="/" class="font-black text-white text-2xl tracking-tighter">AG<span class="text-indigo-500">ON</span></a>
+    <a href="/login" class="text-slate-500 hover:text-white text-sm transition-colors">
+      Já tenho conta <i class="fa fa-arrow-right ml-1 text-xs"></i>
+    </a>
+  </div>
+</header>
+
+<div class="max-w-2xl mx-auto px-5 py-10">
+
+  <!-- HERO -->
+  <div class="text-center mb-10">
+    <div class="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full mb-4">
+      <i class="fa fa-rocket"></i> Cadastro Gratuito
+    </div>
+    <h1 class="text-white text-3xl md:text-4xl font-black tracking-tight">
+      Configure seu negócio<br><span class="text-indigo-400">em minutos</span>
+    </h1>
+    <p class="text-slate-500 mt-3 text-sm">Sem cartão de crédito. Sem aprovação. Comece agora.</p>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="flex items-center gap-2 mb-8" id="progress-bar">
+    <div class="progress-step done w-8 h-1.5 rounded-full" data-step="1"></div>
+    <div class="progress-step pending flex-1 h-1.5 rounded-full" data-step="2"></div>
+    <div class="progress-step pending flex-1 h-1.5 rounded-full" data-step="3"></div>
+    <span id="progress-label" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest shrink-0 ml-1">Passo 1/3</span>
+  </div>
+
+  <!-- ══════════════════════════════ PASSO 1: MÓDULO + SEGMENTO ══ -->
+  <div id="step-1" class="step active space-y-6">
+    <div>
+      <h2 class="text-white font-black text-lg">Qual é o seu tipo de negócio?</h2>
+      <p class="text-slate-500 text-sm mt-1">O sistema será configurado automaticamente para você.</p>
+    </div>
+
+    <div id="modules-list" class="space-y-3">
+      <!-- Carregado dinamicamente -->
+      <div class="sel-card p-5 animate-pulse"><div class="h-6 w-32 bg-slate-800 rounded"></div></div>
+      <div class="sel-card p-5 animate-pulse"><div class="h-6 w-40 bg-slate-800 rounded"></div></div>
+      <div class="sel-card p-5 animate-pulse"><div class="h-6 w-28 bg-slate-800 rounded"></div></div>
+    </div>
+
+    <div id="step1-error" class="hidden text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3"></div>
+
+    <button onclick="goStep(2)" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20">
+      Continuar <i class="fa fa-arrow-right ml-2"></i>
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════ PASSO 2: DADOS DO NEGÓCIO ══ -->
+  <div id="step-2" class="step space-y-5">
+    <div>
+      <h2 class="text-white font-black text-lg">Dados do seu negócio</h2>
+      <p class="text-slate-500 text-sm mt-1">Informações que aparecerão no seu perfil público.</p>
+    </div>
+
+    <div class="space-y-3">
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Nome do Estabelecimento *</label>
+        <input id="f-business" type="text" placeholder="Ex: Barbearia do João" class="w-full p-4 text-sm" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Cidade *</label>
+          <input id="f-city" type="text" placeholder="São Paulo" class="w-full p-4 text-sm" />
+        </div>
+        <div>
+          <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Estado</label>
+          <input id="f-state" type="text" placeholder="SP" maxlength="2" class="w-full p-4 text-sm" />
+        </div>
+      </div>
+    </div>
+
+    <div id="step2-error" class="hidden text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3"></div>
+
+    <div class="flex gap-3">
+      <button onclick="goStep(1)" class="px-6 py-4 rounded-2xl text-slate-500 hover:text-white font-black text-sm transition-colors">
+        <i class="fa fa-arrow-left mr-1"></i> Voltar
+      </button>
+      <button onclick="goStep(3)" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20">
+        Continuar <i class="fa fa-arrow-right ml-2"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ PASSO 3: DADOS DE ACESSO ══ -->
+  <div id="step-3" class="step space-y-5">
+    <div>
+      <h2 class="text-white font-black text-lg">Crie seu acesso</h2>
+      <p class="text-slate-500 text-sm mt-1">Seus dados para entrar no painel.</p>
+    </div>
+
+    <div class="space-y-3">
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Seu nome *</label>
+        <input id="f-owner" type="text" placeholder="Nome completo" class="w-full p-4 text-sm" />
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">WhatsApp *</label>
+        <input id="f-whatsapp" type="tel" placeholder="(11) 99999-9999" class="w-full p-4 text-sm" />
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">E-mail *</label>
+        <input id="f-email" type="email" placeholder="seu@email.com" class="w-full p-4 text-sm" />
+      </div>
+      <div>
+        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1 ml-1">Senha *</label>
+        <div class="relative">
+          <input id="f-password" type="password" placeholder="Mínimo 6 caracteres" class="w-full p-4 text-sm pr-12" />
+          <button type="button" onclick="togglePass()" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+            <i id="pass-eye" class="fa fa-eye text-sm"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resumo do que foi selecionado -->
+    <div id="summary-box" class="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 text-sm space-y-1">
+      <p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Resumo</p>
+      <p class="text-slate-300"><span class="text-slate-500">Segmento:</span> <span id="sum-segment" class="text-white font-bold"></span></p>
+      <p class="text-slate-300"><span class="text-slate-500">Negócio:</span> <span id="sum-business" class="text-white font-bold"></span></p>
+    </div>
+
+    <div id="step3-error" class="hidden text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3"></div>
+
+    <div class="flex gap-3">
+      <button onclick="goStep(2)" class="px-6 py-4 rounded-2xl text-slate-500 hover:text-white font-black text-sm transition-colors">
+        <i class="fa fa-arrow-left mr-1"></i> Voltar
+      </button>
+      <button onclick="submit()" id="submit-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20">
+        <i class="fa fa-rocket mr-2"></i> Criar minha conta
+      </button>
+    </div>
+
+    <!-- LGPD: consentimentos explícitos do lojista -->
+    <div class="space-y-3 bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+      <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Conformidade LGPD obrigatória</p>
+
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input id="consent-privacy" type="checkbox" class="mt-0.5 w-4 h-4 accent-indigo-500 shrink-0 cursor-pointer">
+        <span class="text-slate-400 text-xs leading-relaxed">
+          Li e aceito a
+          <a href="/privacidade" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">Política de Privacidade</a>
+          e os
+          <a href="/privacidade#termos" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">Termos de Uso</a>
+          da plataforma Águia-ON.
+        </span>
+      </label>
+
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input id="consent-dpa" type="checkbox" class="mt-0.5 w-4 h-4 accent-indigo-500 shrink-0 cursor-pointer">
+        <span class="text-slate-400 text-xs leading-relaxed">
+          Li e aceito o
+          <a href="/privacidade#dpa" target="_blank" class="text-indigo-400 underline hover:text-indigo-300">Acordo de Processamento de Dados (DPA)</a>,
+          comprometendo-me a tratar os dados dos meus clientes conforme a LGPD (Lei 13.709/2018).
+        </span>
+      </label>
+    </div>
+
+    <div id="consent-error" class="hidden text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3"></div>
+  </div>
+
+  <!-- ══════════════════════════════ SUCESSO ══ -->
+  <div id="step-success" class="step text-center py-10 space-y-6">
+    <div class="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+      <i class="fa fa-check text-emerald-400 text-3xl"></i>
+    </div>
+    <div>
+      <h2 class="text-white text-2xl font-black">Conta criada!</h2>
+      <p class="text-slate-400 text-sm mt-2">Entrando no seu painel...</p>
+    </div>
+    <div class="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
+  </div>
+
+</div>
+
+<script>
+  let selectedSegment = null; // { slug, label, icon, cor_destaque }
+  let modulesData = [];       // [{ module_slug, module_label, module_icon, segments: [...] }]
+
+  // Carregar configurações públicas
+  fetch('/public/settings').then(r => r.json()).then(settings => {
+      if (settings.pwa_name) document.title = `${settings.pwa_name} | Comece Agora`;
+      if (settings.pwa_theme_color) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', settings.pwa_theme_color);
+      }
+  }).catch(() => {});
+
+  // ── Carrega módulos/segmentos ──────────────────────────────
+  async function loadModules() {
+    try {
+      const res  = await fetch('/public/segments');
+      modulesData = await res.json();
+      renderModules();
+    } catch (e) {
+      document.getElementById('modules-list').innerHTML =
+        '<p class="text-red-400 text-sm text-center py-4">Erro ao carregar segmentos. Tente novamente.</p>';
+    }
+  }
+
+  function renderModules() {
+    const list = document.getElementById('modules-list');
+    if (!modulesData.length) {
+      list.innerHTML = '<p class="text-slate-600 text-sm text-center py-4">Nenhum segmento disponível.</p>';
+      return;
+    }
+
+    list.innerHTML = modulesData.map(mod => `
+      <div class="border border-slate-800 rounded-2xl overflow-hidden">
+        <!-- Cabeçalho do módulo (clicável para expandir) -->
+        <button onclick="toggleModule('${mod.module_slug}')"
+                class="w-full flex items-center justify-between px-5 py-4 bg-slate-900/50 hover:bg-slate-900 transition-colors">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">${mod.module_icon}</span>
+            <div class="text-left">
+              <p class="text-white font-black text-sm">${mod.module_label}</p>
+              <p class="text-slate-500 text-xs">${mod.segments.length} segmento${mod.segments.length > 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <i id="arrow-${mod.module_slug}" class="fa fa-chevron-down text-slate-500 transition-transform text-sm"></i>
+        </button>
+
+        <!-- Segmentos do módulo -->
+        <div id="panel-${mod.module_slug}" class="module-panel">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-[#020617]">
+            ${mod.segments.map(seg => `
+              <div onclick="selectSegment(${JSON.stringify(seg).replace(/"/g,'&quot;')})"
+                   id="seg-card-${seg.slug}"
+                   class="sel-card p-4">
+                <div class="check-dot"><i class="fa fa-check text-white text-[9px]"></i></div>
+                <div class="flex items-center gap-3 mb-1">
+                  <span class="text-2xl">${seg.icon}</span>
+                  <p class="text-white font-black text-sm leading-tight">${seg.label}</p>
+                </div>
+                ${seg.descricao ? `<p class="text-slate-500 text-xs mt-1 leading-snug">${seg.descricao}</p>` : ''}
+                ${seg.features && seg.features.length ? `
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    ${seg.features.slice(0,4).map((f) => `<span class="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded-full">${f}</span>`).join('')}
+                    ${seg.features.length > 4 ? `<span class="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-500 rounded-full">+${seg.features.length - 4}</span>` : ''}
+                  </div>` : ''}
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function toggleModule(slug) {
+    const panel = document.getElementById(`panel-${slug}`);
+    const arrow = document.getElementById(`arrow-${slug}`);
+    const isOpen = panel.classList.contains('open');
+
+    // Fecha todos
+    document.querySelectorAll('.module-panel').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('[id^="arrow-"]').forEach(a => a.style.transform = '');
+
+    if (!isOpen) {
+      panel.classList.add('open');
+      arrow.style.transform = 'rotate(180deg)';
+    }
+  }
+
+  function selectSegment(seg) {
+    // Remove seleção anterior
+    document.querySelectorAll('.sel-card').forEach(c => c.classList.remove('selected'));
+    // Seleciona novo
+    document.getElementById(`seg-card-${seg.slug}`)?.classList.add('selected');
+    selectedSegment = seg;
+    document.getElementById('step1-error').classList.add('hidden');
+  }
+
+  // ── Navegação entre passos ──────────────────────────────────
+  function goStep(n) {
+    // Validações
+    if (n === 2) {
+      if (!selectedSegment) {
+        showError('step1-error', 'Selecione um segmento para continuar.');
+        return;
+      }
+    }
+    if (n === 3) {
+      const biz = document.getElementById('f-business').value.trim();
+      const city = document.getElementById('f-city').value.trim();
+      if (!biz || !city) {
+        showError('step2-error', 'Preencha o nome do negócio e a cidade.');
+        return;
+      }
+      // Atualiza resumo
+      document.getElementById('sum-segment').textContent = `${selectedSegment.icon} ${selectedSegment.label}`;
+      document.getElementById('sum-business').textContent = biz;
+    }
+
+    // Troca passo
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`step-${n}`)?.classList.add('active');
+    updateProgress(n);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function updateProgress(step) {
+    const total = 3;
+    document.getElementById('progress-label').textContent = `Passo ${step}/${total}`;
+    document.querySelectorAll('.progress-step[data-step]').forEach(el => {
+      const s = parseInt(el.dataset.step);
+      el.className = 'progress-step h-1.5 rounded-full ' +
+        (s < step ? 'done flex-1' : s === step ? 'active flex-1' : 'pending flex-1');
+    });
+    // Primeira bolinha tem tamanho fixo
+    const first = document.querySelector('.progress-step[data-step="1"]');
+    if (first) first.classList.replace('flex-1', 'w-8');
+  }
+
+  function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  function togglePass() {
+    const input = document.getElementById('f-password');
+    const icon  = document.getElementById('pass-eye');
+    if (input.type === 'password') {
+      input.type = 'text';
+      icon.className = 'fa fa-eye-slash text-sm';
+    } else {
+      input.type = 'password';
+      icon.className = 'fa fa-eye text-sm';
+    }
+  }
+
+  // ── Submit final ────────────────────────────────────────────
+  async function submit() {
+    const owner    = document.getElementById('f-owner').value.trim();
+    const whatsapp = document.getElementById('f-whatsapp').value.trim();
+    const email    = document.getElementById('f-email').value.trim();
+    const password = document.getElementById('f-password').value;
+    const business = document.getElementById('f-business').value.trim();
+    const city     = document.getElementById('f-city').value.trim();
+    const state    = document.getElementById('f-state').value.trim();
+
+    const consentPrivacy = document.getElementById('consent-privacy')?.checked;
+    const consentDpa     = document.getElementById('consent-dpa')?.checked;
+
+    if (!owner || !password || (!whatsapp && !email)) {
+      showError('step3-error', 'Preencha seu nome, contato e senha.');
+      return;
+    }
+    if (password.length < 6) {
+      showError('step3-error', 'Senha deve ter ao menos 6 caracteres.');
+      return;
+    }
+    if (!consentPrivacy) {
+      showError('step3-error', 'Você precisa aceitar a Política de Privacidade e os Termos de Uso.');
+      document.getElementById('consent-error')?.classList.remove('hidden');
+      return;
+    }
+    if (!consentDpa) {
+      showError('step3-error', 'Você precisa aceitar o Acordo de Processamento de Dados (DPA) para operar como lojista na plataforma.');
+      return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i> Criando conta...';
+    document.getElementById('step3-error').classList.add('hidden');
+
+    try {
+      const res = await fetch('/public/register/lojista', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          business_name: business,
+          owner_name: owner,
+          email, whatsapp, password,
+          city, state,
+          segment_slug: selectedSegment?.slug || 'generico',
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError('step3-error', data.error || 'Erro ao criar conta.');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-rocket mr-2"></i> Criar minha conta';
+        return;
+      }
+
+      // Salva token e redireciona
+      localStorage.setItem('ag_token', data.token);
+      localStorage.removeItem('client_token');
+      localStorage.removeItem('admin_token');
+
+      // Registra consentimentos LGPD (Política + DPA) sem bloquear fluxo
+      const userId = data.user?.id || whatsapp || email;
+      fetch('/auth/lgpd-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, event: 'LOJISTA_REGISTER', version: '1.0' }),
+      }).catch(() => {});
+      fetch('/auth/lgpd-consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, event: 'LOJISTA_DPA', version: '1.0' }),
+      }).catch(() => {});
+
+      // Mostra tela de sucesso e redireciona
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById('step-success').classList.add('active');
+      document.getElementById('progress-bar').style.opacity = '0';
+
+      setTimeout(() => { window.location.href = '/loja'; }, 1800);
+    } catch (e) {
+      showError('step3-error', 'Erro de conexão. Tente novamente.');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-rocket mr-2"></i> Criar minha conta';
+    }
+  }
+
+  // Abre o primeiro módulo automaticamente ao carregar
+  loadModules().then(() => {
+    if (modulesData.length > 0) toggleModule(modulesData[0].module_slug);
+  });
+</script>
+</body>
+</html>

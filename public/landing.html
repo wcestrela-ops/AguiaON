@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AguiaON</title>
+  <meta id="meta-description" name="description" content="Plataforma AguiaON">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root { --accent: #6366f1; }
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+    .card { background: #1e293b; border: 1px solid #334155; }
+    .btn-primary { background: var(--accent); color: #fff; font-weight: 700; transition: filter .15s; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .hero-gradient { background: radial-gradient(ellipse at top, color-mix(in srgb, var(--accent) 25%, transparent) 0%, #0f172a 60%); }
+    .step-num { width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 800; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <div id="loading" class="min-h-screen flex items-center justify-center">
+    <i class="fa fa-spinner fa-spin text-3xl text-slate-500"></i>
+  </div>
+
+  <div id="not-found" class="hidden min-h-screen flex flex-col items-center justify-center gap-4 text-center p-6">
+    <p class="text-slate-400">Essa página ainda não está disponível.</p>
+    <a href="/marketplace" class="btn-primary px-5 py-2.5 rounded-lg text-sm">Ver lojas na plataforma</a>
+  </div>
+
+  <div id="content" class="hidden">
+
+    <!-- top bar -->
+    <header class="fixed top-0 inset-x-0 z-40 h-14 flex items-center px-4 md:px-8"
+            style="background:rgba(15,23,42,.9);backdrop-filter:blur(8px);border-bottom:1px solid #1e293b">
+      <div class="font-black text-white text-lg tracking-tighter">AG<span style="color:var(--accent)">ON</span></div>
+    </header>
+
+    <!-- hero -->
+    <section class="hero-gradient pt-28 pb-16 px-5 md:px-8">
+      <div class="max-w-3xl mx-auto text-center">
+        <h1 id="headline" class="text-3xl md:text-5xl font-black text-white leading-tight"></h1>
+        <p id="subheadline" class="text-slate-400 text-base md:text-lg mt-4 max-w-xl mx-auto"></p>
+
+        <div id="hero-media" class="mt-8 rounded-2xl overflow-hidden border border-slate-700 hidden max-w-xl mx-auto"></div>
+
+        <div class="mt-8">
+          <button id="cta-btn" class="btn-primary px-7 py-3.5 rounded-xl text-base inline-flex items-center gap-2">
+            <span id="cta-label">Saiba mais</span>
+            <i class="fa fa-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- benefícios -->
+    <section id="benefits-section" class="hidden px-5 md:px-8 py-14">
+      <div class="max-w-4xl mx-auto">
+        <div id="benefits-grid" class="grid sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+      </div>
+    </section>
+
+    <!-- como funciona -->
+    <section id="steps-section" class="hidden px-5 md:px-8 py-14" style="background:#0b1220">
+      <div class="max-w-2xl mx-auto">
+        <h2 class="text-xl font-black text-white text-center mb-8">Como funciona</h2>
+        <div id="steps-list" class="space-y-5"></div>
+      </div>
+    </section>
+
+    <!-- cta final -->
+    <section class="px-5 md:px-8 py-16 text-center">
+      <button id="cta-btn-2" class="btn-primary px-7 py-3.5 rounded-xl text-base inline-flex items-center gap-2">
+        <span id="cta-label-2">Saiba mais</span>
+        <i class="fa fa-arrow-right"></i>
+      </button>
+    </section>
+
+    <footer class="text-center text-slate-600 text-xs py-8 border-t border-slate-800">
+      Uma plataforma AguiaON — <a href="/marketplace" class="underline">ver todas as lojas</a>
+    </footer>
+  </div>
+
+<script>
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let landing = null;
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+async function handleCta() {
+  if (!landing) return;
+  const type = landing.cta_type;
+
+  if (type === 'whatsapp' && landing.cta_whatsapp) {
+    const phone = String(landing.cta_whatsapp).replace(/\D/g, '');
+    const text = encodeURIComponent(`Olá! Vim pela página de ${landing.headline || 'AguiaON'} e quero saber mais.`);
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+    return;
+  }
+
+  if (type === 'pwa_install') {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+    } else {
+      window.location.href = '/marketplace' + (landing.vertical_slug ? `?vertical_slug=${encodeURIComponent(landing.vertical_slug)}` : '');
+    }
+    return;
+  }
+
+  if (type === 'custom_url' && landing.cta_url) {
+    window.open(landing.cta_url, '_blank');
+    return;
+  }
+
+  // 'marketplace' ou fallback sem configuração específica
+  window.location.href = '/marketplace' + (landing.vertical_slug ? `?vertical_slug=${encodeURIComponent(landing.vertical_slug)}` : '');
+}
+
+function renderHeroMedia() {
+  const box = document.getElementById('hero-media');
+  if (landing.hero_video_url) {
+    const url = landing.hero_video_url;
+    let embed = '';
+    const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/);
+    if (yt) {
+      embed = `<iframe class="w-full aspect-video" src="https://www.youtube.com/embed/${esc(yt[1])}" frameborder="0" allowfullscreen></iframe>`;
+    } else {
+      embed = `<video class="w-full" src="${esc(url)}" controls playsinline></video>`;
+    }
+    box.innerHTML = embed;
+    box.classList.remove('hidden');
+  } else if (landing.hero_image_url) {
+    box.innerHTML = `<img src="${esc(landing.hero_image_url)}" class="w-full" alt="">`;
+    box.classList.remove('hidden');
+  }
+}
+
+function renderBenefits() {
+  const benefits = landing.benefits || [];
+  if (!benefits.length) return;
+  document.getElementById('benefits-grid').innerHTML = benefits.map(b => `
+    <div class="card rounded-xl p-5">
+      <div class="text-2xl mb-2">${esc(b.icon || '✅')}</div>
+      <p class="text-white font-bold text-sm mb-1">${esc(b.title || '')}</p>
+      <p class="text-slate-400 text-sm">${esc(b.text || '')}</p>
+    </div>`).join('');
+  document.getElementById('benefits-section').classList.remove('hidden');
+}
+
+function renderSteps() {
+  const steps = landing.steps || [];
+  if (!steps.length) return;
+  document.getElementById('steps-list').innerHTML = steps.map((s, i) => `
+    <div class="flex items-start gap-4">
+      <div class="step-num flex items-center justify-center shrink-0">${i + 1}</div>
+      <div>
+        <p class="text-white font-bold text-sm">${esc(s.title || '')}</p>
+        <p class="text-slate-400 text-sm mt-0.5">${esc(s.text || '')}</p>
+      </div>
+    </div>`).join('');
+  document.getElementById('steps-section').classList.remove('hidden');
+}
+
+async function init() {
+  try {
+    const previewSlug = new URLSearchParams(window.location.search).get('preview_slug');
+    let res;
+    if (previewSlug) {
+      // Modo pré-visualização (usado pelo painel do SuperAdmin) — mostra o
+      // rascunho mesmo sem estar publicado, exige o token de admin salvo no
+      // localStorage (mesma aba/origem do painel).
+      const token = localStorage.getItem('admin_token') || localStorage.getItem('ag_token') || '';
+      res = await fetch(`/public/landing/preview/${encodeURIComponent(previewSlug)}`, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+    } else {
+      res = await fetch('/public/landing/resolve');
+    }
+    if (!res.ok) throw new Error('not found');
+    landing = await res.json();
+
+    document.title = landing.seo_title || landing.headline || 'AguiaON';
+    document.getElementById('meta-description').setAttribute('content', landing.seo_description || landing.subheadline || '');
+
+    document.getElementById('headline').textContent = landing.headline || '';
+    document.getElementById('subheadline').textContent = landing.subheadline || '';
+    document.getElementById('cta-label').textContent = landing.cta_label || 'Saiba mais';
+    document.getElementById('cta-label-2').textContent = landing.cta_label || 'Saiba mais';
+
+    renderHeroMedia();
+    renderBenefits();
+    renderSteps();
+
+    document.getElementById('cta-btn').addEventListener('click', handleCta);
+    document.getElementById('cta-btn-2').addEventListener('click', handleCta);
+
+    if (previewSlug) {
+      const banner = document.createElement('div');
+      banner.className = 'fixed top-14 inset-x-0 z-50 text-center text-xs font-bold py-1.5';
+      banner.style.cssText = 'background:#eab308;color:#1e293b';
+      banner.textContent = landing.published ? 'Pré-visualização (já publicada)' : 'Pré-visualização — rascunho, ainda não publicado';
+      document.body.appendChild(banner);
+    }
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('not-found').classList.remove('hidden');
+  }
+}
+init();
+
+if (!new URLSearchParams(window.location.search).get('preview_slug') && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

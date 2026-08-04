@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acompanhar Pedido</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    .logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #f97316;
+      letter-spacing: 1px;
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    .order-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .order-number { font-size: 1.4rem; font-weight: 800; color: #f97316; }
+    .order-code   { font-size: 0.85rem; color: #94a3b8; margin-top: 2px; }
+    .store-name   { font-size: 0.9rem; color: #94a3b8; text-align: right; }
+
+    /* Timeline de status */
+    .timeline { display: flex; flex-direction: column; gap: 0; margin-bottom: 24px; }
+
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      position: relative;
+    }
+
+    .step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: 40px;
+      width: 2px;
+      height: calc(100% - 8px);
+      background: #334155;
+    }
+
+    .step.done::after   { background: #22c55e; }
+    .step.active::after { background: #334155; }
+
+    .step-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      background: #334155;
+      color: #64748b;
+      position: relative;
+      z-index: 1;
+    }
+
+    .step.done   .step-icon { background: #166534; color: #4ade80; }
+    .step.active .step-icon { background: #f97316; color: #fff; animation: pulse 1.5s infinite; }
+    .step.cancelled .step-icon { background: #7f1d1d; color: #f87171; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.4); }
+      50%       { box-shadow: 0 0 0 8px rgba(249,115,22,0); }
+    }
+
+    .step-info { padding: 8px 0 24px; }
+    .step-label { font-weight: 600; font-size: 0.95rem; }
+    .step-desc  { font-size: 0.8rem; color: #94a3b8; margin-top: 2px; }
+
+    .step.done   .step-label { color: #4ade80; }
+    .step.active .step-label { color: #f97316; }
+    .step.pending .step-label { color: #475569; }
+    .step.cancelled .step-label { color: #f87171; }
+
+    /* Detalhes do pedido */
+    .details { background: #0f172a; border-radius: 12px; padding: 16px; }
+    .details-title { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.88rem;
+      padding: 6px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #94a3b8; }
+    .detail-value { font-weight: 600; text-align: right; max-width: 60%; }
+
+    .total-row .detail-value { color: #f97316; font-size: 1rem; }
+
+    /* Estados de carregamento e erro */
+    .loading, .error {
+      text-align: center;
+      padding: 48px 0;
+      color: #94a3b8;
+    }
+    .error { color: #f87171; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #334155;
+      border-top-color: #f97316;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .refresh-hint {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #475569;
+      margin-top: 20px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-orange { background: #7c2d12; color: #fb923c; }
+    .badge-green  { background: #14532d; color: #4ade80; }
+    .badge-red    { background: #7f1d1d; color: #f87171; }
+    .badge-blue   { background: #1e3a5f; color: #60a5fa; }
+  </style>
+</head>
+<body>
+
+<div class="logo">Águia-ON Food</div>
+
+<div class="card" id="card">
+  <div class="loading">
+    <div class="spinner"></div>
+    <p>Buscando seu pedido...</p>
+  </div>
+</div>
+
+<p class="refresh-hint" id="refresh-hint" style="display:none">
+  Atualiza automaticamente a cada 30 segundos
+</p>
+
+<script>
+  const STEPS = [
+    { key: 'pending',    icon: '🕐', label: 'Aguardando confirmação', desc: 'Seu pedido chegou e aguarda aprovação' },
+    { key: 'confirmed',  icon: '✅', label: 'Confirmado',             desc: 'O restaurante confirmou seu pedido' },
+    { key: 'preparing',  icon: '👨‍🍳', label: 'Preparando',            desc: 'Seu pedido está sendo preparado' },
+    { key: 'delivering', icon: '🛵', label: 'Saiu para entrega',      desc: 'O entregador está a caminho' },
+    { key: 'delivered',  icon: '🎉', label: 'Entregue',               desc: 'Bom apetite!' },
+  ];
+  const PICKUP_STEPS = [
+    { key: 'pending',    icon: '🕐', label: 'Aguardando confirmação', desc: 'Seu pedido chegou e aguarda aprovação' },
+    { key: 'confirmed',  icon: '✅', label: 'Confirmado',             desc: 'O restaurante confirmou seu pedido' },
+    { key: 'preparing',  icon: '👨‍🍳', label: 'Preparando',            desc: 'Seu pedido está sendo preparado' },
+    { key: 'delivered',  icon: '🎉', label: 'Pronto para retirada',   desc: 'Pode vir buscar!' },
+  ];
+
+  const orderId = location.pathname.split('/').pop();
+  let lastStatus = null;
+
+  async function loadOrder() {
+    try {
+      const res = await fetch(`/delivery/orders/${orderId}/track`);
+      if (!res.ok) throw new Error('Pedido não encontrado');
+      const order = await res.json();
+      render(order);
+      document.getElementById('refresh-hint').style.display = 'block';
+      lastStatus = order.status;
+    } catch (e) {
+      document.getElementById('card').innerHTML = `
+        <div class="error">
+          <p style="font-size:2rem;margin-bottom:12px">😕</p>
+          <p>Pedido não encontrado.<br>Verifique o link recebido.</p>
+        </div>`;
+    }
+  }
+
+  function render(order) {
+    const cancelled = order.status === 'cancelled';
+    const steps = order.delivery_type === 'pickup' ? PICKUP_STEPS : STEPS;
+    const activeIdx = cancelled ? -1 : steps.findIndex(s => s.key === order.status);
+
+    const timelineHTML = cancelled
+      ? `<div class="step cancelled">
+           <div class="step-icon">❌</div>
+           <div class="step-info">
+             <div class="step-label">Pedido cancelado</div>
+             <div class="step-desc">Entre em contato com o restaurante</div>
+           </div>
+         </div>`
+      : steps.map((step, i) => {
+          const state = i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'pending';
+          return `<div class="step ${state}">
+            <div class="step-icon">${step.icon}</div>
+            <div class="step-info">
+              <div class="step-label">${step.label}</div>
+              <div class="step-desc">${step.desc}</div>
+            </div>
+          </div>`;
+        }).join('');
+
+    const payLabel = order.payment_method === 'pix' ? 'PIX'
+                   : order.payment_method === 'cartao' ? 'Cartão'
+                   : 'Na entrega';
+
+    const deliveryLabel = order.delivery_type === 'pickup' ? '🏪 Retirada na loja' : '🛵 Delivery';
+
+    const updatedAt = new Date(order.updated_at).toLocaleString('pt-BR', {
+      day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'
+    });
+
+    document.getElementById('card').innerHTML = `
+      <div class="order-header">
+        <div>
+          <div class="order-number">#${order.order_number}</div>
+          ${order.daily_code ? `<div class="order-code">${order.daily_code}</div>` : ''}
+        </div>
+        <div class="store-name">${deliveryLabel}</div>
+      </div>
+
+      <div class="timeline">${timelineHTML}</div>
+
+      <div class="details">
+        <div class="details-title">Resumo</div>
+        <div class="detail-row">
+          <span class="detail-label">Cliente</span>
+          <span class="detail-value">${order.customer_name}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Pagamento</span>
+          <span class="detail-value">${payLabel}</span>
+        </div>
+        <div class="detail-row total-row">
+          <span class="detail-label">Total</span>
+          <span class="detail-value">R$ ${Number(order.total).toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div class="detail-row" style="font-size:0.75rem;color:#475569;border:none;padding-top:12px">
+          <span>Última atualização</span>
+          <span>${updatedAt}</span>
+        </div>
+      </div>`;
+  }
+
+  // Atualização automática a cada 30s — se o status mudar recarrega visualmente
+  loadOrder();
+  setInterval(async () => {
+    try {
+      const res = await fetch(`/delivery/orders/${orderId}/track`);
+      if (!res.ok) return;
+      const order = await res.json();
+      if (order.status !== lastStatus) {
+        render(order);
+        lastStatus = order.status;
+      }
+    } catch {}
+  }, 30_000);
+</script>
+</body>
+</html>

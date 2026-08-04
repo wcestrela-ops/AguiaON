@@ -1,0 +1,8 @@
+{
+  "server_url": "https://seu-dominio.com",
+  "store_token": "COLE_AQUI_O_TOKEN_DA_LOJA",
+  "store_name": "Nome da Loja",
+  "printer_name": "",
+  "font_size": 12,
+  "copies": 1
+}

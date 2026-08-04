@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat WhatsApp — Águia-ON</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  body { background:#0f172a; color:#e2e8f0; font-family:'Segoe UI',sans-serif; }
+  ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:#1e293b; } ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+  .msg-in  { background:#1e293b; border-radius:0 12px 12px 12px; }
+  .msg-out { background:#065f46; border-radius:12px 0 12px 12px; }
+  .conv-item { transition:background .15s; }
+  .conv-item:hover, .conv-item.active { background:#1e293b; }
+  #messages-panel { scroll-behavior:smooth; }
+  .typing { display:inline-flex; gap:3px; align-items:center; }
+  .typing span { width:6px; height:6px; background:#94a3b8; border-radius:50%; animation:bounce 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay:.2s; } .typing span:nth-child(3) { animation-delay:.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+</style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+<!-- Header -->
+<header class="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center gap-3 shrink-0">
+  <a href="/loja" class="text-slate-400 hover:text-white"><i class="fa fa-arrow-left"></i></a>
+  <i class="fab fa-whatsapp text-green-400 text-xl"></i>
+  <h1 class="font-semibold text-white">Chat WhatsApp</h1>
+  <span id="conn-badge" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">Conectando…</span>
+</header>
+
+<!-- Layout principal -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- ── Sidebar: lista de conversas ── -->
+  <aside class="w-80 border-r border-slate-700 flex flex-col shrink-0">
+    <!-- Busca -->
+    <div class="p-3 border-b border-slate-700">
+      <div class="relative">
+        <i class="fa fa-search absolute left-3 top-2.5 text-slate-500 text-sm"></i>
+        <input id="search-input" type="text" placeholder="Buscar contato…"
+          class="w-full bg-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-1 focus:ring-green-500"
+          oninput="filterConversations(this.value)">
+      </div>
+    </div>
+    <!-- Lista -->
+    <div id="conv-list" class="flex-1 overflow-y-auto">
+      <div class="text-center text-slate-500 text-sm py-8">Carregando conversas…</div>
+    </div>
+  </aside>
+
+  <!-- ── Painel de mensagens ── -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+
+    <!-- Placeholder vazio -->
+    <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-slate-600">
+      <i class="fab fa-whatsapp text-6xl mb-4 text-slate-700"></i>
+      <p class="text-lg">Selecione uma conversa para começar</p>
+    </div>
+
+    <!-- Conversa ativa -->
+    <div id="chat-panel" class="hidden flex-1 flex flex-col overflow-hidden">
+
+      <!-- Header do contato -->
+      <div class="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center gap-3 shrink-0">
+        <div class="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white" id="contact-avatar">?</div>
+        <div class="flex-1 min-w-0">
+          <div id="contact-name" class="font-semibold text-white truncate">—</div>
+          <div id="contact-phone" class="text-xs text-slate-400">—</div>
+        </div>
+      </div>
+
+      <!-- Mensagens -->
+      <div id="messages-panel" class="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-950">
+        <!-- mensagens injetadas aqui -->
+      </div>
+
+      <!-- Input de envio -->
+      <div class="bg-slate-900 border-t border-slate-700 p-3 flex items-end gap-2 shrink-0">
+        <textarea id="msg-input" rows="1" placeholder="Digite uma mensagem…"
+          class="flex-1 bg-slate-800 rounded-xl px-4 py-2.5 text-sm resize-none outline-none focus:ring-1 focus:ring-green-500 max-h-32"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button onclick="sendPix()" title="Enviar código PIX"
+          class="shrink-0 w-10 h-10 rounded-full bg-yellow-600 hover:bg-yellow-500 flex items-center justify-center text-white transition-colors">
+          <i class="fa fa-qrcode text-sm"></i>
+        </button>
+        <button onclick="sendMessage()" title="Enviar"
+          class="shrink-0 w-10 h-10 rounded-full bg-green-600 hover:bg-green-500 flex items-center justify-center text-white transition-colors">
+          <i class="fa fa-paper-plane text-sm"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal PIX -->
+<div id="modal-pix" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+  <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md space-y-4">
+    <h3 class="font-semibold text-white text-lg flex items-center gap-2"><i class="fa fa-qrcode text-yellow-400"></i> Enviar Código PIX</h3>
+    <p class="text-slate-400 text-sm">Cole o código "Copia e Cola" abaixo. Ele será enviado como mensagem isolada para facilitar a cópia.</p>
+    <textarea id="pix-code-input" rows="4" placeholder="00020101021226870014br.gov.bcb.pix…"
+      class="w-full bg-slate-900 rounded-xl px-4 py-3 text-sm font-mono resize-none outline-none focus:ring-1 focus:ring-yellow-500"></textarea>
+    <div class="flex gap-3">
+      <button onclick="closePixModal()" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancelar</button>
+      <button onclick="confirmSendPix()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Enviar PIX</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API     = '';
+const token   = localStorage.getItem('ag_token') || localStorage.getItem('admin_token') || '';
+let establishment  = null;
+let waConfig       = null;
+let activePhone    = null;
+let activeName     = null;
+let allConversations = [];
+let socket         = null;
+
+// ── Inicialização ─────────────────────────────────────────────
+async function init() {
+  if (!token) { window.location.href = '/login'; return; }
+  try {
+    const r = await apiFetch('/lojista/setup/info');
+    establishment = r.establishment;
+    waConfig      = await apiFetch('/chat/config').catch(() => null);
+    await loadConversations();
+    connectSocket();
+  } catch (e) {
+    console.error('[chat] init error:', e);
+    showToast('Erro ao carregar. Verifique seu login.', 'red');
+  }
+}
+
+// ── Socket.io — recebe mensagens em tempo real ────────────────
+function connectSocket() {
+  if (!establishment?.store_token) return;
+  socket = io('/', { query: { store_token: establishment.store_token }, transports: ['websocket'] });
+
+  socket.on('connect', () => setBadge('online'));
+  socket.on('disconnect', () => setBadge('offline'));
+
+  socket.on('wa_message', (msg) => {
+    const phone = msg.from.replace('@s.whatsapp.net', '');
+    // Atualiza sidebar
+    updateConvLastMessage(phone, msg.text, msg.timestamp);
+    // Se o chat ativo for deste contato, adiciona a mensagem
+    if (phone === activePhone) {
+      appendMessage({ fromMe: msg.fromMe, text: msg.text, timestamp: msg.timestamp });
+      scrollToBottom();
+    } else if (!msg.fromMe) {
+      showToast(`📨 Nova mensagem de ${phone}`, 'green');
+    }
+  });
+}
+
+function setBadge(state) {
+  const b = document.getElementById('conn-badge');
+  if (state === 'online') { b.textContent = '● Online'; b.className = 'ml-auto text-xs px-2 py-0.5 rounded-full bg-green-900 text-green-400'; }
+  else { b.textContent = '● Offline'; b.className = 'ml-auto text-xs px-2 py-0.5 rounded-full bg-red-900 text-red-400'; }
+}
+
+// ── Conversas ─────────────────────────────────────────────────
+async function loadConversations() {
+  try {
+    allConversations = await apiFetch('/chat/conversations');
+    renderConversations(allConversations);
+  } catch (e) {
+    document.getElementById('conv-list').innerHTML = `<div class="text-center text-red-400 text-sm py-8">${e.message}</div>`;
+  }
+}
+
+function renderConversations(list) {
+  const el = document.getElementById('conv-list');
+  if (!list.length) { el.innerHTML = '<div class="text-center text-slate-500 text-sm py-8">Nenhuma conversa</div>'; return; }
+  el.innerHTML = list.map(c => `
+    <div class="conv-item px-4 py-3 cursor-pointer flex items-center gap-3 ${c.phone === activePhone ? 'active' : ''}"
+         onclick="openConversation('${c.phone}','${esc(c.name)}')" data-phone="${c.phone}" data-name="${esc(c.name)}">
+      <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
+        ${(c.name || c.phone)[0].toUpperCase()}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex justify-between items-baseline">
+          <span class="font-medium text-white text-sm truncate">${esc(c.name)}</span>
+          <span class="text-xs text-slate-500 shrink-0 ml-2">${fmtTs(c.lastTimestamp)}</span>
+        </div>
+        <div class="text-xs text-slate-400 truncate">${esc(c.lastMessage || '')}</div>
+      </div>
+      ${c.unreadCount ? `<span class="shrink-0 w-5 h-5 rounded-full bg-green-600 text-white text-xs flex items-center justify-center">${c.unreadCount}</span>` : ''}
+    </div>
+  `).join('');
+}
+
+function filterConversations(q) {
+  const filtered = q ? allConversations.filter(c =>
+    c.name.toLowerCase().includes(q.toLowerCase()) || c.phone.includes(q)
+  ) : allConversations;
+  renderConversations(filtered);
+}
+
+function updateConvLastMessage(phone, text, ts) {
+  const c = allConversations.find(x => x.phone === phone);
+  if (c) { c.lastMessage = text; c.lastTimestamp = ts; }
+  else allConversations.unshift({ phone, name: phone, lastMessage: text, lastTimestamp: ts, unreadCount: 0 });
+  allConversations.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+  renderConversations(allConversations);
+}
+
+// ── Abrir conversa ────────────────────────────────────────────
+async function openConversation(phone, name) {
+  activePhone = phone;
+  activeName  = name;
+
+  document.getElementById('empty-state').classList.add('hidden');
+  document.getElementById('chat-panel').classList.remove('hidden');
+  document.getElementById('contact-name').textContent  = name;
+  document.getElementById('contact-phone').textContent = phone;
+  document.getElementById('contact-avatar').textContent = (name || phone)[0].toUpperCase();
+
+  // Marca como ativo na sidebar
+  document.querySelectorAll('.conv-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.phone === phone);
+  });
+
+  const panel = document.getElementById('messages-panel');
+  panel.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Carregando…</div>';
+
+  try {
+    const msgs = await apiFetch(`/chat/messages/${phone}?limit=50`);
+    panel.innerHTML = '';
+    msgs.reverse().forEach(m => appendMessage(m));
+    scrollToBottom();
+  } catch (e) {
+    panel.innerHTML = `<div class="text-center text-red-400 text-sm">${e.message}</div>`;
+  }
+}
+
+// ── Renderizar mensagem ───────────────────────────────────────
+function appendMessage(m) {
+  const panel = document.getElementById('messages-panel');
+  const isOut = m.fromMe;
+  const text  = m.text || '[mídia]';
+  const time  = m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '';
+
+  const div = document.createElement('div');
+  div.className = `flex ${isOut ? 'justify-end' : 'justify-start'}`;
+  div.innerHTML = `
+    <div class="${isOut ? 'msg-out' : 'msg-in'} max-w-xs sm:max-w-sm lg:max-w-md px-3 py-2 text-sm break-words">
+      <p class="whitespace-pre-wrap">${esc(text)}</p>
+      <p class="text-xs mt-1 ${isOut ? 'text-green-300' : 'text-slate-500'} text-right">${time}</p>
+    </div>`;
+  panel.appendChild(div);
+}
+
+// ── Enviar mensagem ───────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text  = input.value.trim();
+  if (!text || !activePhone) return;
+
+  input.value = '';
+  autoResize(input);
+
+  // Otimista: mostra na tela antes da confirmação
+  appendMessage({ fromMe: true, text, timestamp: Math.floor(Date.now() / 1000) });
+  scrollToBottom();
+  updateConvLastMessage(activePhone, text, Math.floor(Date.now() / 1000));
+
+  try {
+    await apiFetch('/chat/send', { method: 'POST', body: { phone: activePhone, text } });
+  } catch (e) {
+    showToast('Erro ao enviar: ' + e.message, 'red');
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 128) + 'px'; }
+function scrollToBottom() { const p = document.getElementById('messages-panel'); p.scrollTop = p.scrollHeight; }
+
+// ── PIX Copia e Cola ──────────────────────────────────────────
+function sendPix() {
+  if (!activePhone) return;
+  document.getElementById('pix-code-input').value = '';
+  document.getElementById('modal-pix').classList.remove('hidden');
+  setTimeout(() => document.getElementById('pix-code-input').focus(), 50);
+}
+
+function closePixModal() { document.getElementById('modal-pix').classList.add('hidden'); }
+
+async function confirmSendPix() {
+  const code = document.getElementById('pix-code-input').value.trim();
+  if (!code) return;
+  closePixModal();
+
+  appendMessage({ fromMe: true, text: code, timestamp: Math.floor(Date.now() / 1000) });
+  scrollToBottom();
+
+  try {
+    await apiFetch('/chat/send', { method: 'POST', body: { phone: activePhone, text: code } });
+    showToast('✅ PIX enviado!', 'green');
+  } catch (e) {
+    showToast('Erro ao enviar PIX: ' + e.message, 'red');
+  }
+}
+
+// ── Utilitários ───────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...(opts.headers || {}) },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function fmtTs(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+}
+
+let toastTimer;
+function showToast(msg, color = 'green') {
+  clearTimeout(toastTimer);
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm font-medium shadow-lg z-50 transition-opacity'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.className = `fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm font-medium shadow-lg z-50 ${color === 'red' ? 'bg-red-700 text-white' : 'bg-green-700 text-white'}`;
+  t.style.opacity = '1';
+  toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+}
+
+// Fecha modal PIX clicando fora
+document.getElementById('modal-pix').addEventListener('click', e => { if (e.target === e.currentTarget) closePixModal(); });
+
+init();
+</script>
+</body>
+</html>

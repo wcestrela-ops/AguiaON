@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Pedido — Águia-ON</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root { --accent: #6366f1; }
+  * { box-sizing: border-box; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+
+  /* Totem: categorias fixas no topo, itens rolam abaixo */
+  .cat-pill {
+    white-space: nowrap; cursor: pointer;
+    padding: 8px 18px; border-radius: 999px;
+    font-size: .8rem; font-weight: 700;
+    border: 1px solid #334155; color: #94a3b8;
+    transition: all .18s;
+  }
+  .cat-pill.active {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  /* Cards de item maiores para toque */
+  .item-card {
+    background: #1e293b; border: 1px solid #334155;
+    border-radius: 16px; cursor: pointer;
+    transition: border-color .18s, transform .15s;
+    display: flex; flex-direction: column;
+  }
+  .item-card:active { transform: scale(.97); }
+  .item-card:hover  { border-color: var(--accent); }
+
+  /* Barra do carrinho */
+  #cart-bar {
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  #cart-bar.show { transform: translateY(0); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.8); z-index: 100;
+    align-items: center; justify-content: center;
+    padding: 16px; overflow-y: auto;
+  }
+  .modal-overlay.open { display: flex; }
+
+  /* Input */
+  .inp {
+    background: #0f172a; border: 1px solid #334155;
+    color: #e2e8f0; border-radius: 10px;
+    padding: 10px 14px; width: 100%; font-size: .9rem;
+  }
+  .inp:focus { outline: none; border-color: var(--accent); }
+
+  /* Botão principal */
+  .btn-main {
+    background: var(--accent); color: #fff;
+    border-radius: 12px; padding: 14px 28px;
+    font-weight: 700; font-size: 1rem;
+    border: none; cursor: pointer; width: 100%;
+    transition: opacity .2s;
+  }
+  .btn-main:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-main:hover:not(:disabled) { opacity: .88; }
+
+  /* Spinner */
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid #334155; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Totem: aumenta toque em mobile/tablet */
+  @media (max-width: 1024px) {
+    .item-card { min-height: 120px; }
+  }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- HEADER LOJA -->
+<header id="store-header" class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center gap-4 sticky top-0 z-30">
+  <div id="header-logo"
+       class="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-xl font-black text-slate-400 overflow-hidden flex-shrink-0">
+    <i class="fa fa-store"></i>
+  </div>
+  <div class="flex-1 min-w-0">
+    <h1 id="header-name" class="font-black text-white text-lg leading-tight truncate">Carregando...</h1>
+    <p id="header-info" class="text-xs text-slate-500"></p>
+  </div>
+  <button onclick="resetAll()"
+          class="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded-lg px-3 py-2 flex items-center gap-1 flex-shrink-0">
+    <i class="fa fa-house"></i><span class="hidden sm:inline ml-1">Início</span>
+  </button>
+</header>
+
+<!-- BARRA DE CATEGORIAS -->
+<div id="cat-bar" class="bg-slate-900/80 backdrop-blur border-b border-slate-800 px-4 py-2 sticky top-[73px] z-20 overflow-x-auto" style="scrollbar-width:none">
+  <div id="cat-list" class="flex gap-2"></div>
+</div>
+
+<!-- CATÁLOGO -->
+<main class="flex-1 px-4 py-6 pb-32 max-w-5xl w-full mx-auto" id="catalog-root">
+  <div class="text-center py-20">
+    <div class="spinner"></div>
+    <p class="text-slate-400">Carregando cardápio...</p>
+  </div>
+</main>
+
+<!-- BARRA DO CARRINHO -->
+<div id="cart-bar" class="fixed bottom-0 left-0 right-0 bg-indigo-600 shadow-[0_-8px_32px_rgba(99,102,241,.35)] z-40">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+    <div>
+      <p class="text-indigo-200 text-xs" id="cart-count">0 itens</p>
+      <p class="text-white font-black text-xl" id="cart-price">R$ 0,00</p>
+    </div>
+    <button onclick="openCheckout()"
+            class="bg-white text-indigo-600 font-black py-3 px-8 rounded-xl text-sm hover:bg-indigo-50 transition-colors flex items-center gap-2">
+      <i class="fa fa-bag-shopping"></i> Ver Pedido
+    </button>
+  </div>
+</div>
+
+<!-- MODAL DE OPCIONAIS -->
+<div id="modal-opts" class="modal-overlay">
+  <div class="bg-slate-900 rounded-2xl w-full max-w-md border border-slate-800 shadow-2xl overflow-hidden">
+    <div class="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/50">
+      <h3 id="opts-title" class="font-bold text-white">Personalizar</h3>
+      <button onclick="closeModal('modal-opts')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center">
+        <i class="fa fa-times"></i>
+      </button>
+    </div>
+    <div id="opts-body" class="p-4 space-y-4 max-h-[55vh] overflow-y-auto"></div>
+    <div class="p-4 border-t border-slate-800 bg-slate-900">
+      <div class="flex items-center gap-3 mb-3">
+        <button onclick="changeQty(-1)"
+                class="w-11 h-11 rounded-full bg-slate-700 hover:bg-slate-600 text-white font-bold text-lg flex items-center justify-center">−</button>
+        <span id="qty-display" class="text-white font-bold text-xl w-8 text-center">1</span>
+        <button onclick="changeQty(1)"
+                class="w-11 h-11 rounded-full bg-slate-700 hover:bg-slate-600 text-white font-bold text-lg flex items-center justify-center">+</button>
+        <div class="flex-1 text-right">
+          <p class="text-xs text-slate-400">Subtotal</p>
+          <p id="opts-price" class="text-emerald-400 font-black text-lg">R$ 0,00</p>
+        </div>
+      </div>
+      <button onclick="addToCart()" class="btn-main">
+        <i class="fa fa-plus mr-2"></i>Adicionar ao pedido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DE CHECKOUT -->
+<div id="modal-checkout" class="modal-overlay">
+  <div class="bg-slate-900 rounded-2xl w-full max-w-md border border-slate-800 shadow-2xl overflow-hidden">
+    <div class="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/50">
+      <h3 class="font-bold text-white">Finalizar Pedido</h3>
+      <button onclick="closeModal('modal-checkout')" class="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center">
+        <i class="fa fa-times"></i>
+      </button>
+    </div>
+    <div id="checkout-body" class="p-5 space-y-5 max-h-[75vh] overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- MODAL SUCESSO -->
+<div id="modal-success" class="modal-overlay">
+  <div class="bg-slate-900 rounded-2xl w-full max-w-sm border border-slate-800 shadow-2xl text-center p-8">
+    <div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-5 text-5xl text-emerald-400">
+      <i class="fa fa-check-circle"></i>
+    </div>
+    <h2 class="text-2xl font-black text-white mb-2">Pedido Enviado!</h2>
+    <p id="success-order" class="text-slate-400 text-sm mb-1"></p>
+    <p class="text-slate-500 text-sm mb-6">O lojista já recebeu seu pedido. Aguarde!</p>
+    <div class="w-full bg-slate-800 rounded-full h-2 mb-2">
+      <div id="reset-bar" class="bg-indigo-500 h-2 rounded-full transition-none" style="width:100%"></div>
+    </div>
+    <p class="text-slate-600 text-xs">Tela resetando em <span id="reset-count">30</span>s...</p>
+    <button onclick="resetAll()" class="btn-main mt-5">
+      <i class="fa fa-house mr-2"></i>Novo Pedido
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Estado ──────────────────────────────────────────────────────
+const params    = new URLSearchParams(location.search);
+const EST_ID    = params.get('est') || '';
+const MODE      = params.get('mode') || 'totem';
+
+let storeData      = null;
+let deliveryCfg    = null;
+let catalog        = [];
+let cart           = [];
+let pendingItem    = null;
+let pendingQty     = 1;
+let pendingOpts    = {};
+let pendingGroups  = [];
+let resetTimer     = null;
+let currentDType   = 'pickup';   // totem: padrão é retirada
+
+// ── Helpers ─────────────────────────────────────────────────────
+const fmt = v => 'R$ ' + (+v||0).toFixed(2).replace('.',',');
+const esc = s => { const d=document.createElement('div'); d.textContent=s??''; return d.innerHTML; };
+
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── Init ────────────────────────────────────────────────────────
+async function init() {
+  if (!EST_ID) {
+    document.getElementById('catalog-root').innerHTML =
+      `<div class="text-center py-20 text-slate-500"><i class="fa fa-triangle-exclamation text-4xl mb-4 text-red-400"></i><p>Link inválido — parâmetro <code>est</code> não informado.</p></div>`;
+    return;
+  }
+
+  try {
+    const [estRes, catRes, cfgRes] = await Promise.all([
+      fetch(`/public/marketplace/id/${EST_ID}`).catch(()=>fetch(`/public/marketplace/${EST_ID}`)),
+      fetch(`/public/catalog/${EST_ID}`),
+      fetch(`/delivery/public-config/${EST_ID}`),
+    ]);
+
+    if (!estRes.ok) throw new Error('Loja não encontrada');
+    storeData   = await estRes.json();
+    catalog     = estRes.ok ? await catRes.json().catch(()=>[]) : [];
+    deliveryCfg = cfgRes.ok ? await cfgRes.json() : null;
+
+    // Cor do tema
+    const accent = storeData.cor_destaque || storeData.settings?.theme?.primary_color || '#6366f1';
+    document.documentElement.style.setProperty('--accent', accent);
+    document.title = storeData.name + ' — Pedido';
+
+    // Header
+    const logoEl = document.getElementById('header-logo');
+    if (storeData.logo_base64)     logoEl.innerHTML = `<img src="${storeData.logo_base64}" class="w-full h-full object-cover">`;
+    else if (storeData.logo_url)   logoEl.innerHTML = `<img src="${storeData.logo_url}" class="w-full h-full object-cover">`;
+    else                           logoEl.textContent = storeData.name.charAt(0).toUpperCase();
+
+    document.getElementById('header-name').textContent = storeData.name;
+    if (deliveryCfg?.estimated_time) {
+      document.getElementById('header-info').textContent = `⏱ ${deliveryCfg.estimated_time}`;
+    }
+
+    // Tipo de entrega padrão (totem geralmente é retirada)
+    const dtype = deliveryCfg?.delivery_type || 'both';
+    currentDType = (dtype === 'delivery') ? 'delivery' : 'pickup';
+
+    renderCatalog();
+  } catch (err) {
+    document.getElementById('catalog-root').innerHTML =
+      `<div class="text-center py-20 text-red-400"><i class="fa fa-exclamation-triangle text-4xl mb-4"></i><p>${err.message}</p></div>`;
+  }
+}
+
+// ── Catálogo ────────────────────────────────────────────────────
+function renderCatalog() {
+  if (!catalog.length) {
+    document.getElementById('catalog-root').innerHTML =
+      `<div class="text-center py-20 text-slate-500"><i class="fa fa-box-open text-4xl mb-4"></i><p>Nenhum item disponível.</p></div>`;
+    return;
+  }
+
+  // Categorias
+  const catList = document.getElementById('cat-list');
+  catList.innerHTML = catalog.map((cat, i) =>
+    `<button class="cat-pill ${i===0?'active':''}" onclick="scrollToCat('cat-${i}',this)">${esc(cat.name)}</button>`
+  ).join('');
+
+  // Info de delivery
+  let infoBanner = '';
+  if (deliveryCfg) {
+    const parts = [];
+    if (+deliveryCfg.min_order > 0)         parts.push(`Mínimo ${fmt(deliveryCfg.min_order)}`);
+    if (+deliveryCfg.free_delivery_over > 0) parts.push(`Frete grátis acima de ${fmt(deliveryCfg.free_delivery_over)}`);
+    if (parts.length) infoBanner = `<div class="bg-slate-800 rounded-xl px-4 py-2.5 mb-6 text-xs text-slate-300 flex flex-wrap gap-3">${parts.join('<span class="text-slate-600">·</span>')}</div>`;
+  }
+
+  // Items
+  let html = infoBanner;
+  catalog.forEach((cat, i) => {
+    html += `
+    <div id="cat-${i}" class="mb-10">
+      <h2 class="text-base font-black text-white mb-4 sticky top-[115px] bg-[#0f172a]/95 backdrop-blur py-2 -mx-1 px-1 z-10 border-b border-slate-800/50">
+        ${esc(cat.name)}
+        <span class="text-slate-600 font-normal text-sm ml-2">(${cat.items.length})</span>
+      </h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        ${cat.items.map(item => renderCard(item)).join('')}
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('catalog-root').innerHTML = html;
+}
+
+function renderCard(item) {
+  const enc = encodeURIComponent(JSON.stringify(item));
+  const img = item.image_base64
+    ? `<img src="${item.image_base64}" class="w-full h-32 object-cover">`
+    : `<div class="w-full h-28 flex items-center justify-center text-3xl bg-slate-800 text-slate-600"><i class="fa fa-utensils"></i></div>`;
+
+  return `
+  <div onclick="selectItem('${enc}')" class="item-card">
+    <div class="overflow-hidden rounded-t-2xl">${img}</div>
+    <div class="p-3 flex-1 flex flex-col justify-between">
+      <p class="font-bold text-white text-sm leading-tight mb-1">${esc(item.name)}</p>
+      ${item.description ? `<p class="text-xs text-slate-500 line-clamp-2 mb-2">${esc(item.description)}</p>` : ''}
+      <p class="font-black text-[var(--accent)] text-base">${fmt(item.price)}</p>
+    </div>
+  </div>`;
+}
+
+function scrollToCat(id, btn) {
+  document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Opcionais ───────────────────────────────────────────────────
+async function selectItem(enc) {
+  pendingItem   = JSON.parse(decodeURIComponent(enc));
+  pendingQty    = 1;
+  pendingOpts   = {};
+  pendingGroups = [];
+
+  document.getElementById('opts-title').textContent = pendingItem.name;
+  document.getElementById('qty-display').textContent = '1';
+  document.getElementById('opts-body').innerHTML =
+    `<div class="text-center py-6"><div class="spinner" style="width:32px;height:32px"></div></div>`;
+  openModal('modal-opts');
+  updateOptsPrice();
+
+  try {
+    const res  = await fetch(`/delivery/options/${pendingItem.id}`);
+    pendingGroups = res.ok ? await res.json() : [];
+  } catch {}
+  renderGroups();
+}
+
+function renderGroups() {
+  const body = document.getElementById('opts-body');
+  let html = '';
+
+  if (pendingItem.image_base64)
+    html += `<img src="${pendingItem.image_base64}" class="w-full h-36 object-cover rounded-xl">`;
+  if (pendingItem.description)
+    html += `<p class="text-sm text-slate-400">${esc(pendingItem.description)}</p>`;
+
+  if (!pendingGroups.length) {
+    body.innerHTML = html + `<p class="text-slate-600 text-sm text-center py-2">Sem opcionais.</p>`;
+    updateOptsPrice(); return;
+  }
+
+  pendingGroups.forEach(g => {
+    const multi = g.max_options > 1;
+    html += `
+    <div>
+      <div class="flex justify-between items-baseline mb-2">
+        <h4 class="font-bold text-white text-sm">${esc(g.name)}</h4>
+        <span class="text-[10px] text-slate-500 uppercase">${g.is_required?'Obrigatório':'Opcional'} · Até ${g.max_options}</span>
+      </div>
+      <div class="space-y-2">
+        ${(g.items||[]).map(oi => `
+        <label onclick="toggleOpt('${g.id}',${g.max_options},'${oi.id}','${esc(oi.name)}',${oi.additional_price})"
+               class="flex items-center gap-3 bg-slate-800 rounded-xl p-3 cursor-pointer border border-transparent hover:border-[var(--accent)] transition-colors">
+          <div id="chk-${oi.id}" class="w-5 h-5 rounded-${multi?'md':'full'} border-2 border-slate-600 flex items-center justify-center flex-shrink-0">
+            <i class="fa fa-check text-[10px] text-[var(--accent)] hidden" id="ico-${oi.id}"></i>
+          </div>
+          <span class="flex-1 text-sm text-white">${esc(oi.name)}</span>
+          ${+oi.additional_price>0?`<span class="text-emerald-400 font-bold text-sm">+${fmt(oi.additional_price)}</span>`:''}
+        </label>`).join('')}
+      </div>
+    </div>`;
+  });
+
+  body.innerHTML = html;
+  updateOptsPrice();
+}
+
+function toggleOpt(gid, max, oid, name, price) {
+  if (!pendingOpts[gid]) pendingOpts[gid] = [];
+  const grp = pendingOpts[gid];
+  const idx = grp.findIndex(o => o.id === oid);
+  if (idx >= 0) {
+    grp.splice(idx, 1);
+    document.getElementById(`chk-${oid}`)?.classList.remove('border-[var(--accent)]');
+    document.getElementById(`ico-${oid}`)?.classList.add('hidden');
+  } else {
+    if (max === 1) {
+      grp.forEach(o => {
+        document.getElementById(`chk-${o.id}`)?.classList.remove('border-[var(--accent)]');
+        document.getElementById(`ico-${o.id}`)?.classList.add('hidden');
+      });
+      pendingOpts[gid] = [];
+    } else if (grp.length >= max) return;
+    pendingOpts[gid].push({ id: oid, name, additional_price: +price });
+    document.getElementById(`chk-${oid}`)?.classList.add('border-[var(--accent)]');
+    document.getElementById(`ico-${oid}`)?.classList.remove('hidden');
+  }
+  updateOptsPrice();
+}
+
+function changeQty(d) {
+  pendingQty = Math.max(1, pendingQty + d);
+  document.getElementById('qty-display').textContent = pendingQty;
+  updateOptsPrice();
+}
+
+function updateOptsPrice() {
+  if (!pendingItem) return;
+  const extras = Object.values(pendingOpts).flat().reduce((s,o)=>s+o.additional_price,0);
+  document.getElementById('opts-price').textContent = fmt((+pendingItem.price + extras) * pendingQty);
+}
+
+function addToCart() {
+  for (const g of pendingGroups) {
+    if (g.is_required && g.min_options > 0) {
+      if ((pendingOpts[g.id]||[]).length < g.min_options) {
+        alert(`Selecione pelo menos ${g.min_options} opção em "${g.name}"`);
+        return;
+      }
+    }
+  }
+  const opts = Object.values(pendingOpts).flat();
+  const existing = cart.find(c =>
+    c.item.id === pendingItem.id &&
+    JSON.stringify(c.opts) === JSON.stringify(opts)
+  );
+  if (existing) existing.qty += pendingQty;
+  else cart.push({ item: pendingItem, qty: pendingQty, opts });
+
+  closeModal('modal-opts');
+  updateCartBar();
+}
+
+// ── Carrinho ────────────────────────────────────────────────────
+function subtotal() {
+  return cart.reduce((a, e) => {
+    return a + (+e.item.price + e.opts.reduce((s,o)=>s+o.additional_price,0)) * e.qty;
+  }, 0);
+}
+
+function updateCartBar() {
+  const bar  = document.getElementById('cart-bar');
+  const qty  = cart.reduce((s,e)=>s+e.qty,0);
+  document.getElementById('cart-count').textContent = `${qty} ${qty===1?'item':'itens'} no pedido`;
+  document.getElementById('cart-price').textContent = fmt(subtotal());
+  bar.classList.toggle('show', cart.length > 0);
+}
+
+// ── Checkout ────────────────────────────────────────────────────
+function openCheckout() {
+  const cfg    = deliveryCfg || {};
+  const dtype  = cfg.delivery_type || 'both';
+
+  let itemsHtml = cart.map(e => {
+    const extras = e.opts.map(o=>`+ ${esc(o.name)}`).join(', ');
+    const line   = (+e.item.price + e.opts.reduce((s,o)=>s+o.additional_price,0)) * e.qty;
+    return `
+    <div class="flex justify-between items-start py-1">
+      <div>
+        <p class="text-white text-sm font-medium">${esc(e.item.name)}</p>
+        ${extras?`<p class="text-xs text-slate-400">${extras}</p>`:''}
+        <p class="text-xs text-slate-500">× ${e.qty}</p>
+      </div>
+      <span class="text-emerald-400 font-bold text-sm flex-shrink-0 ml-3">${fmt(line)}</span>
+    </div>`;
+  }).join('');
+
+  let typeHtml = '';
+  if (dtype === 'both') {
+    typeHtml = `
+    <div>
+      <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Tipo de Entrega</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="btn-pickup" onclick="setDType('pickup')"
+          class="py-3 rounded-xl border-2 font-bold text-sm transition-all ${currentDType==='pickup'?'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-white':'border-slate-700 text-slate-400'}">
+          <i class="fa fa-store mr-1"></i> Retirada
+        </button>
+        <button id="btn-delivery" onclick="setDType('delivery')"
+          class="py-3 rounded-xl border-2 font-bold text-sm transition-all ${currentDType==='delivery'?'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_15%,transparent)] text-white':'border-slate-700 text-slate-400'}">
+          <i class="fa fa-motorcycle mr-1"></i> Entrega
+        </button>
+      </div>
+    </div>`;
+  }
+
+  // Zonas
+  let zonesHtml = '';
+  if (cfg.zones?.length) {
+    const opts = cfg.zones.map(z =>
+      `<option value="${z.id}" data-tax="${z.delivery_tax}">${esc(z.name)} — ${fmt(z.delivery_tax)}</option>`
+    ).join('');
+    zonesHtml = `
+    <div id="zone-sec">
+      <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Bairro / Região</label>
+      <select id="zone-sel" class="inp" onchange="recalcTotal()">
+        <option value="">— Selecione sua região —</option>${opts}
+      </select>
+    </div>`;
+  }
+
+  // Cupom
+  const couponHtml = `
+  <div>
+    <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Cupom de Desconto</label>
+    <div class="flex gap-2">
+      <input id="co-coupon" class="inp flex-1" placeholder="Código do cupom (opcional)" style="text-transform:uppercase">
+      <button onclick="validateCoupon()" class="bg-slate-700 hover:bg-slate-600 text-white px-4 rounded-xl font-bold text-sm transition-colors flex-shrink-0">Aplicar</button>
+    </div>
+    <p id="coupon-msg" class="text-xs mt-1 hidden"></p>
+  </div>`;
+
+  document.getElementById('checkout-body').innerHTML = `
+  <div>
+    <p class="text-xs text-slate-400 uppercase font-bold mb-2">Seu Pedido</p>
+    <div class="bg-slate-800/50 rounded-xl p-3 space-y-1 divide-y divide-slate-700/40">${itemsHtml}</div>
+  </div>
+  ${typeHtml}
+  ${zonesHtml}
+  <div id="addr-sec" ${currentDType==='pickup'?'style="display:none"':''}>
+    <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Endereço de Entrega</label>
+    <input id="co-addr" type="text" class="inp" placeholder="Rua, número, bairro...">
+  </div>
+  <div class="grid grid-cols-2 gap-3">
+    <div>
+      <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Seu Nome *</label>
+      <input id="co-name" type="text" class="inp" placeholder="Nome completo">
+    </div>
+    <div>
+      <label class="block text-xs text-slate-400 uppercase font-bold mb-2">WhatsApp</label>
+      <input id="co-phone" type="tel" class="inp" placeholder="(99) 99999-9999">
+    </div>
+  </div>
+  <div>
+    <label class="block text-xs text-slate-400 uppercase font-bold mb-2">Observações</label>
+    <textarea id="co-notes" rows="2" class="inp resize-none" placeholder="Sem cebola, ponto da carne..."></textarea>
+  </div>
+  ${couponHtml}
+  <div class="bg-slate-800 rounded-xl p-4 space-y-1 text-sm" id="totals-box">
+    <div class="flex justify-between text-slate-300"><span>Subtotal</span><span>${fmt(subtotal())}</span></div>
+    <div class="flex justify-between text-slate-300" id="tax-row"><span>Taxa de entrega</span><span id="tax-val">—</span></div>
+    <div id="disc-row" class="flex justify-between text-emerald-400 hidden"><span>Desconto</span><span id="disc-val"></span></div>
+    <div class="flex justify-between text-white font-black text-base border-t border-slate-700 pt-2 mt-1">
+      <span>Total</span><span id="total-val" class="text-emerald-400">—</span>
+    </div>
+  </div>
+  <button onclick="submitOrder()" class="btn-main" id="btn-confirm">
+    <i class="fa fa-check mr-2"></i>Confirmar Pedido
+  </button>`;
+
+  openModal('modal-checkout');
+  recalcTotal();
+}
+
+let appliedDiscount = 0;
+let appliedCouponCode = null;
+
+async function validateCoupon() {
+  const code = document.getElementById('co-coupon')?.value.trim().toUpperCase();
+  const msg  = document.getElementById('coupon-msg');
+  if (!code) return;
+
+  msg.className = 'text-xs mt-1 text-slate-400'; msg.textContent = 'Verificando...'; msg.classList.remove('hidden');
+
+  try {
+    const res  = await fetch('/delivery/coupons/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ establishment_id: storeData.id, code, subtotal: subtotal() }),
+    });
+    const data = await res.json();
+    if (!res.ok) { msg.className='text-xs mt-1 text-red-400'; msg.textContent = data.error || 'Cupom inválido.'; appliedDiscount=0; appliedCouponCode=null; }
+    else {
+      appliedDiscount    = data.discount || 0;
+      appliedCouponCode  = code;
+      msg.className = 'text-xs mt-1 text-emerald-400';
+      msg.textContent = `✓ Desconto de ${fmt(appliedDiscount)} aplicado!`;
+    }
+  } catch { msg.className='text-xs mt-1 text-red-400'; msg.textContent = 'Erro ao verificar cupom.'; }
+  recalcTotal();
+}
+
+function setDType(type) {
+  currentDType = type;
+  ['pickup','delivery'].forEach(t => {
+    const btn = document.getElementById(`btn-${t}`);
+    if (!btn) return;
+    if (t === type) {
+      btn.classList.add('border-[var(--accent)]','bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]','text-white');
+      btn.classList.remove('border-slate-700','text-slate-400');
+    } else {
+      btn.classList.remove('border-[var(--accent)]','bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]','text-white');
+      btn.classList.add('border-slate-700','text-slate-400');
+    }
+  });
+  const addrSec = document.getElementById('addr-sec');
+  const zoneSec = document.getElementById('zone-sec');
+  if (addrSec) addrSec.style.display = type === 'pickup' ? 'none' : '';
+  if (zoneSec) zoneSec.style.display = type === 'pickup' ? 'none' : '';
+  recalcTotal();
+}
+
+function recalcTotal() {
+  const cfg  = deliveryCfg || {};
+  const sub  = subtotal();
+  const isP  = currentDType === 'pickup';
+  let tax    = 0, free = false;
+
+  if (!isP) {
+    const sel = document.getElementById('zone-sel');
+    tax = sel?.value ? +(sel.selectedOptions[0].dataset.tax||0) : +(cfg.delivery_tax||0);
+    if (+cfg.free_delivery_over > 0 && sub >= +cfg.free_delivery_over) { tax = 0; free = true; }
+  }
+
+  const disc  = appliedDiscount;
+  const total = Math.max(0, sub + tax - disc);
+
+  const taxRow  = document.getElementById('tax-row');
+  const taxVal  = document.getElementById('tax-val');
+  const discRow = document.getElementById('disc-row');
+  const discVal = document.getElementById('disc-val');
+  const totalEl = document.getElementById('total-val');
+
+  if (taxRow)  taxRow.style.display  = isP ? 'none' : '';
+  if (taxVal)  taxVal.textContent    = free ? 'Grátis' : fmt(tax);
+  if (discRow) discRow.classList.toggle('hidden', disc <= 0);
+  if (discVal) discVal.textContent   = `-${fmt(disc)}`;
+  if (totalEl) totalEl.textContent   = fmt(total);
+}
+
+async function submitOrder() {
+  const name  = document.getElementById('co-name')?.value.trim();
+  const phone = document.getElementById('co-phone')?.value.trim();
+  const addr  = document.getElementById('co-addr')?.value.trim();
+  const notes = document.getElementById('co-notes')?.value.trim();
+  const sel   = document.getElementById('zone-sel');
+  const zoneId = sel?.value || null;
+
+  if (!name) { alert('Informe seu nome.'); return; }
+  if (currentDType === 'delivery' && !addr) { alert('Informe o endereço.'); return; }
+
+  const cfg = deliveryCfg || {};
+  if (+cfg.min_order > 0 && subtotal() < +cfg.min_order) {
+    alert(`Pedido mínimo de ${fmt(cfg.min_order)} não atingido.`); return;
+  }
+
+  const items = cart.map(e => ({
+    id: e.item.id, name: e.item.name, price: +e.item.price,
+    quantity: e.qty, selected_options: e.opts,
+  }));
+
+  const btn = document.getElementById('btn-confirm');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>Enviando...'; }
+
+  try {
+    const res = await fetch('/delivery/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        establishment_id: storeData.id,
+        customer_name:    name,
+        customer_phone:   phone || null,
+        customer_address: currentDType === 'delivery' ? addr : 'Retirada na loja',
+        delivery_type:    currentDType,
+        items, notes: notes||null, zone_id: zoneId,
+        coupon_code:      appliedCouponCode || undefined,
+        source:           MODE === 'totem' ? 'totem' : 'web',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Erro ao enviar.'); if(btn){btn.disabled=false;btn.innerHTML='<i class="fa fa-check mr-2"></i>Confirmar Pedido';} return; }
+
+    closeModal('modal-checkout');
+    showSuccess(data);
+  } catch {
+    alert('Erro de conexão. Tente novamente.');
+    if (btn) { btn.disabled=false; btn.innerHTML='<i class="fa fa-check mr-2"></i>Confirmar Pedido'; }
+  }
+}
+
+function showSuccess(order) {
+  document.getElementById('success-order').textContent = `Pedido #${order.order_number} — Total: ${fmt(order.total)}`;
+  openModal('modal-success');
+
+  let secs = 30;
+  document.getElementById('reset-count').textContent = secs;
+  const bar = document.getElementById('reset-bar');
+  bar.style.transition = 'none'; bar.style.width = '100%';
+
+  clearInterval(resetTimer);
+  resetTimer = setInterval(() => {
+    secs--;
+    document.getElementById('reset-count').textContent = secs;
+    bar.style.transition = 'width 1s linear';
+    bar.style.width = (secs / 30 * 100) + '%';
+    if (secs <= 0) { clearInterval(resetTimer); resetAll(); }
+  }, 1000);
+}
+
+function resetAll() {
+  clearInterval(resetTimer);
+  cart = []; appliedDiscount = 0; appliedCouponCode = null;
+  currentDType = (deliveryCfg?.delivery_type === 'delivery') ? 'delivery' : 'pickup';
+  ['modal-opts','modal-checkout','modal-success'].forEach(closeModal);
+  updateCartBar();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+init();
+</script>
+</body>
+</html>

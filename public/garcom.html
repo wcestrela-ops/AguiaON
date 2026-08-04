@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Garçom — Águia-ON</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    :root {
+      --nav-h: calc(58px + env(safe-area-inset-bottom));
+      --header-h: 56px;
+    }
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f8fafc; overscroll-behavior: none; }
+    .tab-btn { transition: all .15s; }
+    .tab-btn.active { color: #6366f1; border-bottom: 2px solid #6366f1; }
+    .badge { display:inline-block; padding:2px 10px; border-radius:9999px; font-size:.72rem; font-weight:600; }
+    .badge-pending    { background:#fef3c7; color:#92400e; }
+    .badge-confirmed  { background:#dbeafe; color:#1e3a8a; }
+    .badge-preparing  { background:#ede9fe; color:#5b21b6; }
+    .badge-delivering { background:#fce7f3; color:#9d174d; }
+    .badge-delivered  { background:#d1fae5; color:#065f46; }
+    .badge-cancelled  { background:#fee2e2; color:#991b1b; }
+    .badge-livre      { background:#d1fae5; color:#065f46; }
+    .badge-ocupada    { background:#fef3c7; color:#92400e; }
+    .badge-conta_solicitada { background:#fce7f3; color:#9d174d; }
+    .product-card { border:2px solid transparent; transition: border-color .15s, background .15s; cursor:pointer; }
+    .product-card:active { border-color:#a5b4fc; background:#f5f3ff; }
+    @media (hover:hover) { .product-card:hover { border-color:#a5b4fc; background:#f5f3ff; } }
+    .cart-item { border-bottom: 1px solid #f3f4f6; }
+    #toast { position:fixed; bottom:calc(var(--nav-h) + 8px); left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:10px 22px; border-radius:10px; font-size:.88rem; display:none; z-index:9999; min-width:200px; text-align:center; white-space:nowrap; }
+    .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid #e5e7eb; display:flex; z-index:100; padding-bottom:env(safe-area-inset-bottom); }
+    .bottom-nav button { flex:1; padding:10px 4px 8px; font-size:.65rem; font-weight:600; color:#9ca3af; display:flex; flex-direction:column; align-items:center; gap:3px; transition:color .15s; border:none; background:none; cursor:pointer; min-height:44px; }
+    .bottom-nav button.active { color:#6366f1; }
+    .bottom-nav button i { font-size:1.25rem; }
+    main.screen { display:none; padding-bottom:var(--nav-h); }
+    main.screen.active { display:block; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; display:flex; align-items:flex-end; justify-content:center; }
+    .modal-box { background:#fff; border-radius:20px 20px 0 0; width:100%; max-width:520px; max-height:92vh; overflow-y:auto; padding:20px; padding-bottom:calc(20px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling:touch; }
+    .qty-btn { width:36px; height:36px; border-radius:50%; border:1.5px solid #e5e7eb; font-size:1.1rem; display:flex; align-items:center; justify-content:center; cursor:pointer; background:#f9fafb; touch-action:manipulation; }
+    .qty-btn:active { background:#e5e7eb; }
+    .btn-indigo { background:#6366f1; color:#fff; border:none; border-radius:12px; padding:14px; font-weight:600; cursor:pointer; width:100%; font-size:1rem; transition:background .15s; touch-action:manipulation; min-height:48px; }
+    .btn-indigo:active { background:#4f46e5; }
+    .btn-outline { background:#fff; color:#6366f1; border:2px solid #6366f1; border-radius:12px; padding:12px; font-weight:600; cursor:pointer; width:100%; font-size:.9rem; touch-action:manipulation; min-height:44px; }
+    .btn-sm { padding:8px 16px; border-radius:8px; font-size:.8rem; font-weight:600; cursor:pointer; border:none; min-height:36px; touch-action:manipulation; }
+    .btn-sm-indigo { background:#6366f1; color:#fff; }
+    .btn-sm-green  { background:#10b981; color:#fff; }
+    .btn-sm-amber  { background:#f59e0b; color:#fff; }
+    .btn-sm-red    { background:#ef4444; color:#fff; }
+    input, select, textarea { outline:none; font-size:16px !important; } /* 16px previne zoom no iOS */
+    input:focus, select:focus, textarea:focus { box-shadow: 0 0 0 2px #a5b4fc; }
+    .input-field { width:100%; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; font-size:16px !important; }
+    .input-field:focus { box-shadow:0 0 0 2px #a5b4fc; border-color:#a5b4fc; }
+    .qr-container { display:flex; flex-direction:column; align-items:center; gap:12px; padding:16px; background:#f9fafb; border-radius:16px; }
+    .pix-code-box { font-family:monospace; font-size:.7rem; word-break:break-all; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:8px; padding:10px; max-height:80px; overflow:auto; color:#374151; }
+    /* PDV height: usa 100dvh que desconta a barra do browser no iOS */
+    .pdv-catalog-area { height: calc(100dvh - var(--header-h) - var(--nav-h)); }
+    /* FAB cart */
+    #cart-fab { bottom: calc(var(--nav-h) + 12px); }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- TELA DE LOGIN                                  -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="screen-login" class="min-h-screen flex flex-col items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
+    <div class="flex flex-col items-center mb-6">
+      <div class="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mb-3">
+        <i class="fa-solid fa-utensils text-indigo-500 text-2xl"></i>
+      </div>
+      <h1 class="text-xl font-bold text-gray-800">Área do Garçom</h1>
+      <p id="login-store-name" class="text-sm text-gray-500 mt-1"></p>
+    </div>
+    <div id="login-error" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Número do celular</label>
+        <input id="login-phone" type="tel" placeholder="(11) 99999-9999"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-base"
+          autocomplete="tel" />
+      </div>
+      <button onclick="doLogin()" class="btn-indigo py-3 rounded-xl text-base">
+        <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i>Entrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- APP PRINCIPAL                                  -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <header class="bg-indigo-600 text-white px-4 flex items-center justify-between shadow sticky top-0 z-50" style="height:var(--header-h); padding-top:env(safe-area-inset-top)">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-utensils"></i>
+      <div>
+        <div class="font-bold" id="header-name">Garçom</div>
+        <div class="text-xs opacity-80" id="header-store"></div>
+      </div>
+    </div>
+    <button onclick="doLogout()" class="text-white opacity-80 hover:opacity-100 text-sm">
+      <i class="fa-solid fa-right-from-bracket mr-1"></i>Sair
+    </button>
+  </header>
+
+  <!-- ── PDV ── -->
+  <main id="tab-pdv" class="screen active overflow-hidden" style="padding-bottom:0">
+    <div class="flex pdv-catalog-area">
+
+      <!-- Coluna esq: catálogo -->
+      <div class="flex-1 flex flex-col border-r border-gray-100 min-w-0">
+        <div class="p-3 bg-white border-b space-y-2">
+          <input id="pdv-search" type="search" placeholder="Buscar produto..."
+            oninput="filterProducts()"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+          <div id="cat-list" class="flex gap-1 overflow-x-auto pb-1 text-xs"></div>
+        </div>
+        <div id="pdv-products" class="flex-1 overflow-y-auto p-2 grid grid-cols-2 sm:grid-cols-3 gap-2 content-start">
+          <div class="col-span-2 text-center text-gray-400 py-8">
+            <i class="fa-solid fa-spinner fa-spin text-xl"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna dir: carrinho (desktop) -->
+      <div id="cart-panel" class="hidden md:flex flex-col w-80 bg-white overflow-hidden">
+        <div class="p-3 border-b space-y-2 shrink-0">
+          <h2 class="font-bold text-gray-700 flex items-center gap-2">
+            <i class="fa-solid fa-cart-shopping text-indigo-500"></i>Pedido
+          </h2>
+          <!-- Tipo -->
+          <div>
+            <label class="text-xs text-gray-500 font-medium">Tipo</label>
+            <select id="pdv-dtype" onchange="pdvToggleType()" class="input-field mt-0.5">
+              <option value="balcao">Balcão</option>
+              <option value="mesa">Mesa</option>
+              <option value="pickup">Retirada</option>
+              <option value="delivery">Delivery</option>
+            </select>
+          </div>
+          <!-- Mesa -->
+          <div id="pdv-mesa-row">
+            <label class="text-xs text-gray-500 font-medium">Mesa</label>
+            <select id="pdv-table-select" class="input-field mt-0.5"></select>
+          </div>
+          <!-- Endereço delivery -->
+          <div id="pdv-address-row" class="hidden">
+            <label class="text-xs text-gray-500 font-medium">Endereço *</label>
+            <input id="pdv-address" type="text" placeholder="Rua, número, bairro"
+              class="input-field mt-0.5" />
+          </div>
+          <!-- Zona delivery -->
+          <div id="pdv-zone-row" class="hidden">
+            <label class="text-xs text-gray-500 font-medium">Zona / Bairro</label>
+            <select id="pdv-zone" class="input-field mt-0.5"></select>
+          </div>
+          <!-- Cliente -->
+          <div>
+            <label class="text-xs text-gray-500 font-medium">Cliente</label>
+            <input id="pdv-customer" type="text" placeholder="Nome (opcional)"
+              class="input-field mt-0.5" />
+          </div>
+        </div>
+        <div id="cart-items" class="flex-1 overflow-y-auto divide-y divide-gray-50 min-h-[60px]"></div>
+        <div class="p-3 border-t space-y-2 shrink-0">
+          <div class="flex justify-between text-sm font-semibold">
+            <span>Total</span>
+            <span id="cart-total">R$ 0,00</span>
+          </div>
+          <div id="cart-tax-row" class="hidden flex justify-between text-xs text-gray-500">
+            <span>+ Taxa entrega</span>
+            <span id="cart-tax-val">R$ 0,00</span>
+          </div>
+          <select id="pdv-payment" class="input-field">
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao_credito">Cartão Crédito</option>
+            <option value="cartao_debito">Cartão Débito</option>
+            <option value="pix">PIX</option>
+            <option value="na_entrega">Na entrega</option>
+          </select>
+          <textarea id="pdv-notes" placeholder="Observações..." rows="2"
+            class="input-field resize-none"></textarea>
+          <button onclick="submitOrder()" class="btn-indigo">
+            <i class="fa-solid fa-paper-plane mr-1"></i>Enviar Pedido
+          </button>
+          <button onclick="clearCart()" class="btn-outline text-sm py-2">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botão flutuante carrinho (mobile) -->
+    <button id="cart-fab" onclick="openCartModal()"
+      class="md:hidden fixed right-4 bg-indigo-600 text-white rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-50">
+      <i class="fa-solid fa-cart-shopping text-xl"></i>
+      <span id="cart-count" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+    </button>
+  </main>
+
+  <!-- ── PEDIDOS ── -->
+  <main id="tab-pedidos" class="screen overflow-y-auto p-3 space-y-3" style="padding-top:calc(var(--header-h) + 8px)">
+    <div class="flex gap-2 sticky top-[56px] bg-gray-50 py-2 z-10">
+      <select id="ped-filter-status" onchange="loadPedidos()" class="input-field flex-1 text-sm">
+        <option value="">Todos de hoje</option>
+        <option value="pending">Pendentes</option>
+        <option value="confirmed">Confirmados</option>
+        <option value="preparing">Em Preparo</option>
+        <option value="delivering">Saiu para Entrega</option>
+        <option value="delivered">Entregues</option>
+        <option value="cancelled">Cancelados</option>
+      </select>
+      <button onclick="loadPedidos()" class="btn-sm btn-sm-indigo px-4">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+    </div>
+    <div id="ped-loading" class="text-center text-gray-400 py-10"><i class="fa-solid fa-spinner fa-spin text-xl"></i></div>
+    <div id="ped-empty" class="hidden text-center text-gray-400 py-10">
+      <i class="fa-solid fa-box-open text-3xl mb-2 opacity-50"></i>
+      <p>Nenhum pedido encontrado</p>
+    </div>
+    <div id="ped-list"></div>
+  </main>
+
+  <!-- ── MESAS ── -->
+  <main id="tab-mesas" class="screen p-3" style="padding-top:calc(var(--header-h) + 12px)">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-bold text-gray-700">Mesas</h2>
+      <button onclick="openMesaModal()" class="btn-sm btn-sm-indigo">
+        <i class="fa-solid fa-plus mr-1"></i>Nova Mesa
+      </button>
+    </div>
+    <div id="mesas-loading" class="text-center text-gray-400 py-10"><i class="fa-solid fa-spinner fa-spin text-xl"></i></div>
+    <div id="mesas-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button onclick="switchTab('pdv')" id="nav-pdv" class="active">
+      <i class="fa-solid fa-cash-register"></i>PDV
+    </button>
+    <button onclick="switchTab('pedidos')" id="nav-pedidos">
+      <i class="fa-solid fa-list-check"></i>Pedidos
+    </button>
+    <button onclick="switchTab('mesas')" id="nav-mesas">
+      <i class="fa-solid fa-table-cells-large"></i>Mesas
+    </button>
+  </nav>
+
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════════ -->
+<!-- MODAL CARRINHO (mobile)                        -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="modal-cart" class="hidden modal-overlay" onclick="if(event.target===this)closeCartModal()">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800 text-base">Pedido</h3>
+      <button onclick="closeCartModal()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="space-y-3 mb-3">
+      <div>
+        <label class="text-xs text-gray-500 font-medium">Tipo</label>
+        <select id="modal-dtype" onchange="modalToggleType()" class="input-field mt-0.5">
+          <option value="balcao">Balcão</option>
+          <option value="mesa">Mesa</option>
+          <option value="pickup">Retirada</option>
+          <option value="delivery">Delivery</option>
+        </select>
+      </div>
+      <div id="modal-mesa-row">
+        <label class="text-xs text-gray-500 font-medium">Mesa</label>
+        <select id="modal-table-select" class="input-field mt-0.5"></select>
+      </div>
+      <div id="modal-address-row" class="hidden">
+        <label class="text-xs text-gray-500 font-medium">Endereço *</label>
+        <input id="modal-address" type="text" placeholder="Rua, número, bairro" class="input-field mt-0.5" />
+      </div>
+      <div id="modal-zone-row" class="hidden">
+        <label class="text-xs text-gray-500 font-medium">Zona / Bairro</label>
+        <select id="modal-zone" class="input-field mt-0.5"></select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 font-medium">Cliente</label>
+        <input id="modal-customer" type="text" placeholder="Nome (opcional)" class="input-field mt-0.5" />
+      </div>
+    </div>
+    <div id="modal-cart-items" class="divide-y divide-gray-100 mb-3 min-h-[60px]"></div>
+    <div class="flex justify-between font-bold text-gray-800 mb-1">
+      <span>Total</span>
+      <span id="modal-cart-total">R$ 0,00</span>
+    </div>
+    <div id="modal-tax-row" class="hidden flex justify-between text-xs text-gray-500 mb-3">
+      <span>+ Taxa entrega</span>
+      <span id="modal-tax-val">R$ 0,00</span>
+    </div>
+    <select id="modal-payment" class="input-field mb-3">
+      <option value="dinheiro">Dinheiro</option>
+      <option value="cartao_credito">Cartão Crédito</option>
+      <option value="cartao_debito">Cartão Débito</option>
+      <option value="pix">PIX</option>
+      <option value="na_entrega">Na entrega</option>
+    </select>
+    <textarea id="modal-notes" placeholder="Observações..." rows="2"
+      class="input-field resize-none mb-3"></textarea>
+    <button onclick="submitOrder(true)" class="btn-indigo mb-2">
+      <i class="fa-solid fa-paper-plane mr-1"></i>Enviar Pedido
+    </button>
+    <button onclick="closeCartModal()" class="btn-outline text-sm py-2">Continuar comprando</button>
+  </div>
+</div>
+
+<!-- MODAL NOVA MESA -->
+<div id="modal-mesa" class="hidden modal-overlay" onclick="if(event.target===this)closeMesaModal()">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800 text-base">Nova Mesa</h3>
+      <button onclick="closeMesaModal()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500 font-medium">Número/Nome da Mesa</label>
+        <input id="mesa-number" type="text" placeholder="Ex: 01, VIP, Bar..." class="input-field mt-0.5" />
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 font-medium">Lugares</label>
+        <input id="mesa-seats" type="number" value="4" min="1" class="input-field mt-0.5" />
+      </div>
+      <button onclick="saveMesa()" class="btn-indigo">Salvar Mesa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALHE DA MESA (pedidos da mesa) -->
+<div id="modal-table-detail" class="hidden modal-overlay" onclick="if(event.target===this)closeTableDetail()">
+  <div class="modal-box" style="max-height:92vh">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-bold text-gray-800 text-base" id="td-title">Mesa</h3>
+      <button onclick="closeTableDetail()" class="text-gray-400 text-xl"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <p class="text-xs font-semibold mb-3" id="td-subtitle"></p>
+    <div class="flex flex-wrap gap-2 mb-4" id="td-actions"></div>
+    <div id="td-orders" class="space-y-3"></div>
+    <div class="border-t border-gray-100 mt-4 pt-3 flex items-center justify-between">
+      <div>
+        <p class="text-xs text-gray-500">Total em aberto</p>
+        <p class="text-lg font-black text-indigo-600" id="td-grand-total">R$ 0,00</p>
+      </div>
+      <button onclick="tdGoToPDV()" class="btn-sm btn-sm-indigo">
+        <i class="fa-solid fa-plus mr-1"></i>Novo pedido
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALHES PEDIDO -->
+<div id="modal-pedido" class="hidden modal-overlay" onclick="if(event.target===this)closePedidoModal()">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800" id="modal-ped-title">Pedido</h3>
+      <button onclick="closePedidoModal()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="modal-ped-content"></div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR ITENS DO PEDIDO (adicionar + remover) -->
+<div id="modal-edit-items" class="hidden modal-overlay" onclick="if(event.target===this)closeEditItems()">
+  <div class="modal-box" style="max-height:95vh">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800">Editar Itens do Pedido</h3>
+      <button onclick="closeEditItems()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <!-- Itens atuais do pedido -->
+    <div class="mb-4">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Itens no pedido</p>
+      <div id="edit-current-items" class="space-y-1 max-h-48 overflow-y-auto"></div>
+    </div>
+
+    <div class="border-t pt-4 mb-3">
+      <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Adicionar itens</p>
+      <input id="edit-search" type="search" placeholder="Buscar produto..."
+        oninput="renderEditProducts()"
+        class="input-field mb-2" />
+      <!-- Filtro de categorias -->
+      <div id="edit-cat-tabs" class="flex gap-1 overflow-x-auto pb-1 mb-2 scrollbar-thin"></div>
+      <!-- Grade de produtos -->
+      <div id="edit-products-list" class="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto"></div>
+    </div>
+
+    <!-- Preview dos novos itens -->
+    <div id="edit-cart-preview" class="border-t pt-3 mb-4 text-sm text-gray-600 min-h-[36px]"></div>
+
+    <button onclick="submitEditItems()" class="btn-indigo">
+      <i class="fa-solid fa-check mr-1"></i>Salvar Alterações
+    </button>
+  </div>
+</div>
+
+<!-- MODAL ADICIONAIS DO PRODUTO -->
+<div id="modal-addons" class="hidden modal-overlay" onclick="if(event.target===this)closeAddonsModal()">
+  <div class="modal-box" style="max-height:92vh">
+    <div class="flex items-center justify-between mb-1">
+      <div>
+        <h3 class="font-bold text-gray-800" id="addon-product-name">Produto</h3>
+        <p class="text-xs text-indigo-500 font-semibold" id="addon-product-price"></p>
+      </div>
+      <button onclick="closeAddonsModal()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="addon-groups" class="space-y-4 my-4 overflow-y-auto max-h-[55vh]"></div>
+    <div class="mb-3">
+      <label class="text-xs text-gray-500 font-semibold uppercase tracking-wide">Observação</label>
+      <input id="addon-note" type="text" class="input-field mt-1" placeholder="Ex: sem cebola, bem passado…">
+    </div>
+    <button onclick="confirmAddons()" class="btn-indigo">
+      <i class="fa-solid fa-cart-plus mr-1"></i>Adicionar ao Carrinho
+    </button>
+  </div>
+</div>
+
+<!-- MODAL PIX -->
+<div id="modal-pix" class="hidden modal-overlay" onclick="if(event.target===this)closePixModal()">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-800 flex items-center gap-2">
+        <i class="fa-solid fa-qrcode text-indigo-500"></i>Pagar com PIX
+      </h3>
+      <button onclick="closePixModal()" class="text-gray-400"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div id="pix-loading" class="text-center py-8 text-gray-400">
+      <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+      <p class="text-sm">Gerando QR Code…</p>
+    </div>
+    <div id="pix-content" class="hidden">
+      <p class="text-sm text-gray-600 text-center mb-3">Mostre o QR Code para o cliente escanear:</p>
+      <div class="qr-container">
+        <img id="pix-qr-img" src="" alt="QR Code PIX" class="w-52 h-52 object-contain" />
+        <p class="text-sm font-bold text-gray-700" id="pix-amount"></p>
+      </div>
+      <div class="mt-4">
+        <p class="text-xs text-gray-500 mb-1">Ou copie o código PIX:</p>
+        <div class="pix-code-box" id="pix-code-text"></div>
+        <button onclick="copyPixCode()" class="btn-outline text-sm py-2 mt-2">
+          <i class="fa-solid fa-copy mr-1"></i>Copiar Código
+        </button>
+      </div>
+    </div>
+    <div id="pix-error" class="hidden text-center py-4 text-red-500 text-sm"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+let TOKEN      = localStorage.getItem('garcom_token') || '';
+let USER       = JSON.parse(localStorage.getItem('garcom_user') || 'null');
+let STAFF_NAME = localStorage.getItem('garcom_staff_name') || '';
+let EST_ID     = '';
+let catalog  = []; // [{id, name, items:[...]}]
+let products = []; // flat list
+let categories = [];
+let cart     = []; // { product, qty }
+let tables   = [];
+let activeCat = null;
+let pollTimer = null;
+let deliveryConfig = { delivery_tax: 0, zones: [], zone_type: 'fixed' };
+
+// estado edição de itens
+let editOrderId   = null;
+let editOrderItems = []; // itens atuais do pedido (modificável)
+let editAddCart   = []; // itens novos a adicionar
+
+// estado PIX
+let pixCode = '';
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+(function init() {
+  const params = new URLSearchParams(location.search);
+  EST_ID = params.get('loja') || params.get('est') || '';
+
+  if (EST_ID) {
+    fetch(`/public/establishments/${EST_ID}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.name) document.getElementById('login-store-name').textContent = d.name; })
+      .catch(() => {});
+  }
+
+  if (TOKEN && USER) showApp();
+})();
+
+document.getElementById('login-phone').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// ══════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════
+async function doLogin() {
+  const phone = document.getElementById('login-phone').value.trim();
+  const errEl = document.getElementById('login-error');
+  errEl.classList.add('hidden');
+
+  if (!phone) { showLoginError(errEl, 'Informe seu celular.'); return; }
+  if (!EST_ID) { showLoginError(errEl, 'Link inválido. Peça ao lojista o link correto.'); return; }
+
+  try {
+    const res = await fetch('/auth/staff-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, establishment_id: EST_ID }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showLoginError(errEl, data.error || 'Erro ao entrar.'); return; }
+
+    const allowedRoles = ['garcom', 'atendente', 'gerente'];
+    const userRoles = data.memberRoles || [data.memberRole];
+    if (!userRoles.some(r => allowedRoles.includes(r))) {
+      showLoginError(errEl, 'Este link é exclusivo para garçons/atendentes.');
+      return;
+    }
+
+    TOKEN      = data.token;
+    USER       = { name: data.userName, storeName: data.storeName, memberRole: data.memberRole };
+    STAFF_NAME = data.userName || '';
+    localStorage.setItem('garcom_token', TOKEN);
+    localStorage.setItem('garcom_user', JSON.stringify(USER));
+    localStorage.setItem('garcom_staff_name', STAFF_NAME);
+    showApp();
+  } catch {
+    showLoginError(errEl, 'Erro de conexão. Tente novamente.');
+  }
+}
+
+function showLoginError(el, msg) { el.textContent = msg; el.classList.remove('hidden'); }
+
+function doLogout() {
+  TOKEN = ''; USER = null; STAFF_NAME = ''; cart = [];
+  localStorage.removeItem('garcom_token');
+  localStorage.removeItem('garcom_user');
+  localStorage.removeItem('garcom_staff_name');
+  clearInterval(pollTimer);
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('screen-login').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════
+async function showApp() {
+  document.getElementById('screen-login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('header-name').textContent = USER.name || 'Garçom';
+  document.getElementById('header-store').textContent = USER.storeName || '';
+
+  await Promise.all([loadProducts(), loadTables(), loadDeliveryConfig()]);
+  startPolling();
+}
+
+let _prevBillTables = new Set();
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    await loadTables(true);
+    // Detecta novas mesas com conta_solicitada
+    tables.forEach(t => {
+      if (t.status === 'conta_solicitada' && !_prevBillTables.has(t.id)) {
+        playBillSound();
+        showBillBanner(t.table_number, t.customer_name);
+      }
+    });
+    const currentBill = new Set(tables.filter(t => t.status === 'conta_solicitada').map(t => t.id));
+    _prevBillTables = currentBill;
+  }, 15000);
+}
+
+function playBillSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 660, 440].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + i * 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.2 + 0.35);
+      osc.start(ctx.currentTime + i * 0.2);
+      osc.stop(ctx.currentTime + i * 0.2 + 0.35);
+    });
+  } catch {}
+}
+
+function showBillBanner(tableNumber, customerName) {
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#f59e0b;color:#fff;text-align:center;padding:12px 16px;font-weight:700;font-size:.9rem;display:flex;align-items:center;justify-content:center;gap:12px;';
+  banner.innerHTML = `<i class="fa-solid fa-bell"></i>
+    <span>Mesa ${tableNumber}${customerName ? ' · ' + customerName : ''} solicitou a conta!</span>
+    <button onclick="this.parentElement.remove()" style="background:rgba(0,0,0,.2);border:none;border-radius:6px;color:#fff;padding:3px 10px;cursor:pointer;font-size:.8rem;">OK</button>`;
+  document.body.prepend(banner);
+  setTimeout(() => banner.remove(), 12000);
+}
+
+// ══════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('main.screen').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.getElementById(`nav-${tab}`).classList.add('active');
+  if (tab === 'pedidos') loadPedidos();
+  if (tab === 'mesas') loadTables();
+}
+
+// ══════════════════════════════════════════
+// DELIVERY CONFIG
+// ══════════════════════════════════════════
+async function loadDeliveryConfig() {
+  try {
+    const res = await fetch(`/delivery/config?establishment_id=${EST_ID}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (res.ok) {
+      deliveryConfig = await res.json();
+      deliveryConfig.zones = deliveryConfig.zones || [];
+    }
+  } catch {}
+}
+
+function buildZoneOptions() {
+  const tax = +deliveryConfig.delivery_tax || 0;
+  const base = `<option value="">Taxa padrão (R$ ${tax.toFixed(2).replace('.',',')})</option>`;
+  const zones = (deliveryConfig.zones || [])
+    .filter(z => z.is_active !== false)
+    .map(z => `<option value="${z.id}" data-tax="${z.delivery_tax}">${z.name}${z.city?' — '+z.city:''} · R$ ${(+z.delivery_tax).toFixed(2).replace('.',',')}</option>`)
+    .join('');
+  return base + zones;
+}
+
+function getSelectedTax(zoneSelId) {
+  const sel = document.getElementById(zoneSelId);
+  if (!sel) return 0;
+  const opt = sel.selectedOptions?.[0];
+  if (opt?.value && opt.dataset?.tax !== undefined) return +(opt.dataset.tax || 0);
+  return +(deliveryConfig.delivery_tax || 0);
+}
+
+// ══════════════════════════════════════════
+// PRODUTOS
+// ══════════════════════════════════════════
+async function loadProducts() {
+  try {
+    // /api/catalog/:id retorna [{id, name, items:[...]}]
+    const res = await fetch(`/api/catalog/${EST_ID}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    catalog = await res.json();
+
+    // flat list de produtos ativos
+    products = [];
+    const catMap = {};
+    for (const cat of catalog) {
+      for (const item of (cat.items || [])) {
+        if (item.active === false) continue;
+        products.push({ ...item, category_id: cat.id || cat.name, category_name: cat.name });
+        catMap[cat.id || cat.name] = cat.name;
+      }
+    }
+    categories = Object.entries(catMap).map(([id, name]) => ({ id, name }));
+
+    renderCategories();
+    renderProducts();
+  } catch(e) {
+    document.getElementById('pdv-products').innerHTML =
+      `<p class="col-span-2 text-center text-red-500 py-8">Erro ao carregar produtos: ${e.message}</p>`;
+  }
+}
+
+function renderCategories() {
+  const el = document.getElementById('cat-list');
+  const all = `<button onclick="filterByCategory(null)"
+    class="whitespace-nowrap px-3 py-1 rounded-full border text-xs font-medium transition ${!activeCat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200'}">
+    Todos</button>`;
+  const cats = categories.map(c =>
+    `<button onclick="filterByCategory('${c.id}')"
+      class="whitespace-nowrap px-3 py-1 rounded-full border text-xs font-medium transition ${activeCat === c.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200'}">
+      ${c.name}</button>`
+  ).join('');
+  el.innerHTML = all + cats;
+}
+
+function filterByCategory(catId) {
+  activeCat = catId;
+  renderCategories();
+  renderProducts();
+}
+
+function filterProducts() { renderProducts(); }
+
+function getFilteredProducts() {
+  const q = (document.getElementById('pdv-search')?.value || '').toLowerCase();
+  return products.filter(p => {
+    const matchCat = !activeCat || p.category_id === activeCat;
+    const matchQ = !q || p.name.toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+}
+
+function renderProducts() {
+  const el = document.getElementById('pdv-products');
+  const list = getFilteredProducts();
+  if (!list.length) {
+    el.innerHTML = '<p class="col-span-2 text-center text-gray-400 py-8">Nenhum produto encontrado.</p>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const hasAddons = p.addon_groups && p.addon_groups.length > 0;
+    const basePrice = +p.price > 0 ? `${hasAddons ? 'A partir de ' : ''}R$ ${(+p.price).toFixed(2).replace('.', ',')}` : 'Consulte';
+    const inCart = cart.filter(i => i.product.id === p.id).reduce((s,i) => s+i.qty, 0);
+    return `
+    <div class="product-card bg-white rounded-xl p-3 shadow-sm border" onclick="addToCart('${p.id}')">
+      ${p.image_base64 ? `<img src="${p.image_base64}" class="w-full h-20 object-cover rounded-lg mb-2">` : ''}
+      <p class="font-semibold text-gray-800 text-sm leading-tight">${p.name}</p>
+      <p class="text-xs text-gray-500 mt-0.5 line-clamp-2">${p.description || ''}</p>
+      <div class="flex items-center justify-between mt-1">
+        <p class="text-indigo-600 font-bold text-sm">${basePrice}</p>
+        ${inCart ? `<span class="bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full px-2">${inCart}</span>` : ''}
+      </div>
+      ${hasAddons ? `<p class="text-[10px] text-indigo-400 mt-1"><i class="fa-solid fa-layer-group mr-1"></i>Adicionais disponíveis</p>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+// MODAL ADICIONAIS
+// ══════════════════════════════════════════
+let addonPendingProduct = null;
+
+function openAddonsModal(p) {
+  addonPendingProduct = p;
+  document.getElementById('addon-product-name').textContent = p.name;
+  document.getElementById('addon-product-price').textContent = +p.price > 0 ? `A partir de R$ ${(+p.price).toFixed(2).replace('.', ',')}` : '';
+  document.getElementById('addon-note').value = '';
+
+  document.getElementById('addon-groups').innerHTML = p.addon_groups.map(g => {
+    const isSingle = g.max_qty === 1;
+    const badge = g.is_required
+      ? `<span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-semibold">Obrigatório</span>`
+      : `<span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Opcional · máx ${g.max_qty || '∞'}</span>`;
+    const inputs = g.items.map(opt => {
+      const inputType = isSingle ? 'radio' : 'checkbox';
+      const priceLabel = +opt.price > 0 ? `<span class="text-indigo-500 text-xs ml-1">+R$ ${(+opt.price).toFixed(2).replace('.', ',')}</span>` : '';
+      return `
+      <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-50 transition">
+        <input type="${inputType}" name="${isSingle ? `ag-${g.id}` : ''}"
+               class="addon-input accent-indigo-600"
+               data-group="${g.id}" data-group-name="${g.name}"
+               data-item="${opt.id}" data-item-name="${opt.name}" data-price="${opt.price}">
+        <span class="text-sm text-gray-800">${opt.name}</span>${priceLabel}
+      </label>`;
+    }).join('');
+    return `
+    <div class="border border-gray-200 rounded-xl p-3">
+      <div class="flex items-center gap-2 mb-2">
+        <p class="text-sm font-semibold text-gray-800">${g.name}</p>
+        ${badge}
+      </div>
+      <div class="space-y-0.5">${inputs}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('modal-addons').classList.remove('hidden');
+}
+
+function closeAddonsModal() {
+  document.getElementById('modal-addons').classList.add('hidden');
+  addonPendingProduct = null;
+}
+
+function confirmAddons() {
+  const p = addonPendingProduct;
+  if (!p) return;
+  // Valida obrigatórios
+  for (const g of p.addon_groups) {
+    if (!g.is_required) continue;
+    const checked = document.querySelectorAll(`.addon-input[data-group="${g.id}"]:checked`);
+    if (!checked.length) { showToast(`Selecione uma opção em "${g.name}"`); return; }
+  }
+  const selected = [];
+  document.querySelectorAll('.addon-input:checked').forEach(inp => {
+    selected.push({ id: inp.dataset.item, name: inp.dataset.itemName, price: +inp.dataset.price, group_name: inp.dataset.groupName });
+  });
+  const note = document.getElementById('addon-note').value.trim();
+  const addonsTotal = selected.reduce((s, a) => s + a.price, 0);
+  const unitPrice = +p.price + addonsTotal;
+  cart.push({ product: { ...p, price: unitPrice }, qty: 1, addons: selected, note });
+  closeAddonsModal();
+  updateCartUI();
+  showToast(`${p.name} adicionado`);
+  renderProducts();
+}
+
+// ══════════════════════════════════════════
+// CARRINHO
+// ══════════════════════════════════════════
+function addToCart(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  if (p.addon_groups && p.addon_groups.length > 0) {
+    openAddonsModal(p);
+    return;
+  }
+  const existing = cart.find(i => i.product.id === productId && !(i.addons?.length));
+  if (existing) existing.qty++;
+  else cart.push({ product: p, qty: 1, addons: [], note: '' });
+  updateCartUI();
+  showToast(`${p.name} adicionado`);
+  renderProducts(); // atualiza badge
+}
+
+function removeFromCart(idx) { cart.splice(idx, 1); updateCartUI(); renderProducts(); }
+function changeQty(idx, delta) {
+  cart[idx].qty = Math.max(1, cart[idx].qty + delta);
+  updateCartUI();
+}
+function clearCart() { cart = []; updateCartUI(); renderProducts(); }
+
+function getCartSubtotal() {
+  return cart.reduce((sum, i) => sum + (+i.product.price || 0) * i.qty, 0);
+}
+
+function getCurrentDeliveryTax(fromModal) {
+  const dtype = fromModal
+    ? document.getElementById('modal-dtype')?.value
+    : document.getElementById('pdv-dtype')?.value;
+  if (dtype !== 'delivery') return 0;
+  return getSelectedTax(fromModal ? 'modal-zone' : 'pdv-zone');
+}
+
+function updateCartUI() {
+  const subtotal = getCartSubtotal();
+  const taxD   = getCurrentDeliveryTax(false);
+  const taxM   = getCurrentDeliveryTax(true);
+  const totalD = subtotal + taxD;
+  const totalM = subtotal + taxM;
+
+  const countEl = document.getElementById('cart-count');
+  const totalCount = cart.reduce((s, i) => s + i.qty, 0);
+  countEl.textContent = totalCount;
+  countEl.classList.toggle('hidden', totalCount === 0);
+
+  document.getElementById('cart-total').textContent = `R$ ${totalD.toFixed(2).replace('.', ',')}`;
+  document.getElementById('modal-cart-total').textContent = `R$ ${totalM.toFixed(2).replace('.', ',')}`;
+
+  const taxRowD = document.getElementById('cart-tax-row');
+  const taxRowM = document.getElementById('modal-tax-row');
+  const dtype = document.getElementById('pdv-dtype')?.value;
+  const modalDtype = document.getElementById('modal-dtype')?.value;
+  taxRowD?.classList.toggle('hidden', dtype !== 'delivery');
+  taxRowM?.classList.toggle('hidden', modalDtype !== 'delivery');
+  if (!taxRowD?.classList.contains('hidden'))
+    document.getElementById('cart-tax-val').textContent = `R$ ${taxD.toFixed(2).replace('.', ',')}`;
+  if (!taxRowM?.classList.contains('hidden'))
+    document.getElementById('modal-tax-val').textContent = `R$ ${taxM.toFixed(2).replace('.', ',')}`;
+
+  renderCartItems('cart-items', false);
+  renderCartItems('modal-cart-items', true);
+}
+
+function renderCartItems(containerId, isModal) {
+  const el = document.getElementById(containerId);
+  if (!cart.length) {
+    el.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Carrinho vazio</p>';
+    return;
+  }
+  el.innerHTML = cart.map((item, idx) => {
+    const addonsHtml = (item.addons || []).length
+      ? `<p class="text-[10px] text-gray-400 truncate">${item.addons.map(a => a.name).join(', ')}</p>`
+      : '';
+    const noteHtml = item.note ? `<p class="text-[10px] text-gray-400 italic truncate">${item.note}</p>` : '';
+    return `
+    <div class="cart-item flex items-center gap-2 py-2 px-3">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${item.product.name}</p>
+        ${addonsHtml}${noteHtml}
+        <p class="text-xs text-indigo-600">R$ ${((+item.product.price || 0) * item.qty).toFixed(2).replace('.', ',')}</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="qty-btn" onclick="changeQty(${idx}, -1)">−</button>
+        <span class="text-sm font-semibold w-6 text-center">${item.qty}</span>
+        <button class="qty-btn" onclick="changeQty(${idx}, +1)">+</button>
+        <button class="qty-btn border-red-200 text-red-400" onclick="removeFromCart(${idx})">
+          <i class="fa-solid fa-trash text-xs"></i>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Toggle tipo de pedido ──
+function pdvToggleType() {
+  const dtype = document.getElementById('pdv-dtype').value;
+  const isDelivery = dtype === 'delivery';
+  const isMesa = dtype === 'mesa';
+  document.getElementById('pdv-mesa-row').classList.toggle('hidden', !isMesa);
+  document.getElementById('pdv-address-row').classList.toggle('hidden', !isDelivery);
+
+  const zoneRow = document.getElementById('pdv-zone-row');
+  if (isDelivery && deliveryConfig.zones?.length > 0) {
+    zoneRow.classList.remove('hidden');
+    document.getElementById('pdv-zone').innerHTML = buildZoneOptions();
+  } else {
+    zoneRow.classList.add('hidden');
+  }
+  updateCartUI();
+}
+
+function modalToggleType() {
+  const dtype = document.getElementById('modal-dtype').value;
+  const isDelivery = dtype === 'delivery';
+  const isMesa = dtype === 'mesa';
+  document.getElementById('modal-mesa-row').classList.toggle('hidden', !isMesa);
+  document.getElementById('modal-address-row').classList.toggle('hidden', !isDelivery);
+
+  const zoneRow = document.getElementById('modal-zone-row');
+  if (isDelivery && deliveryConfig.zones?.length > 0) {
+    zoneRow.classList.remove('hidden');
+    document.getElementById('modal-zone').innerHTML = buildZoneOptions();
+  } else {
+    zoneRow.classList.add('hidden');
+  }
+  updateCartUI();
+}
+
+function openCartModal() {
+  // Sincroniza selects de mesa e tipo
+  const selMobile  = document.getElementById('modal-table-select');
+  const selDesktop = document.getElementById('pdv-table-select');
+  selMobile.innerHTML = selDesktop.innerHTML;
+  selMobile.value = selDesktop.value;
+  const mdtype = document.getElementById('modal-dtype');
+  mdtype.value = document.getElementById('pdv-dtype').value;
+  modalToggleType();
+  updateCartUI();
+  document.getElementById('modal-cart').classList.remove('hidden');
+}
+function closeCartModal() { document.getElementById('modal-cart').classList.add('hidden'); }
+
+// ══════════════════════════════════════════
+// MESAS
+// ══════════════════════════════════════════
+async function loadTables(silent = false) {
+  if (!silent) {
+    document.getElementById('mesas-loading').classList.remove('hidden');
+    document.getElementById('mesas-grid').innerHTML = '';
+  }
+  try {
+    const res = await fetch('/delivery/tables', {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (res.status === 401) { doLogout(); return; }
+    tables = await res.json();
+    document.getElementById('mesas-loading').classList.add('hidden');
+    renderTables();
+    renderTableSelects();
+  } catch {
+    document.getElementById('mesas-loading').classList.add('hidden');
+  }
+}
+
+function renderTables() {
+  const el = document.getElementById('mesas-grid');
+  if (!tables.length) {
+    el.innerHTML = '<p class="col-span-2 text-center text-gray-400 py-8">Nenhuma mesa cadastrada.</p>';
+    return;
+  }
+  const statusMap = {
+    livre:            { label: 'Livre',            cls: 'badge-livre',           icon: 'fa-check' },
+    ocupada:          { label: 'Ocupada',           cls: 'badge-ocupada',         icon: 'fa-utensils' },
+    conta_solicitada: { label: 'Conta Solicitada',  cls: 'badge-conta_solicitada',icon: 'fa-file-invoice-dollar' },
+  };
+  el.innerHTML = tables.map(t => {
+    const s = statusMap[t.status] || { label: t.status, cls: 'badge-pending', icon: 'fa-question' };
+    const isBill = t.status === 'conta_solicitada';
+    return `
+    <div class="bg-white rounded-2xl shadow-sm border ${isBill ? 'border-amber-300 ring-2 ring-amber-300' : 'border-gray-100'} p-4 text-center cursor-pointer hover:shadow-md transition"
+      onclick="openMesaDetail('${t.id}')">
+      <div class="text-3xl font-bold text-gray-800 mb-1">${t.table_number}</div>
+      <span class="badge ${s.cls}"><i class="fa-solid ${s.icon} mr-1"></i>${s.label}</span>
+      ${t.customer_name ? `<p class="text-xs text-indigo-600 font-semibold mt-1 truncate"><i class="fa-solid fa-user mr-1"></i>${t.customer_name}</p>` : (t.seats ? `<p class="text-xs text-gray-400 mt-1">${t.seats} lugares</p>` : '')}
+      ${t.order_total > 0 ? `<p class="text-xs text-indigo-600 font-bold mt-1">R$ ${(+t.order_total).toFixed(2).replace('.', ',')}</p>` : ''}
+      ${t.order_count > 0 ? `<p class="text-xs text-gray-400">${t.order_count} pedido(s)</p>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderTableSelects() {
+  const opts = `<option value="">Sem mesa (balcão)</option>` +
+    tables.map(t => {
+      const occ = t.status !== 'livre';
+      return `<option value="${t.id}" ${occ ? 'style="color:#f97316"' : ''}>${t.table_number} — ${t.status === 'livre' ? 'Livre' : 'Ocupada'}</option>`;
+    }).join('');
+  document.getElementById('pdv-table-select').innerHTML = opts;
+  document.getElementById('modal-table-select').innerHTML = opts;
+}
+
+function openMesaModal() {
+  document.getElementById('mesa-number').value = '';
+  document.getElementById('mesa-seats').value = '4';
+  document.getElementById('modal-mesa').classList.remove('hidden');
+}
+function closeMesaModal() { document.getElementById('modal-mesa').classList.add('hidden'); }
+
+async function saveMesa() {
+  const number = document.getElementById('mesa-number').value.trim();
+  const seats = +document.getElementById('mesa-seats').value || 4;
+  if (!number) { showToast('Informe o número da mesa.'); return; }
+  try {
+    const res = await fetch('/delivery/tables', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ table_number: number, seats }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao salvar.'); return; }
+    closeMesaModal();
+    showToast(`Mesa ${number} criada!`);
+    loadTables();
+  } catch { showToast('Erro de conexão.'); }
+}
+
+let _tdTableId = null;
+let _tdTableData = null;
+
+async function openMesaDetail(tableId) {
+  _tdTableId = tableId;
+  document.getElementById('td-title').textContent = 'Carregando…';
+  document.getElementById('td-subtitle').textContent = '';
+  document.getElementById('td-actions').innerHTML = '';
+  document.getElementById('td-orders').innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-xl"></i></div>';
+  document.getElementById('td-grand-total').textContent = 'R$ 0,00';
+  document.getElementById('modal-table-detail').classList.remove('hidden');
+
+  try {
+    const t = tables.find(x => x.id === tableId);
+    const orders = await (await fetch(`/delivery/tables/${tableId}/orders`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })).json();
+    _tdTableData = { table: t, orders };
+    renderTableDetail();
+  } catch(e) {
+    document.getElementById('td-orders').innerHTML = `<p class="text-red-500 text-sm">${e.message}</p>`;
+  }
+}
+
+function closeTableDetail() {
+  document.getElementById('modal-table-detail').classList.add('hidden');
+}
+
+function renderTableDetail() {
+  const { table: t, orders } = _tdTableData;
+  if (!t) return;
+  const stLabel = { livre:'Livre', ocupada:'Ocupada', conta_solicitada:'🔔 Conta Solicitada' }[t.status] || t.status;
+  const stColor = { livre:'text-green-500', ocupada:'text-orange-500', conta_solicitada:'text-amber-500' }[t.status] || 'text-gray-500';
+
+  document.getElementById('td-title').textContent = `Mesa ${t.table_number}`;
+  const sub = document.getElementById('td-subtitle');
+  sub.textContent = `${stLabel}${t.customer_name ? ' · ' + t.customer_name : ''}`;
+  sub.className = `text-xs font-semibold mb-3 ${stColor}`;
+
+  document.getElementById('td-actions').innerHTML = `
+    <button onclick="tdFinalizeTable()" class="btn-sm btn-sm-green">
+      <i class="fa-solid fa-unlock mr-1"></i>Finalizar & Abrir Mesa
+    </button>
+    <button onclick="tdChangeStatus('conta_solicitada')" class="btn-sm btn-sm-amber">
+      <i class="fa-solid fa-file-invoice-dollar mr-1"></i>Marcar Conta
+    </button>
+    <button onclick="tdChangeStatus('livre')" class="btn-sm" style="background:#e5e7eb;color:#374151">
+      <i class="fa-solid fa-door-open mr-1"></i>Abrir sem finalizar
+    </button>`;
+
+  if (!orders.length) {
+    document.getElementById('td-orders').innerHTML =
+      '<p class="text-gray-400 text-sm text-center py-6">Nenhum pedido ativo.</p>';
+    document.getElementById('td-grand-total').textContent = 'R$ 0,00';
+    return;
+  }
+
+  const grandTotal = orders.reduce((s,o) => s + (+o.total||0), 0);
+  document.getElementById('td-grand-total').textContent =
+    `R$ ${grandTotal.toFixed(2).replace('.',',')}`;
+
+  const sMap = { pending:'Pendente', confirmed:'Confirmado', preparing:'Em Preparo', delivering:'Saiu', delivered:'Entregue', cancelled:'Cancelado' };
+  const sCol = { pending:'badge-pending', confirmed:'badge-confirmed', preparing:'badge-preparing', delivered:'badge-delivered', cancelled:'badge-cancelled' };
+  const payL = { pix:'PIX', dinheiro:'Dinheiro', cartao_credito:'Crédito', cartao_debito:'Débito', na_entrega:'Na Entrega' };
+
+  document.getElementById('td-orders').innerHTML = orders.map((o) => {
+    const items = (o.items||[]).map((it, ii) => `
+      <div class="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
+        <div class="flex items-center gap-1">
+          <button onclick="tdItemQty('${o.id}',${ii},-1)" class="qty-btn" style="width:24px;height:24px;font-size:.9rem">−</button>
+          <span class="text-sm font-semibold w-5 text-center">${it.quantity||1}</span>
+          <button onclick="tdItemQty('${o.id}',${ii},+1)" class="qty-btn" style="width:24px;height:24px;font-size:.9rem">+</button>
+        </div>
+        <span class="flex-1 text-sm text-gray-700 truncate">${it.name}</span>
+        <span class="text-xs text-indigo-600">R$ ${((+it.price||0)*(+(it.quantity||1))).toFixed(2).replace('.',',')}</span>
+        <button onclick="tdRemoveItem('${o.id}',${ii})" class="text-red-400 hover:text-red-600 text-xs ml-1">×</button>
+      </div>`).join('');
+    const isPix = o.payment_method === 'pix';
+
+    const isDone = ['delivered', 'cancelled'].includes(o.status);
+    const staffHtml = o.staff_name
+      ? `<p class="text-[10px] text-indigo-400"><i class="fa-solid fa-user-tie mr-0.5"></i>Garçom ${o.staff_name}</p>`
+      : '';
+
+    return `
+    <div class="border border-gray-100 rounded-xl p-3 space-y-2 transition ${isDone ? 'opacity-40' : ''}">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-gray-800">${o.daily_code || ('#'+o.order_number)}</span>
+          <span class="badge ${sCol[o.status]||'badge-pending'}">${sMap[o.status]||o.status}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-gray-400">${payL[o.payment_method]||'—'}</span>
+          <span class="font-bold text-indigo-600">R$ ${(+o.total).toFixed(2).replace('.',',')}</span>
+        </div>
+      </div>
+      <p class="text-xs text-gray-500"><i class="fa-solid fa-user mr-1"></i>${o.customer_name||'—'}</p>
+      ${staffHtml}
+      <div class="space-y-0.5">${items}</div>
+      <button onclick="tdAddToOrder('${o.id}')" class="text-xs text-indigo-500 hover:text-indigo-700 mt-1">
+        <i class="fa-solid fa-plus mr-1"></i>Adicionar item
+      </button>
+      <div class="flex flex-wrap gap-1 pt-2 border-t border-gray-100">
+        ${['confirmed','preparing','delivered'].map(s =>
+          `<button onclick="tdUpdateStatus('${o.id}','${s}')" class="btn-sm btn-sm-indigo" style="padding:4px 10px;font-size:.75rem">${sMap[s]}</button>`
+        ).join('')}
+        <button onclick="tdUpdateStatus('${o.id}','cancelled')" class="btn-sm btn-sm-red" style="padding:4px 10px;font-size:.75rem">Cancelar</button>
+        ${isPix ? `<button onclick="openPixModal('${o.id}', ${o.total})" class="btn-sm btn-sm-indigo" style="padding:4px 10px;font-size:.75rem"><i class="fa-solid fa-qrcode mr-1"></i>PIX</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function tdItemQty(orderId, idx, delta) {
+  const order = _tdTableData.orders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = JSON.parse(JSON.stringify(order.items||[]));
+  items[idx].quantity = Math.max(1, (+(items[idx].quantity||1)) + delta);
+  await tdSaveItems(orderId, items);
+}
+
+async function tdRemoveItem(orderId, idx) {
+  const order = _tdTableData.orders.find(o => o.id === orderId);
+  if (!order) return;
+  const items = JSON.parse(JSON.stringify(order.items||[]));
+  items.splice(idx, 1);
+  await tdSaveItems(orderId, items);
+}
+
+async function tdSaveItems(orderId, items) {
+  try {
+    const res = await fetch(`/delivery/orders/${orderId}/items`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ items }),
+    });
+    if (!res.ok) { showToast('Erro ao salvar.'); return; }
+    // Recarrega pedidos da mesa
+    const orders = await (await fetch(`/delivery/tables/${_tdTableId}/orders`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })).json();
+    _tdTableData.orders = orders;
+    renderTableDetail();
+    loadPedidos();
+  } catch { showToast('Erro de conexão.'); }
+}
+
+async function tdUpdateStatus(orderId, status) {
+  try {
+    const res = await fetch(`/delivery/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) { showToast('Erro.'); return; }
+    const orders = await (await fetch(`/delivery/tables/${_tdTableId}/orders`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })).json();
+    _tdTableData.orders = orders;
+    renderTableDetail();
+    loadTables(true);
+    loadPedidos();
+  } catch { showToast('Erro de conexão.'); }
+}
+
+function tdAddToOrder(orderId) {
+  closeTableDetail();
+  openEditItems(orderId);
+}
+
+async function tdFinalizeTable() {
+  try {
+    const res = await fetch(`/delivery/tables/${_tdTableId}/open`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (!res.ok) { showToast('Erro.'); return; }
+    closeTableDetail();
+    showToast('Mesa liberada!');
+    loadTables();
+    loadPedidos();
+  } catch { showToast('Erro de conexão.'); }
+}
+
+async function tdChangeStatus(status) {
+  try {
+    await fetch(`/delivery/tables/${_tdTableId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ status }),
+    });
+    closeTableDetail();
+    loadTables();
+  } catch { showToast('Erro.'); }
+}
+
+function tdGoToPDV() {
+  closeTableDetail();
+  document.getElementById('pdv-dtype').value = 'mesa';
+  pdvToggleType();
+  document.getElementById('pdv-table-select').value = _tdTableId;
+  switchTab('pdv');
+}
+
+async function updateMesaStatus(tableId, status) {
+  try {
+    const res = await fetch(`/delivery/tables/${tableId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) { showToast('Erro ao atualizar mesa.'); return; }
+    closePedidoModal();
+    showToast('Mesa atualizada!');
+    loadTables();
+  } catch { showToast('Erro de conexão.'); }
+}
+
+// ══════════════════════════════════════════
+// PEDIDOS
+// ══════════════════════════════════════════
+async function loadPedidos() {
+  const loadEl = document.getElementById('ped-loading');
+  const emptyEl = document.getElementById('ped-empty');
+  const listEl  = document.getElementById('ped-list');
+  const status  = document.getElementById('ped-filter-status').value;
+  loadEl.classList.remove('hidden');
+  listEl.innerHTML = '';
+  emptyEl.classList.add('hidden');
+  try {
+    // Sempre filtra apenas pedidos de hoje (fuso BR)
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+    const qs = new URLSearchParams({ date: today });
+    if (status) qs.set('status', status);
+    const res = await fetch(`/delivery/orders?${qs}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    if (res.status === 401) { doLogout(); return; }
+    let orders = await res.json();
+    loadEl.classList.add('hidden');
+    if (!orders.length) { emptyEl.classList.remove('hidden'); return; }
+    // Pendentes/ativos primeiro, finalizados por último
+    const done = ['delivered', 'cancelled'];
+    orders.sort((a, b) => {
+      const aDone = done.includes(a.status) ? 1 : 0;
+      const bDone = done.includes(b.status) ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+    listEl.innerHTML = orders.map(renderPedido).join('');
+  } catch {
+    loadEl.classList.add('hidden');
+    listEl.innerHTML = '<p class="text-center text-red-500 py-8">Erro ao carregar pedidos.</p>';
+  }
+}
+
+function renderPedido(o) {
+  const sMap = {
+    pending:    { l:'Pendente',        c:'badge-pending'    },
+    confirmed:  { l:'Confirmado',      c:'badge-confirmed'  },
+    preparing:  { l:'Em Preparo',      c:'badge-preparing'  },
+    delivering: { l:'Saiu p/ Entrega', c:'badge-delivering' },
+    delivered:  { l:'Entregue',        c:'badge-delivered'  },
+    cancelled:  { l:'Cancelado',       c:'badge-cancelled'  },
+  };
+  const s = sMap[o.status] || { l:o.status, c:'badge-pending' };
+  const isDone = ['delivered', 'cancelled'].includes(o.status);
+  const time = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  const items = (o.items || []).slice(0,3).map(i =>
+    `<span class="text-xs text-gray-400">${i.quantity||1}x ${i.name}</span>`).join(', ');
+  const dest = o.table_number ? `Mesa ${o.table_number}`
+    : o.delivery_type === 'delivery' ? 'Delivery'
+    : o.delivery_type === 'scheduled_pickup' ? 'Ret. Agendada'
+    : 'Balcão';
+  const staffHtml = o.staff_name
+    ? `<span class="text-[10px] text-indigo-400 font-medium"><i class="fa-solid fa-user-tie mr-0.5"></i>Garçom ${o.staff_name}</span>`
+    : '';
+
+  return `
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2 cursor-pointer hover:shadow-md transition ${isDone ? 'opacity-40' : ''}"
+    onclick="openPedidoDetail('${o.id}')">
+    <div class="flex items-start justify-between">
+      <div class="flex items-center gap-1 flex-wrap">
+        <span class="font-bold text-gray-800">${o.daily_code || ('#'+o.order_number) || '—'}</span>
+        <span class="badge ${s.c}">${s.l}</span>
+        <span class="text-xs text-gray-400">${dest}</span>
+      </div>
+      <span class="text-xs text-gray-400 shrink-0">${time}</span>
+    </div>
+    <p class="text-sm text-gray-700 mt-1 font-medium">${o.customer_name}</p>
+    ${staffHtml}
+    <p class="text-xs text-gray-400 mt-0.5 truncate">${items}</p>
+    <div class="flex justify-between items-center mt-1">
+      <span class="text-xs text-gray-400">${(o.items||[]).length} item(ns)</span>
+      <span class="text-sm font-bold text-gray-800">R$ ${(+o.total).toFixed(2).replace('.', ',')}</span>
+    </div>
+  </div>`;
+}
+
+// busca um pedido específico
+async function fetchOrder(orderId) {
+  const res = await fetch(`/delivery/orders?`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  const orders = await res.json();
+  return orders.find(x => x.id === orderId) || null;
+}
+
+async function openPedidoDetail(orderId) {
+  closePedidoModal(); // fecha mesa detail se aberto
+  try {
+    const o = await fetchOrder(orderId);
+    if (!o) { showToast('Pedido não encontrado.'); return; }
+
+    const sMap = {
+      pending:'Pendente', confirmed:'Confirmado', preparing:'Em Preparo',
+      delivering:'Saiu para Entrega', delivered:'Entregue', cancelled:'Cancelado',
+    };
+    const payMap = {
+      pix:'PIX', dinheiro:'Dinheiro', cartao_credito:'Cartão Crédito',
+      cartao_debito:'Cartão Débito', na_entrega:'Na Entrega',
+    };
+    const items = (o.items || []).map(it =>
+      `<li class="text-sm text-gray-600 flex justify-between">
+        <span>${it.quantity||1}x ${it.name}</span>
+        <span>R$ ${((+it.price||0)*(+(it.quantity||1))).toFixed(2).replace('.', ',')}</span>
+      </li>`
+    ).join('');
+
+    const activeStatuses = ['pending','confirmed','preparing','delivering'];
+    const statusBtns = activeStatuses.map(s =>
+      `<button class="btn-sm btn-sm-indigo" onclick="updatePedidoStatus('${o.id}','${s}')">${sMap[s]}</button>`
+    ).join('');
+
+    const canEdit = !['delivered','cancelled'].includes(o.status);
+    const isPix = o.payment_method === 'pix';
+
+    const html = `
+      <p class="text-sm text-gray-500 mb-1">Cliente: <b class="text-gray-800">${o.customer_name}</b></p>
+      ${o.table_number ? `<p class="text-sm text-gray-500 mb-1">Mesa: <b>${o.table_number}</b></p>` : ''}
+      ${o.customer_address ? `<p class="text-sm text-gray-500 mb-1">Endereço: <b>${o.customer_address}</b></p>` : ''}
+      <p class="text-sm text-gray-500 mb-1">Pagamento: <b>${payMap[o.payment_method]||o.payment_method}</b></p>
+      <p class="text-sm text-gray-500 mb-3">Status: <b>${sMap[o.status]||o.status}</b></p>
+      <ul class="mb-2 space-y-1 border-t pt-2">${items}</ul>
+      ${+o.delivery_tax>0 ? `<p class="text-xs text-gray-400 text-right">+ Entrega R$ ${(+o.delivery_tax).toFixed(2).replace('.',',')}</p>` : ''}
+      <div class="flex justify-between font-bold mb-4 border-t pt-2">
+        <span>Total</span>
+        <span>R$ ${(+o.total).toFixed(2).replace('.', ',')}</span>
+      </div>
+      <p class="text-xs text-gray-500 font-medium mb-2">Alterar status:</p>
+      <div class="flex flex-wrap gap-2 mb-3">${statusBtns}
+        <button class="btn-sm btn-sm-red" onclick="updatePedidoStatus('${o.id}','cancelled')">Cancelar</button>
+      </div>
+      <div class="flex flex-col gap-2">
+        ${canEdit ? `
+          <button class="btn-outline text-sm py-2" onclick="openEditItems('${o.id}'); closePedidoModal();">
+            <i class="fa-solid fa-pen mr-1"></i>Editar itens
+          </button>` : ''}
+        ${isPix ? `
+          <button class="btn-sm btn-sm-indigo w-full py-2" onclick="openPixModal('${o.id}', ${o.total})">
+            <i class="fa-solid fa-qrcode mr-1"></i>Gerar QR Code PIX
+          </button>` : ''}
+      </div>
+    `;
+    document.getElementById('modal-ped-title').textContent = `${o.daily_code || ('#'+o.order_number)}`;
+    document.getElementById('modal-ped-content').innerHTML = html;
+    document.getElementById('modal-pedido').classList.remove('hidden');
+  } catch { showToast('Erro ao carregar pedido.'); }
+}
+
+async function updatePedidoStatus(orderId, status) {
+  try {
+    const res = await fetch(`/delivery/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro.'); return; }
+    closePedidoModal();
+    showToast('Status atualizado!');
+    loadPedidos();
+    loadTables(true);
+  } catch { showToast('Erro de conexão.'); }
+}
+
+function closePedidoModal() { document.getElementById('modal-pedido').classList.add('hidden'); }
+
+// ══════════════════════════════════════════
+// EDITAR ITENS DO PEDIDO (adicionar + remover)
+// ══════════════════════════════════════════
+async function openEditItems(orderId) {
+  try {
+    const o = await fetchOrder(orderId);
+    if (!o) { showToast('Pedido não encontrado.'); return; }
+    editOrderId    = orderId;
+    editOrderItems = JSON.parse(JSON.stringify(o.items || [])); // cópia mutável
+    editAddCart    = [];
+    editActiveCat  = null;
+    renderEditCurrentItems();
+    renderEditCatTabs();
+    renderEditProducts();
+    renderEditCartPreview();
+    document.getElementById('edit-search').value = '';
+    document.getElementById('modal-edit-items').classList.remove('hidden');
+  } catch { showToast('Erro ao carregar pedido.'); }
+}
+
+function closeEditItems() {
+  document.getElementById('modal-edit-items').classList.add('hidden');
+  editOrderId = null; editOrderItems = []; editAddCart = [];
+}
+
+function renderEditCurrentItems() {
+  const el = document.getElementById('edit-current-items');
+  if (!editOrderItems.length) {
+    el.innerHTML = '<p class="text-xs text-gray-400 text-center py-2">Sem itens</p>';
+    return;
+  }
+  el.innerHTML = editOrderItems.map((it, idx) => {
+    const total = ((+it.price||0) * (+(it.quantity||1))).toFixed(2).replace('.', ',');
+    return `
+    <div class="flex items-center gap-2 py-1.5 border-b border-gray-100">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${it.quantity||1}x ${it.name}</p>
+        <p class="text-xs text-indigo-600">R$ ${total}</p>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button class="qty-btn border-gray-200" onclick="editChangeQty(${idx}, -1)">−</button>
+        <span class="text-sm font-semibold w-5 text-center">${it.quantity||1}</span>
+        <button class="qty-btn border-gray-200" onclick="editChangeQty(${idx}, +1)">+</button>
+        <button class="qty-btn border-red-200 text-red-400" onclick="editRemoveItem(${idx})">
+          <i class="fa-solid fa-trash text-xs"></i>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editChangeQty(idx, delta) {
+  if (!editOrderItems[idx]) return;
+  editOrderItems[idx].quantity = Math.max(1, (+(editOrderItems[idx].quantity||1)) + delta);
+  renderEditCurrentItems();
+}
+
+function editRemoveItem(idx) {
+  editOrderItems.splice(idx, 1);
+  renderEditCurrentItems();
+}
+
+let editActiveCat = null; // categoria selecionada no modal editar
+
+function renderEditCatTabs() {
+  const el = document.getElementById('edit-cat-tabs');
+  if (!el) return;
+  const tabs = [{ id: null, name: 'Todos' }, ...catalog.map(c => ({ id: c.id, name: c.name }))];
+  el.innerHTML = tabs.map(c => {
+    const active = editActiveCat === c.id;
+    return `<button onclick="editActiveCat='${c.id}';renderEditProducts()"
+      class="shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+        ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'}"
+      >${c.name}</button>`;
+  }).join('');
+}
+
+function renderEditProducts() {
+  const q = (document.getElementById('edit-search')?.value || '').toLowerCase();
+  let list = [];
+  if (editActiveCat) {
+    const cat = catalog.find(c => c.id === editActiveCat);
+    list = cat ? (cat.items || []) : [];
+  } else {
+    list = products;
+  }
+  if (q) list = list.filter(p => p.name.toLowerCase().includes(q));
+
+  const el = document.getElementById('edit-products-list');
+  if (!list.length) {
+    el.innerHTML = '<p class="col-span-2 text-xs text-gray-400 text-center py-4">Nenhum produto encontrado</p>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const price = +p.price > 0 ? `R$ ${(+p.price).toFixed(2).replace('.', ',')}` : 'Consulte';
+    const inCart = editAddCart.find(i => i.product.id === p.id);
+    const img = p.image_url
+      ? `<img src="${p.image_url}" class="w-full h-20 object-cover rounded-t-lg" onerror="this.style.display='none'">`
+      : `<div class="w-full h-20 bg-indigo-50 rounded-t-lg flex items-center justify-center text-2xl">🍽️</div>`;
+    return `
+    <div class="border rounded-lg overflow-hidden bg-white shadow-sm">
+      ${img}
+      <div class="p-2">
+        <p class="text-xs font-semibold text-gray-800 truncate">${p.name}</p>
+        <p class="text-xs text-indigo-600 font-bold">${price}</p>
+        ${inCart ? `
+          <div class="flex items-center justify-center gap-2 mt-1.5">
+            <button class="qty-btn w-6 h-6 text-sm" onclick="editAddChangeQty('${p.id}', -1)">−</button>
+            <span class="text-sm font-bold text-gray-800">${inCart.qty}</span>
+            <button class="qty-btn w-6 h-6 text-sm" onclick="editAddChangeQty('${p.id}', +1)">+</button>
+          </div>
+        ` : `
+          <button onclick="editAddToCart('${p.id}')"
+            class="mt-1.5 w-full text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded py-1 font-semibold transition-colors">
+            + Adicionar
+          </button>
+        `}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editAddToCart(productId) {
+  const p = products.find(x => x.id === productId);
+  if (!p) return;
+  editAddCart.push({ product: p, qty: 1 });
+  renderEditProducts();
+  renderEditCartPreview();
+}
+
+function editAddChangeQty(productId, delta) {
+  const item = editAddCart.find(i => i.product.id === productId);
+  if (!item) return;
+  item.qty = Math.max(1, item.qty + delta);
+  if (item.qty <= 0) editAddCart = editAddCart.filter(i => i.product.id !== productId);
+  renderEditProducts();
+  renderEditCartPreview();
+}
+
+function renderEditCartPreview() {
+  const el = document.getElementById('edit-cart-preview');
+  if (!editAddCart.length) {
+    el.innerHTML = '<p class="text-gray-400 text-xs">Nenhum item novo selecionado</p>';
+    return;
+  }
+  const total = editAddCart.reduce((s, i) => s + (+i.product.price||0) * i.qty, 0);
+  el.innerHTML = `
+    <p class="text-xs font-medium text-gray-600 mb-1">Itens a adicionar:</p>
+    ${editAddCart.map(i => `<p class="text-xs text-gray-500">${i.qty}x ${i.product.name}</p>`).join('')}
+    <p class="text-sm font-bold text-gray-800 mt-1">+R$ ${total.toFixed(2).replace('.', ',')}</p>`;
+}
+
+async function submitEditItems() {
+  if (!editOrderId) return;
+
+  // Mescla: itens existentes (possivelmente modificados) + novos do addCart
+  const newItems = editAddCart.map(i => ({
+    id: i.product.id,
+    name: i.product.name,
+    price: +i.product.price || 0,
+    quantity: i.qty,
+    added_by_store: true,
+  }));
+  const finalItems = [...editOrderItems, ...newItems];
+
+  if (!finalItems.length) { showToast('O pedido precisa ter pelo menos 1 item.'); return; }
+
+  try {
+    const res = await fetch(`/delivery/orders/${editOrderId}/items`, {
+      method: 'PUT',  // substitui a lista completa
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify({ items: finalItems }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao salvar.'); return; }
+    closeEditItems();
+    showToast('Pedido atualizado!');
+    loadPedidos();
+    loadTables(true);
+  } catch { showToast('Erro de conexão.'); }
+}
+
+// ══════════════════════════════════════════
+// PIX — GERAR QR CODE
+// ══════════════════════════════════════════
+async function openPixModal(orderId, total) {
+  pixCode = '';
+  document.getElementById('pix-loading').classList.remove('hidden');
+  document.getElementById('pix-content').classList.add('hidden');
+  document.getElementById('pix-error').classList.add('hidden');
+  document.getElementById('pix-amount').textContent = `R$ ${(+total).toFixed(2).replace('.',',')}`;
+  document.getElementById('modal-pix').classList.remove('hidden');
+
+  try {
+    const res = await fetch('/delivery/public/pix-generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId, establishment_id: EST_ID }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erro ao gerar PIX');
+
+    pixCode = data.code || '';
+    // QR code via API pública de imagem
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pixCode)}`;
+    document.getElementById('pix-qr-img').src = qrUrl;
+    document.getElementById('pix-code-text').textContent = pixCode;
+    document.getElementById('pix-loading').classList.add('hidden');
+    document.getElementById('pix-content').classList.remove('hidden');
+  } catch(e) {
+    document.getElementById('pix-loading').classList.add('hidden');
+    const errEl = document.getElementById('pix-error');
+    errEl.textContent = e.message || 'PIX não configurado para esta loja.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+function closePixModal() {
+  document.getElementById('modal-pix').classList.add('hidden');
+}
+
+function copyPixCode() {
+  if (!pixCode) return;
+  navigator.clipboard.writeText(pixCode)
+    .then(() => showToast('Código PIX copiado!'))
+    .catch(() => showToast('Não foi possível copiar.'));
+}
+
+// ══════════════════════════════════════════
+// CRIAR PEDIDO (PDV)
+// ══════════════════════════════════════════
+async function submitOrder(fromModal = false) {
+  if (!cart.length) { showToast('Adicione produtos ao pedido.'); return; }
+
+  const dtype   = fromModal
+    ? document.getElementById('modal-dtype').value
+    : document.getElementById('pdv-dtype').value;
+  const tableId = fromModal
+    ? document.getElementById('modal-table-select').value
+    : document.getElementById('pdv-table-select').value;
+  const address = fromModal
+    ? document.getElementById('modal-address').value.trim()
+    : document.getElementById('pdv-address').value.trim();
+  const zoneId  = fromModal
+    ? document.getElementById('modal-zone').value
+    : document.getElementById('pdv-zone').value;
+  const customer = ((fromModal
+    ? document.getElementById('modal-customer').value
+    : document.getElementById('pdv-customer').value).trim()) || 'Garçom';
+  const payment = fromModal
+    ? document.getElementById('modal-payment').value
+    : document.getElementById('pdv-payment').value;
+  const notes   = fromModal
+    ? document.getElementById('modal-notes').value
+    : document.getElementById('pdv-notes').value;
+
+  if (dtype === 'delivery' && !address) { showToast('Informe o endereço de entrega.'); return; }
+  if (dtype === 'mesa' && !tableId)     { showToast('Selecione a mesa.'); return; }
+
+  // balcao/pickup → pickup; mesa → mesa
+  const deliveryType = dtype === 'balcao' ? 'pickup'
+    : dtype === 'mesa' ? 'mesa'
+    : dtype; // pickup | delivery
+
+  const items = cart.map(i => ({
+    id: i.product.id,
+    name: i.product.name,
+    price: +i.product.price || 0,
+    quantity: i.qty,
+    note: i.note || undefined,
+    addons: (i.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price, group_name: a.group_name })),
+    selected_options: (i.addons || []).map(a => ({ id: a.id, name: a.name, additional_price: a.price, group_name: a.group_name })),
+  }));
+
+  const body = {
+    establishment_id: EST_ID,
+    customer_name:    customer,
+    items,
+    delivery_type:    deliveryType === 'mesa' ? 'pickup' : deliveryType,
+    table_id:         (dtype === 'mesa' && tableId) ? tableId : undefined,
+    customer_address: dtype === 'delivery' ? address : undefined,
+    zone_id:          dtype === 'delivery' && zoneId ? zoneId : undefined,
+    payment_method:   payment,
+    notes:            notes || undefined,
+    source:           'garcom',
+    staff_name:       STAFF_NAME || undefined,
+  };
+
+  try {
+    const res = await fetch('/delivery/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Erro ao criar pedido.'); return; }
+
+    // Marca mesa como ocupada
+    if (dtype === 'mesa' && tableId) {
+      await fetch(`/delivery/tables/${tableId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+        body: JSON.stringify({ status: 'ocupada', current_order_id: data.id }),
+      }).catch(() => {});
+    }
+
+    clearCart();
+    if (fromModal) closeCartModal();
+    showToast('Pedido enviado!');
+
+    // Limpa campos
+    document.getElementById('pdv-customer').value = '';
+    document.getElementById('pdv-notes').value    = '';
+    document.getElementById('pdv-address').value  = '';
+    loadTables(true);
+
+    // Se PIX, abre modal QR code automaticamente
+    if (payment === 'pix' && data.id) {
+      setTimeout(() => openPixModal(data.id, data.total || 0), 400);
+    }
+  } catch { showToast('Erro de conexão.'); }
+}
+
+// ══════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Read(//c/Users/w_car/OneDrive/Documentos/GitHub/agenda-ag-on/**)",
+      "Read(//c/Users/w_car/OneDrive/Documentos/GitHub/agfit/**)",
+      "Read(//c/Users/w_car/OneDrive/Documentos/GitHub/agpedidos/**)",
+      "Read(//c/Users/w_car/OneDrive/Documentos/GitHub/ag-on-core/**)",
+      "Bash(mkdir -p \"c:/Users/w_car/OneDrive/Documentos/GitHub/AG-ON-SAAS/src/verticals\")",
+      "Bash(mkdir -p \"c:/Users/w_car/OneDrive/Documentos/GitHub/AG-ON-SAAS/src/routes/agenda\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node -r dotenv/config database/seed_demos.js)",
+      "Bash(ls .env*)",
+      "Read(//c/Users/w_car/OneDoing/Documentos/GitHub/AG-ON-SAAS/public/**)",
+      "Bash(ls c:/Users/w_car/OneDrive/Documentos/GitHub/AG-ON-SAAS/public/*.html)",
+      "Bash(/\" \"c:/Users/w_car/OneDrive/Documentos/GitHub/AG-ON-SAAS/public/loja.html\" | grep -v \"//\\\\|setup-wizard\" | head -60)",
+      "Bash(grep -n \"api\\('/\\\\|api\\(`/\" \"c:/Users/w_car/OneDrive/Documentos/GitHub/AG-ON-SAAS/public/loja.html\" | grep -v \"//\\\\|setup-wizard\" | head -60)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\w_car\\OneDrive\\Documentos\\GitHub\\agenda-ag-on\\public\\loja",
+      "c:\\Users\\w_car\\OneDrive\\Documentos\\GitHub\\agenda-ag-on\\public\\profissional"
+    ]
+  }
+}

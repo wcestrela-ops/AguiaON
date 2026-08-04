@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Meus Pedidos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        :root { --accent: #6366f1; }
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- HEADER -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-4 flex items-center gap-3 sticky top-0 z-10">
+        <button onclick="goBack()" class="text-slate-400 hover:text-white w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors">
+            <i class="fa fa-arrow-left"></i>
+        </button>
+        <div class="flex-1">
+            <h1 class="font-bold text-white text-base" id="store-title">Meus Pedidos</h1>
+            <p class="text-xs text-slate-400" id="store-subtitle">Portal do Cliente</p>
+        </div>
+        <div id="store-logo-small" class="w-9 h-9 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center text-slate-400 text-sm font-bold shrink-0">
+            <i class="fa fa-store"></i>
+        </div>
+    </header>
+
+    <!-- CONTEÚDO -->
+    <main class="flex-1 max-w-lg w-full mx-auto p-4 space-y-6">
+
+        <!-- Identificação por telefone -->
+        <div id="login-section" class="bg-slate-800/60 rounded-2xl p-6 space-y-4">
+            <div class="text-center">
+                <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[var(--accent)]/20 text-[var(--accent)] text-3xl mb-3">
+                    <i class="fa fa-user-circle"></i>
+                </div>
+                <h2 class="font-bold text-white text-lg">Acesse seus pedidos</h2>
+                <p class="text-slate-400 text-sm mt-1">Informe seu WhatsApp para ver seu histórico</p>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 font-bold uppercase mb-2">WhatsApp</label>
+                <input id="portal-phone" type="tel" placeholder="(99) 99999-9999"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-base focus:outline-none focus:border-[var(--accent)]"
+                    onkeydown="if(event.key==='Enter') loadOrders()">
+            </div>
+            <button onclick="loadOrders()" id="btn-load"
+                class="w-full bg-[var(--accent)] hover:opacity-90 text-white font-bold py-3.5 rounded-xl transition-opacity flex items-center justify-center gap-2">
+                <i class="fa fa-search"></i> Buscar Pedidos
+            </button>
+        </div>
+
+        <!-- Resultado -->
+        <div id="orders-section" class="hidden space-y-4">
+
+            <!-- Info do cliente -->
+            <div id="customer-info" class="bg-slate-800/60 rounded-2xl p-4 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center text-[var(--accent)] text-xl shrink-0" style="background:color-mix(in srgb,var(--accent) 15%,transparent)">
+                    <i class="fa fa-user"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p id="ci-name" class="font-bold text-white truncate"></p>
+                    <p id="ci-phone" class="text-xs text-slate-400"></p>
+                </div>
+                <div class="text-right shrink-0">
+                    <p id="ci-total" class="text-emerald-400 font-bold text-sm"></p>
+                    <p id="ci-orders" class="text-slate-500 text-xs"></p>
+                </div>
+            </div>
+
+            <!-- Lista de pedidos -->
+            <div>
+                <p class="text-xs text-slate-500 uppercase font-bold mb-3">Histórico de Pedidos</p>
+                <div id="orders-list" class="space-y-3"></div>
+            </div>
+
+            <!-- Botão pedir novamente -->
+            <button onclick="goBack()" id="btn-new-order"
+                class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                <i class="fa fa-shopping-bag"></i> Fazer novo pedido
+            </button>
+        </div>
+
+        <!-- Não encontrado -->
+        <div id="not-found-section" class="hidden text-center py-8 space-y-3">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-slate-800 text-slate-400 text-3xl">
+                <i class="fa fa-box-open"></i>
+            </div>
+            <p class="text-white font-semibold">Nenhum pedido encontrado</p>
+            <p class="text-slate-400 text-sm">Este número ainda não fez pedidos nesta loja.</p>
+            <button onclick="resetPortal()" class="text-[var(--accent)] text-sm hover:underline">Tentar outro número</button>
+        </div>
+
+    </main>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const estId  = params.get('est');
+const slug   = params.get('slug') || '';
+
+const STATUS_LABELS = {
+    pending:    { label: 'Aguardando',  color: '#f59e0b' },
+    confirmed:  { label: 'Confirmado',  color: '#6366f1' },
+    preparing:  { label: 'Preparando',  color: '#3b82f6' },
+    delivering: { label: 'A caminho',   color: '#8b5cf6' },
+    delivered:  { label: 'Entregue',    color: '#10b981' },
+    cancelled:  { label: 'Cancelado',   color: '#ef4444' },
+};
+
+const PAY_LABELS = {
+    pix: 'PIX', cartao_credito: 'Cartão', cartao_debito: 'Débito',
+    dinheiro: 'Dinheiro', na_entrega: 'Na entrega',
+};
+
+function fmtMoney(v) { return 'R$ ' + (+v || 0).toFixed(2).replace('.', ','); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function goBack() {
+    if (slug) window.location.href = `/${slug}`;
+    else window.history.back();
+}
+
+async function loadOrders() {
+    const phoneRaw = document.getElementById('portal-phone').value.replace(/\D/g, '');
+    if (phoneRaw.length < 10) { alert('Informe um WhatsApp válido.'); return; }
+
+    const btn = document.getElementById('btn-load');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin mr-2"></i>Buscando...';
+
+    try {
+        // Busca info do cliente + pedidos em paralelo
+        const [lookupRes, ordersRes] = await Promise.all([
+            fetch('/delivery/public/customer-lookup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: phoneRaw, establishment_id: estId }),
+            }),
+            fetch(`/delivery/public/customer-orders?phone=${phoneRaw}&establishment_id=${estId}`),
+        ]);
+
+        const lookup = lookupRes.ok ? await lookupRes.json() : { found: false };
+        const orders = ordersRes.ok ? await ordersRes.json() : [];
+
+        if (!orders.length && !lookup.found) {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('not-found-section').classList.remove('hidden');
+            return;
+        }
+
+        renderOrders(phoneRaw, lookup, orders);
+
+    } catch (err) {
+        alert('Erro de conexão. Tente novamente.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-search mr-2"></i>Buscar Pedidos';
+    }
+}
+
+function renderOrders(phone, lookup, orders) {
+    // Info do cliente
+    document.getElementById('ci-name').textContent  = lookup.name || 'Cliente';
+    document.getElementById('ci-phone').textContent = phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+    if (orders.length) {
+        const totalSpent = orders.reduce((s, o) => s + +o.total, 0);
+        document.getElementById('ci-total').textContent  = fmtMoney(totalSpent) + ' gastos';
+        document.getElementById('ci-orders').textContent = `${orders.length} pedido${orders.length > 1 ? 's' : ''}`;
+    }
+
+    // Lista
+    const list = document.getElementById('orders-list');
+    if (!orders.length) {
+        list.innerHTML = `<p class="text-slate-500 text-sm text-center py-4">Histórico vazio.</p>`;
+    } else {
+        list.innerHTML = orders.map(order => {
+            const st    = STATUS_LABELS[order.status] || { label: order.status, color: '#94a3b8' };
+            const items = Array.isArray(order.items) ? order.items : (JSON.parse(order.items || '[]'));
+            const itemsSummary = items.slice(0, 3).map(i => `${i.quantity || 1}× ${esc(i.name)}`).join(', ');
+            const extra = items.length > 3 ? ` +${items.length - 3} mais` : '';
+            const date  = new Date(order.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+            const trackUrl = `/track/${order.id}`;
+
+            const encodedItems = encodeURIComponent(JSON.stringify(items));
+            return `
+            <div class="bg-slate-800/60 rounded-2xl p-4 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <p class="font-bold text-white text-sm">#${(order.daily_code || order.id.slice(-8)).toUpperCase()}</p>
+                        <p class="text-slate-400 text-xs">${date}</p>
+                    </div>
+                    <span class="text-xs font-bold px-2 py-1 rounded-full shrink-0" style="background:${st.color}22;color:${st.color}">${st.label}</span>
+                </div>
+                <p class="text-slate-300 text-sm line-clamp-1">${itemsSummary}${extra}</p>
+                <div class="flex items-center justify-between gap-2 mt-1">
+                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                        <span>${PAY_LABELS[order.payment_method] || order.payment_method} · ${order.delivery_type === 'pickup' ? 'Retirada' : 'Entrega'}</span>
+                        <span class="font-bold text-emerald-400 text-sm">${fmtMoney(order.total)}</span>
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <a href="${trackUrl}" class="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
+                            <i class="fa fa-location-dot mr-1"></i>Ver
+                        </a>
+                        <button onclick="repeatOrder('${encodedItems}')"
+                            class="text-xs font-bold text-white px-3 py-1.5 rounded-lg transition-colors"
+                            style="background:var(--accent)">
+                            <i class="fa fa-rotate-right mr-1"></i>Repetir
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Botão "novo pedido" aponta para a loja certa
+    const btnNew = document.getElementById('btn-new-order');
+    if (slug) btnNew.onclick = () => window.location.href = `/${slug}`;
+
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('orders-section').classList.remove('hidden');
+}
+
+function repeatOrder(encodedItems) {
+    if (!slug && !estId) { alert('Não foi possível identificar a loja.'); return; }
+    try {
+        const items = JSON.parse(decodeURIComponent(encodedItems));
+        sessionStorage.setItem('ag_repeat_order', JSON.stringify({
+            establishment_id: estId,
+            items: items.map(i => ({
+                item: { id: i.id, name: i.name, price: i.price },
+                quantity: i.quantity || 1,
+                selected_options: i.selected_options || [],
+            })),
+        }));
+        window.location.href = slug ? `/${slug}` : `/?est=${estId}`;
+    } catch { alert('Erro ao repetir pedido.'); }
+}
+
+function resetPortal() {
+    document.getElementById('not-found-section').classList.add('hidden');
+    document.getElementById('orders-section').classList.add('hidden');
+    document.getElementById('login-section').classList.remove('hidden');
+    document.getElementById('portal-phone').value = '';
+    document.getElementById('portal-phone').focus();
+}
+
+// Carrega info da loja para personalizar visual
+async function init() {
+    if (!estId) return;
+    try {
+        const res = await fetch(`/public/marketplace/${slug || estId}`);
+        if (!res.ok) return;
+        const store = await res.json();
+
+        document.title = `Meus Pedidos — ${store.name}`;
+        document.getElementById('store-title').textContent    = store.name;
+        document.getElementById('store-subtitle').textContent = 'Meus Pedidos';
+
+        if (store.cor_destaque) document.documentElement.style.setProperty('--accent', store.cor_destaque);
+
+        const logo = document.getElementById('store-logo-small');
+        if (store.logo_base64) logo.innerHTML = `<img src="${store.logo_base64}" class="w-full h-full object-cover">`;
+        else if (store.logo_url) logo.innerHTML = `<img src="${store.logo_url}" class="w-full h-full object-cover">`;
+        else logo.textContent = store.name.charAt(0).toUpperCase();
+    } catch { /* silencioso */ }
+}
+
+init();
+</script>
+</body>
+</html>
