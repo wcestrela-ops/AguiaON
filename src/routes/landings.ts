@@ -39,6 +39,7 @@ import { listBlueprints } from '../verticals/blueprints';
 import { extractSubdomainSlug } from '../shared/tenantResolver';
 import { findOrCreateClienteUser, ensureTables as ensureAgendaTables } from './agenda/index';
 import { getSmtpSettings, sendEmail, buildTermoAdesaoEmailHtml } from '../shared/mailer';
+import { createCustomer as createAsaasCustomer } from '../shared/asaasClient';
 
 const router = Router();
 
@@ -688,15 +689,36 @@ async function convertLandingLead(leadId: string) {
     const userId = await findOrCreateClienteUser(lead.nome, lead.whatsapp, lead.email);
     loginDisponivel = !!userId;
 
+    // Fix de produção 29 — o Carlos pediu pra já criar o cliente no Asaas
+    // aqui, na conversão do lead, em vez de só na primeira cobrança (como
+    // era antes, tanto na cobrança manual quanto na recorrência automática —
+    // ver createAsaasCustomer em agenda/index.ts e trackingBillingJob.ts).
+    // Objetivo: detectar qualquer problema de credencial/rota do Asaas nesse
+    // momento (lojista está olhando a tela), não no dia da cobrança
+    // automática, sem ninguém por perto pra perceber. Best-effort — igual ao
+    // padrão já usado no cadastro manual de cliente: se o Asaas falhar (ex:
+    // conta não configurada ainda), o cliente é criado local mesmo assim, e
+    // o fallback "sob demanda" na hora de cobrar continua valendo como rede
+    // de segurança.
+    let asaasCustomerId: string | null = null;
+    try {
+      const created = await createAsaasCustomer(eid, {
+        name: lead.nome, phone: lead.whatsapp || null, email: lead.email || null, cpfCnpj: lead.cpf_cnpj || null,
+      });
+      asaasCustomerId = created?.id || null;
+    } catch (asaasErr: any) {
+      console.warn(`[landing-leads] não foi possível criar cliente no Asaas na conversão (${asaasErr.message}) — seguindo só local, cria na 1ª cobrança.`);
+    }
+
     const clienteRes = await pool.query(
       `INSERT INTO agenda_clientes
-         (establishment_id, nome, telefone, email, cpf_cnpj, observacoes, origem, user_id,
+         (establishment_id, nome, telefone, email, cpf_cnpj, asaas_customer_id, observacoes, origem, user_id,
           endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
           data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
-       VALUES ($1,$2,$3,$4,$5,$6,'landing_modulo',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'landing_modulo',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id`,
       [
-        eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null,
+        eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null, asaasCustomerId,
         lead.empresa ? `Empresa: ${lead.empresa}` : null, userId,
         lead.endereco_cep || null, lead.endereco_rua || null, lead.endereco_numero || null,
         lead.endereco_bairro || null, lead.endereco_cidade || null, lead.endereco_estado || null,

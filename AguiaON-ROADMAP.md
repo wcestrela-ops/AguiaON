@@ -750,3 +750,13 @@ Causa raiz: `order_number` é usado em todo o módulo de Delivery (`delivery.ts`
 Fix: adicionado `ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS order_number INTEGER` na mesma migração idempotente que já existe em `delivery.ts` (executa uma vez na inicialização do servidor, junto com `lat`/`lng`) — mesmo padrão já usado nesse arquivo pra corrigir lacunas de migração parecidas.
 
 Verificação: `delivery.ts` reconferido via `ts.transpileModule` (OK, 0 diagnósticos). Não testado contra o ambiente real — depende do próximo deploy; o erro deve parar de aparecer no log assim que a migração rodar no boot.
+
+## Fix de produção 29 — Cliente já nasce cadastrado no Asaas na conversão do lead
+
+Pergunta do Carlos: quando o lead da landing é aceito e vira cliente, esses dados já criam automaticamente um cliente no Asaas? Resposta investigada: não — o cadastro no Asaas só acontecia "sob demanda", na primeira cobrança (manual ou pela recorrência automática do dia), tanto em `agenda/index.ts` quanto em `trackingBillingJob.ts`. Na conversão em si (`convertLandingLead`, `landings.ts`), o cliente era criado só localmente (`agenda_clientes`), sem tocar no Asaas.
+
+O Carlos pediu pra adiantar essa criação pro momento da conversão, assim qualquer problema de credencial/rota do Asaas aparece na hora (com o lojista olhando a tela), em vez de no dia da cobrança automática, sem ninguém por perto pra perceber.
+
+Fix: `convertLandingLead()` agora chama `createAsaasCustomer(eid, {...})` (mesma função já usada no cadastro manual de cliente, `asaasClient.ts`) logo depois de resolver o `userId`, e salva o `asaas_customer_id` retornado já no INSERT de `agenda_clientes`. Best-effort — mesmo padrão já usado no cadastro manual: se o Asaas falhar (conta ainda não configurada, chave inválida etc.), loga um aviso e o cliente é criado local mesmo assim; o fallback "cria sob demanda na hora de cobrar" (que já existia) continua valendo como rede de segurança, então nada quebra se isso falhar.
+
+Verificação: `landings.ts` reconferido via `ts.transpileModule` (OK, 0 diagnósticos); coluna `asaas_customer_id` confirmada já existente em `agenda_clientes` (criada por `ensureAgendaTables()`, já chamada nessa mesma função antes do INSERT). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve converter um lead de teste e conferir se o cliente já aparece com o Asaas sincronizado (mesmo indicador `asaas_sincronizado` usado no cadastro manual) antes da primeira cobrança.
