@@ -760,3 +760,23 @@ O Carlos pediu pra adiantar essa criação pro momento da conversão, assim qual
 Fix: `convertLandingLead()` agora chama `createAsaasCustomer(eid, {...})` (mesma função já usada no cadastro manual de cliente, `asaasClient.ts`) logo depois de resolver o `userId`, e salva o `asaas_customer_id` retornado já no INSERT de `agenda_clientes`. Best-effort — mesmo padrão já usado no cadastro manual: se o Asaas falhar (conta ainda não configurada, chave inválida etc.), loga um aviso e o cliente é criado local mesmo assim; o fallback "cria sob demanda na hora de cobrar" (que já existia) continua valendo como rede de segurança, então nada quebra se isso falhar.
 
 Verificação: `landings.ts` reconferido via `ts.transpileModule` (OK, 0 diagnósticos); coluna `asaas_customer_id` confirmada já existente em `agenda_clientes` (criada por `ensureAgendaTables()`, já chamada nessa mesma função antes do INSERT). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve converter um lead de teste e conferir se o cliente já aparece com o Asaas sincronizado (mesmo indicador `asaas_sincronizado` usado no cadastro manual) antes da primeira cobrança.
+
+## Fix de produção 30 — Logo da águia substitui o ícone padrão "AGON"
+
+Pedido do Carlos: ele enviou a logo oficial (águia dourada) e perguntou se dava pra salvar como ícone nas Configurações do SuperAdmin, e se o "Gerar" já passava a produzir essa imagem, tirando o placeholder antigo.
+
+Investigação: o painel SuperAdmin (`admin.html`, aba Configurações → Ícone PWA) já tem duas formas de definir o ícone — "MODO UPLOAD" (sobe uma imagem, redimensiona pra 192×192/512×512 e salva) e "MODO GERADOR" (desenha texto customizável tipo "AG"/"ON" num canvas). O placeholder "antigo do AGON" que o Carlos quer tirar é justamente esse texto "AG" (branco) + "ON" (índigo) sobre fundo escuro — ele existe em DOIS lugares: o gerador embutido no painel (`admin.html`) e um arquivo estático já commitado no repositório, `public/icons/icon.svg`, referenciado direto no `manifest.json` como um dos ícones do PWA (funciona independente do que estiver salvo no banco).
+
+Como não tenho acesso ao painel do SuperAdmin rodando em produção (nem às credenciais do Asaas/SMTP de vocês) pra clicar em "salvar" por lá, resolvi direto pelos arquivos: usei a logo que o Carlos enviou (PNG 1080×1080, com transparência de verdade) e:
+- Gerei `public/icons/icon-192.png`, `icon-512.png` e `favicon.png` (mesmo redimensionamento que o botão "Salvar Ícones no Banco" faria).
+- Atualizei `public/icons/icon.svg` (o SVG estático do manifest) pra embutir a logo da águia no lugar do texto "AG"/"ON", mantendo o mesmo fundo/gradiente escuro de marca.
+- Criei `database/migration_v26_brand_icon.sql`, que faz o mesmo `INSERT ... ON CONFLICT DO UPDATE` que os endpoints `POST /admin/icons` e `POST /admin/favicon` já fazem — só que rodando uma vez direto no banco, pra deixar `global_settings` (`pwa_icon_192`, `pwa_icon_512`, `site_favicon`) consistente com os arquivos nesta mesma leva, sem esperar ninguém clicar em nada no painel.
+
+Importante — não toquei no "MODO GERADOR" (o textinho AG/ON customizável em `admin.html`): ele continua existindo como ferramenta genérica pra quem não tem logo própria; só o *resultado padrão* do sistema (os arquivos e o registro no banco) é que virou a logo da águia.
+
+Passos pro Carlos, depois desse commit:
+1. Fazer commit + push desses arquivos (`public/icons/*`, `database/migration_v26_brand_icon.sql`) — só rodar o deploy não é suficiente se eles não estiverem versionados no GitHub, já que o EasyPanel builda a partir do repositório, não desta pasta local.
+2. Rodar `database/migration_v26_brand_icon.sql` uma vez no Shell do Postgres (mesmo jeito que as migrations v21–v25 já são aplicadas, segundo o `DEPLOY.md` — esse arquivo é só `INSERT`, idempotente via `ON CONFLICT`, não precisa reverter nada se rodar de novo por engano).
+3. Conferir no navegador (com cache limpo/aba anônima, já que favicon/manifest costumam ficar em cache agressivo) se o ícone novo aparece na aba e ao "instalar" o PWA.
+
+Verificação: `icon.svg` reconferido como XML válido (`xml.etree.ElementTree`, sem erros — a primeira tentativa quebrou por um comentário com `--` duplo dentro, inválido em XML, corrigido); os 3 PNGs reabertos com Pillow pra confirmar que não corromperam (192×192, 512×512 e 64×64, todos RGBA). Não testado contra o ambiente real — depende do commit+push+migração acima.
