@@ -478,11 +478,11 @@
       </div>
     </div>
 
-    <!-- ─── CRM (rastreamento) ─── -->
+    <!-- ─── CRM (rastreamento) — Fix de produção 34: funil removido (pouco -->
+    <!-- útil), leads da landing page passam a aparecer direto aqui ─── -->
     <div id="tab-crm" class="tab-content">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 class="text-lg font-bold">CRM</h2>
-        <button onclick="abrirNovoLead()" class="btn-primary text-sm"><i class="fa fa-plus mr-1"></i> Novo Lead</button>
       </div>
 
       <!-- Alertas -->
@@ -493,11 +493,11 @@
         </div>
       </div>
 
-      <!-- Funil de Leads -->
+      <!-- Leads da Landing Page -->
       <div>
-        <h3 class="text-sm font-bold text-slate-300 mb-2"><i class="fa fa-filter mr-2 text-accent"></i>Funil de Leads</h3>
-        <div id="crm-funil" class="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <!-- colunas geradas via JS -->
+        <h3 class="text-sm font-bold text-slate-300 mb-2"><i class="fa fa-users mr-2 text-accent"></i>Leads da Landing Page</h3>
+        <div id="crm-leads-landing" class="space-y-3">
+          <p class="text-slate-500 text-xs">Carregando...</p>
         </div>
       </div>
     </div>
@@ -1589,10 +1589,8 @@
         <div>
           <h2 class="text-xl font-black text-white">Landing Page</h2>
           <p class="text-slate-500 text-sm">Página de marketing do módulo de Rastreamento — edite o conteúdo, o endereço público e o termo de adesão daqui.</p>
+          <p class="text-slate-600 text-xs mt-1"><i class="fa fa-info-circle mr-1"></i>Os leads capturados aqui aparecem na aba CRM.</p>
         </div>
-        <button onclick="ljOpenLeadsModal()" class="border border-slate-700 hover:border-[var(--accent)] text-slate-300 hover:text-white px-4 py-2 rounded-xl font-black text-xs uppercase transition-all shrink-0">
-          <i class="fa fa-users mr-1.5"></i>Ver Leads
-        </button>
       </div>
 
       <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-6">
@@ -1661,21 +1659,6 @@
           <button onclick="ljSaveLanding()" class="flex-1 bg-[var(--accent)] hover:opacity-90 text-white py-3 rounded-xl font-black text-xs uppercase transition-all">
             <i class="fa fa-save mr-2"></i>Salvar
           </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- MODAL LEADS DA LANDING (Fix de produção 16) -->
-    <div id="lj-leads-modal" class="hidden fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div class="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex justify-between items-center rounded-t-[2.5rem] z-10">
-          <h3 class="text-white font-black text-xl">Leads da Landing Page</h3>
-          <button onclick="document.getElementById('lj-leads-modal').classList.add('hidden')" class="text-slate-500 hover:text-white w-8 h-8 flex items-center justify-center">
-            <i class="fa-solid fa-times"></i>
-          </button>
-        </div>
-        <div class="p-8">
-          <div id="lj-leads-list" class="space-y-3"></div>
         </div>
       </div>
     </div>
@@ -3140,44 +3123,6 @@
 </div>
 
 <!-- Modal Lead (funil de CRM do Rastreamento) -->
-<div id="modal-lead" class="modal-overlay">
-  <div class="modal">
-    <div class="flex justify-between items-center mb-4">
-      <h3 class="font-bold" id="modal-lead-title">Novo Lead</h3>
-      <button onclick="closeModal('modal-lead')" class="text-slate-400"><i class="fa fa-times"></i></button>
-    </div>
-    <input type="hidden" id="lead-id" />
-    <div class="space-y-3">
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">Nome</label>
-        <input type="text" id="lead-nome" class="input" placeholder="Nome do cliente/contato" />
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs text-slate-400 block mb-1">Telefone</label>
-          <input type="text" id="lead-telefone" class="input" />
-        </div>
-        <div>
-          <label class="text-xs text-slate-400 block mb-1">Valor estimado (R$)</label>
-          <input type="number" id="lead-valor" class="input" step="0.01" />
-        </div>
-      </div>
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">Veículo (placa/modelo)</label>
-        <input type="text" id="lead-veiculo" class="input" placeholder="Ex: ABC-1234, Fiat Strada branca" />
-      </div>
-      <div>
-        <label class="text-xs text-slate-400 block mb-1">Observações</label>
-        <textarea id="lead-obs" class="input" rows="2"></textarea>
-      </div>
-    </div>
-    <div class="flex gap-2 mt-5">
-      <button onclick="closeModal('modal-lead')" class="btn-outline flex-1">Cancelar</button>
-      <button onclick="salvarLead()" class="btn-primary flex-1">Salvar</button>
-    </div>
-  </div>
-</div>
-
 <!-- Modal Cliente (Rastreamento) -->
 <div id="modal-cliente" class="modal-overlay">
   <div class="modal">
@@ -3509,7 +3454,7 @@ function showTab(id) {
   else if (id === 'frota')    loadFrota();
   else if (id === 'frota-clientes') loadClientes();
   else if (id === 'cobranca') loadCobrancas();
-  else if (id === 'crm')      { loadCrmAlertas(); loadFrotaLeads(); }
+  else if (id === 'crm')      { loadCrmAlertas(); loadCrmLeadsLanding(); }
   else if (id === 'avaliacoes') loadAvaliacoes();
   else if (id === 'configuracoes') fillConfig();
   else if (id === 'whatsapp') loadWhatsappStatus(); // carrega credenciais salvas + testa silenciosamente
@@ -6453,9 +6398,12 @@ function ljPreviewLanding() {
 // que o SuperAdmin já tinha, só que sempre restrita ao próprio módulo (o
 // backend confere isso, aqui é só consumo).
 let ljLeadsCache = [];
-async function ljOpenLeadsModal() {
-    document.getElementById('lj-leads-modal').classList.remove('hidden');
-    const list = document.getElementById('lj-leads-list');
+// Fix de produção 34 — leads da landing page passaram a aparecer direto na
+// aba CRM (antes eram um modal separado, aberto pelo botão "Ver Leads" na
+// aba Landing Page). Função renomeada de ljOpenLeadsModal() pra deixar claro
+// que agora renderiza inline, sem modal.
+async function loadCrmLeadsLanding() {
+    const list = document.getElementById('crm-leads-landing');
     list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
     try {
         const leads = await api('/lojista/landing-leads');
@@ -6520,7 +6468,7 @@ async function ljConverterLead(id) {
                 ? '✅ Cliente criado. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
                 : '✅ Cliente criado, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
         }
-        ljOpenLeadsModal();
+        loadCrmLeadsLanding();
     } catch (e) { alert('❌ ' + e.message); }
 }
 
@@ -6533,7 +6481,7 @@ async function ljReenviarEmailLead(id) {
     try {
         const data = await api(`/lojista/landing-leads/${id}/reenviar-email`, { method: 'POST' });
         alert(data.email_enviado ? '✅ E-mail enviado com sucesso!' : '❌ Não foi possível enviar — confira o SMTP em Configurações Globais.');
-        ljOpenLeadsModal();
+        loadCrmLeadsLanding();
     } catch (e) { alert('❌ ' + e.message); }
 }
 
@@ -6541,7 +6489,7 @@ async function ljExcluirLead(id) {
     if (!confirm('Excluir este lead?')) return;
     try {
         await api(`/lojista/landing-leads/${id}`, { method: 'DELETE' });
-        ljOpenLeadsModal();
+        loadCrmLeadsLanding();
     } catch (e) { alert('❌ ' + e.message); }
 }
 
@@ -8053,115 +8001,13 @@ async function loadCrmAlertas() {
   }
 }
 
-const LEAD_ETAPAS = [
-  { id: 'novo_contato', label: 'Novo Contato', icon: '📞' },
-  { id: 'negociacao',   label: 'Negociação',   icon: '💬' },
-  { id: 'agendado',     label: 'Agendado',     icon: '🗓️' },
-  { id: 'instalado',    label: 'Instalado',    icon: '✅' },
-  { id: 'perdido',      label: 'Perdido',      icon: '❌' },
-];
-
-let leadsCache = [];
-
-async function loadFrotaLeads() {
-  try {
-    leadsCache = await api('/agenda/frota-leads');
-    renderFunil();
-  } catch (e) {
-    document.getElementById('crm-funil').innerHTML = `<p class="text-red-400 text-xs">${e.message}</p>`;
-  }
-}
-
-function renderFunil() {
-  document.getElementById('crm-funil').innerHTML = LEAD_ETAPAS.map(et => {
-    const leads = leadsCache.filter(l => l.etapa === et.id);
-    return `
-      <div class="card p-3">
-        <p class="text-xs font-bold text-slate-300 mb-2">${et.icon} ${et.label} <span class="text-slate-500">(${leads.length})</span></p>
-        <div class="space-y-2">
-          ${leads.map(l => `
-            <div class="bg-slate-800/50 rounded-lg p-2 text-xs">
-              <p class="font-medium text-slate-200">${esc(l.nome)}</p>
-              ${l.telefone ? `<p class="text-slate-500">${esc(l.telefone)}</p>` : ''}
-              ${l.veiculo_info ? `<p class="text-slate-500">${esc(l.veiculo_info)}</p>` : ''}
-              ${l.valor_estimado ? `<p class="text-green-400">${fmtMoney(l.valor_estimado)}</p>` : ''}
-              <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                ${et.id !== 'instalado' && et.id !== 'perdido' ? `<button onclick="editarLead(${JSON.stringify(l).replace(/"/g,'&quot;')})" class="text-slate-400 hover:text-white" title="Editar"><i class="fa fa-pencil"></i></button>` : ''}
-                ${LEAD_ETAPAS.filter(e2 => e2.id !== et.id).map(e2 =>
-                  `<button onclick="moverLeadEtapa('${l.id}','${e2.id}')" title="Mover para ${e2.label}" class="text-slate-500 hover:text-accent">${e2.icon}</button>`
-                ).join('')}
-                ${et.id !== 'instalado' ? `<button onclick="converterLead('${l.id}')" title="Converter em veículo/cliente" class="text-green-400 hover:text-green-300 ml-auto"><i class="fa fa-car"></i></button>` : ''}
-                <button onclick="excluirLead('${l.id}')" title="Excluir" class="text-slate-600 hover:text-red-400"><i class="fa fa-trash"></i></button>
-              </div>
-            </div>`).join('') || '<p class="text-slate-600 text-[11px] text-center py-3">Vazio</p>'}
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function abrirNovoLead() {
-  document.getElementById('modal-lead-title').textContent = 'Novo Lead';
-  document.getElementById('lead-id').value = '';
-  document.getElementById('lead-nome').value = '';
-  document.getElementById('lead-telefone').value = '';
-  document.getElementById('lead-valor').value = '';
-  document.getElementById('lead-veiculo').value = '';
-  document.getElementById('lead-obs').value = '';
-  openModal('modal-lead');
-}
-
-function editarLead(l) {
-  document.getElementById('modal-lead-title').textContent = 'Editar Lead';
-  document.getElementById('lead-id').value = l.id;
-  document.getElementById('lead-nome').value = l.nome || '';
-  document.getElementById('lead-telefone').value = l.telefone || '';
-  document.getElementById('lead-valor').value = l.valor_estimado || '';
-  document.getElementById('lead-veiculo').value = l.veiculo_info || '';
-  document.getElementById('lead-obs').value = l.observacoes || '';
-  openModal('modal-lead');
-}
-
-async function salvarLead() {
-  const id = document.getElementById('lead-id').value;
-  const body = {
-    nome: document.getElementById('lead-nome').value,
-    telefone: document.getElementById('lead-telefone').value || null,
-    valor_estimado: parseFloat(document.getElementById('lead-valor').value) || null,
-    veiculo_info: document.getElementById('lead-veiculo').value || null,
-    observacoes: document.getElementById('lead-obs').value || null,
-  };
-  if (!body.nome?.trim()) { alert('Nome é obrigatório.'); return; }
-  try {
-    if (id) await api(`/agenda/frota-leads/${id}`, { method: 'PUT', body });
-    else await api('/agenda/frota-leads', { method: 'POST', body });
-    closeModal('modal-lead');
-    loadFrotaLeads();
-  } catch (e) { alert(e.message); }
-}
-
-async function moverLeadEtapa(id, etapa) {
-  try {
-    await api(`/agenda/frota-leads/${id}`, { method: 'PUT', body: { etapa } });
-    loadFrotaLeads();
-  } catch (e) { alert(e.message); }
-}
-
-async function converterLead(id) {
-  if (!confirm('Converter este lead em veículo/cliente ativo na Frota?')) return;
-  try {
-    await api(`/agenda/frota-leads/${id}/converter`, { method: 'POST' });
-    alert('✅ Lead convertido! Complete os dados do veículo (placa, IMEI) na aba Frota/Clientes.');
-    loadFrotaLeads();
-  } catch (e) { alert(e.message); }
-}
-
-async function excluirLead(id) {
-  if (!confirm('Excluir este lead?')) return;
-  try {
-    await api(`/agenda/frota-leads/${id}`, { method: 'DELETE' });
-    loadFrotaLeads();
-  } catch (e) { alert(e.message); }
-}
+// Fix de produção 34 — o "Funil de Leads" (agenda_frota_leads, kanban com
+// etapas novo_contato/negociação/agendado/instalado/perdido) foi removido da
+// aba CRM por decisão do usuário ("nao ta tendo muita utilidade"). As rotas
+// de backend (/agenda/frota-leads*) e as funções abrirNovoLead/editarLead/
+// salvarLead/moverLeadEtapa/converterLead/excluirLead/renderFunil/
+// loadFrotaLeads foram removidas do frontend (não há mais UI que as chame);
+// a tabela e as rotas do backend continuam intactas caso precisem voltar.
 
 // ════════ AVALIAÇÕES ════════
 async function loadAvaliacoes() {
