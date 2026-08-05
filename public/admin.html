@@ -346,6 +346,14 @@
                     </div>
                     <div class="p-8">
                         <div id="leads-list" class="space-y-3"></div>
+
+                        <!-- Fix de produção 35 — arquivados escondidos por padrão, só carregam ao clicar -->
+                        <div class="mt-4 pt-3 border-t border-slate-800/60">
+                            <button onclick="toggleArquivados()" class="text-slate-500 hover:text-slate-300 text-xs font-bold flex items-center gap-1.5">
+                                <i class="fa fa-chevron-right" id="leads-arquivados-chevron"></i>Leads arquivados
+                            </button>
+                            <div id="leads-arquivados-list" class="hidden space-y-3 mt-3"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2962,25 +2970,21 @@
 
         // ════ LEADS DE LANDING ════
         let leadsCache = [];
-        async function openLeadsModal() {
-            document.getElementById('leads-modal').classList.remove('hidden');
-            const list = document.getElementById('leads-list');
-            list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
-            try {
-                const res = await fetch('/admin/landing-leads', { headers: adminHeaders() });
-                const leads = await res.json();
-                leadsCache = leads;
-                if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
+        const leadsStatusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
 
-                const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
-                list.innerHTML = leads.map(l => `
+        // Fix de produção 35 — extraído do corpo de openLeadsModal() pra virar
+        // função à parte, reaproveitada tanto na lista principal quanto na
+        // seção "Arquivados" (mesmo card, só muda o botão Arquivar/Desarquivar
+        // conforme l.arquivado).
+        function leadCardHtml(l) {
+            return `
                     <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-2">
                         <div class="flex justify-between items-start">
                             <div>
                                 <p class="text-white font-bold text-sm">${l.nome}${l.empresa ? ' — ' + l.empresa : ''}</p>
                                 <p class="text-slate-500 text-xs">${l.vertical_slug}${l.plano_nome ? ' · plano ' + l.plano_nome : ''} · ${new Date(l.created_at).toLocaleDateString('pt-BR')}</p>
                             </div>
-                            <span class="text-[10px] font-bold uppercase tracking-widest ${statusColor[l.status]||''}">${l.status}</span>
+                            <span class="text-[10px] font-bold uppercase tracking-widest ${leadsStatusColor[l.status]||''}">${l.status}</span>
                         </div>
                         <div class="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
                             ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
@@ -3006,20 +3010,90 @@
                                 ? `<p class="text-emerald-400 text-[10px]"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia do termo enviada por e-mail</p>`
                                 : `<p class="text-amber-400 text-[10px]"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia do termo NÃO enviada — confira o SMTP em Configurações Globais</p>`
                             ) : ''}
-                            <div class="flex gap-4 flex-wrap">
+                            <div class="flex gap-4 flex-wrap items-center">
                                 <button onclick="baixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                                 ${l.email ? `<button onclick="reenviarEmailLead('${l.id}')" class="text-amber-400 text-xs font-bold"><i class="fa fa-envelope mr-1"></i>Enviar por Email</button>` : ''}
                                 ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
+                                ${l.arquivado
+                                    ? `<button onclick="desarquivarLead('${l.id}')" class="text-cyan-400 text-xs font-bold ml-auto"><i class="fa fa-box-open mr-1"></i>Desarquivar</button>`
+                                    : `<button onclick="arquivarLead('${l.id}')" class="text-slate-400 hover:text-slate-200 text-xs font-bold ml-auto"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
                             </div>
                         ` : `
-                            <div class="flex justify-end">
+                            <div class="flex justify-end gap-4">
+                                ${l.arquivado
+                                    ? `<button onclick="desarquivarLead('${l.id}')" class="text-cyan-400 hover:text-cyan-300 text-xs font-bold"><i class="fa fa-box-open mr-1"></i>Desarquivar</button>`
+                                    : `<button onclick="arquivarLead('${l.id}')" class="text-slate-500 hover:text-slate-300 text-xs font-bold"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
                                 <button onclick="excluirLandingLead('${l.id}')" title="Excluir" class="text-slate-600 hover:text-red-400 text-xs"><i class="fa fa-trash"></i></button>
                             </div>
                         `}
-                    </div>`).join('');
+                    </div>`;
+        }
+
+        function mergeLeadsCache(leads) {
+            const byId = new Map(leadsCache.map(l => [l.id, l]));
+            leads.forEach(l => byId.set(l.id, l));
+            leadsCache = Array.from(byId.values());
+        }
+
+        async function openLeadsModal() {
+            document.getElementById('leads-modal').classList.remove('hidden');
+            const list = document.getElementById('leads-list');
+            list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
+            try {
+                const res = await fetch('/admin/landing-leads', { headers: adminHeaders() });
+                const leads = await res.json();
+                mergeLeadsCache(leads);
+                list.innerHTML = leads.length ? leads.map(l => leadCardHtml(l)).join('') : '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>';
             } catch (e) {
                 list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
             }
+        }
+
+        // Fix de produção 35 — seção "Arquivados" dentro do modal, recolhida
+        // por padrão; só busca ao clicar pra abrir.
+        let arquivadosAbertos = false;
+
+        async function loadArquivados() {
+            const box = document.getElementById('leads-arquivados-list');
+            box.innerHTML = '<p class="text-slate-500 text-center py-4 text-xs"><i class="fa fa-spinner fa-spin"></i></p>';
+            try {
+                const res = await fetch('/admin/landing-leads?arquivados=1', { headers: adminHeaders() });
+                const leads = await res.json();
+                mergeLeadsCache(leads);
+                box.innerHTML = leads.length ? leads.map(l => leadCardHtml(l)).join('') : '<p class="text-slate-600 text-xs text-center py-4">Nenhum lead arquivado.</p>';
+            } catch (e) {
+                box.innerHTML = `<p class="text-red-400 text-xs">${e.message}</p>`;
+            }
+        }
+
+        function toggleArquivados() {
+            arquivadosAbertos = !arquivadosAbertos;
+            const box = document.getElementById('leads-arquivados-list');
+            const chevron = document.getElementById('leads-arquivados-chevron');
+            box.classList.toggle('hidden', !arquivadosAbertos);
+            chevron.classList.toggle('fa-chevron-right', !arquivadosAbertos);
+            chevron.classList.toggle('fa-chevron-down', arquivadosAbertos);
+            if (arquivadosAbertos) loadArquivados();
+        }
+
+        async function arquivarLead(id) {
+            try {
+                const res = await fetch(`/admin/landing-leads/${id}/arquivar`, { method: 'POST', headers: adminHeaders() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao arquivar.');
+                openLeadsModal();
+                if (arquivadosAbertos) loadArquivados();
+            } catch (e) { alert('❌ ' + e.message); }
+        }
+
+        async function desarquivarLead(id) {
+            try {
+                const res = await fetch(`/admin/landing-leads/${id}/desarquivar`, { method: 'POST', headers: adminHeaders() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao desarquivar.');
+                openLeadsModal();
+                if (arquivadosAbertos) loadArquivados();
+            } catch (e) { alert('❌ ' + e.message); }
         }
 
         async function converterLead(id) {
@@ -3033,6 +3107,7 @@
                         : '✅ Cliente criado na loja de gestão veicular, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
                 }
                 openLeadsModal();
+                if (arquivadosAbertos) loadArquivados();
             } catch (e) { alert('❌ ' + e.message); }
         }
 
@@ -3045,6 +3120,7 @@
                 if (!res.ok) throw new Error(data.error || 'Falha ao enviar.');
                 alert(data.email_enviado ? '✅ E-mail enviado com sucesso!' : '❌ Não foi possível enviar — confira o SMTP em Configurações Globais.');
                 openLeadsModal();
+                if (arquivadosAbertos) loadArquivados();
             } catch (e) { alert('❌ ' + e.message); }
         }
 
@@ -3057,6 +3133,7 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Falha ao excluir.');
                 openLeadsModal();
+                if (arquivadosAbertos) loadArquivados();
             } catch (e) { alert('❌ ' + e.message); }
         }
 

@@ -499,6 +499,14 @@
         <div id="crm-leads-landing" class="space-y-3">
           <p class="text-slate-500 text-xs">Carregando...</p>
         </div>
+
+        <!-- Fix de produção 35 — arquivados ficam escondidos por padrão, só carregam ao clicar -->
+        <div class="mt-4 pt-3 border-t border-slate-800/60">
+          <button onclick="ljToggleArquivados()" class="text-slate-500 hover:text-slate-300 text-xs font-bold flex items-center gap-1.5">
+            <i class="fa fa-chevron-right" id="crm-arquivados-chevron"></i>Leads arquivados
+          </button>
+          <div id="crm-leads-arquivados" class="hidden space-y-3 mt-3"></div>
+        </div>
       </div>
     </div>
 
@@ -6402,23 +6410,21 @@ let ljLeadsCache = [];
 // aba CRM (antes eram um modal separado, aberto pelo botão "Ver Leads" na
 // aba Landing Page). Função renomeada de ljOpenLeadsModal() pra deixar claro
 // que agora renderiza inline, sem modal.
-async function loadCrmLeadsLanding() {
-    const list = document.getElementById('crm-leads-landing');
-    list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
-    try {
-        const leads = await api('/lojista/landing-leads');
-        ljLeadsCache = leads;
-        if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
+const ljStatusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
 
-        const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
-        list.innerHTML = leads.map(l => `
+// Fix de produção 35 — extraído do que era o corpo de loadCrmLeadsLanding()
+// pra virar uma função à parte, reaproveitada tanto na lista principal
+// (leads ativos) quanto na seção "Arquivados" — o card é idêntico nas duas,
+// só muda o botão Arquivar/Desarquivar conforme l.arquivado.
+function ljLeadCardHtml(l) {
+    return `
             <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-2">
                 <div class="flex justify-between items-start">
                     <div>
                         <p class="text-white font-bold text-sm">${l.nome}${l.empresa ? ' — ' + l.empresa : ''}</p>
                         <p class="text-slate-500 text-xs">${l.plano_nome ? 'plano ' + l.plano_nome + ' · ' : ''}${new Date(l.created_at).toLocaleDateString('pt-BR')}</p>
                     </div>
-                    <span class="text-[10px] font-bold uppercase tracking-widest ${statusColor[l.status]||''}">${l.status}</span>
+                    <span class="text-[10px] font-bold uppercase tracking-widest ${ljStatusColor[l.status]||''}">${l.status}</span>
                 </div>
                 <div class="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
                     ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
@@ -6444,20 +6450,89 @@ async function loadCrmLeadsLanding() {
                         ? `<p class="text-emerald-400 text-[10px]"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia do termo enviada por e-mail</p>`
                         : `<p class="text-amber-400 text-[10px]"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia do termo NÃO enviada — confira o SMTP em Configurações Globais</p>`
                     ) : ''}
-                    <div class="flex gap-4 flex-wrap">
+                    <div class="flex gap-4 flex-wrap items-center">
                         <button onclick="ljBaixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                         ${l.email ? `<button onclick="ljReenviarEmailLead('${l.id}')" class="text-amber-400 text-xs font-bold"><i class="fa fa-envelope mr-1"></i>Enviar por Email</button>` : ''}
                         ${l.status === 'aceito' ? `<button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
+                        ${l.arquivado
+                            ? `<button onclick="ljDesarquivarLead('${l.id}')" class="text-cyan-400 text-xs font-bold ml-auto"><i class="fa fa-box-open mr-1"></i>Desarquivar</button>`
+                            : `<button onclick="ljArquivarLead('${l.id}')" class="text-slate-400 hover:text-slate-200 text-xs font-bold ml-auto"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
                     </div>
                 ` : `
-                    <div class="flex justify-end">
+                    <div class="flex justify-end gap-4">
+                        ${l.arquivado
+                            ? `<button onclick="ljDesarquivarLead('${l.id}')" class="text-cyan-400 hover:text-cyan-300 text-xs font-bold"><i class="fa fa-box-open mr-1"></i>Desarquivar</button>`
+                            : `<button onclick="ljArquivarLead('${l.id}')" class="text-slate-500 hover:text-slate-300 text-xs font-bold"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
                         <button onclick="ljExcluirLead('${l.id}')" title="Excluir" class="text-slate-600 hover:text-red-400 text-xs"><i class="fa fa-trash"></i></button>
                     </div>
                 `}
-            </div>`).join('');
+            </div>`;
+}
+
+// Fix de produção 35 — ljLeadsCache agora é alimentado tanto pela lista
+// principal quanto pela seção "Arquivados" (mergeado por id, nunca
+// substituído por inteiro), pra "Baixar Contrato" continuar funcionando
+// mesmo clicado num lead que só está carregado na seção de arquivados.
+function ljMergeLeadsCache(leads) {
+    const byId = new Map(ljLeadsCache.map(l => [l.id, l]));
+    leads.forEach(l => byId.set(l.id, l));
+    ljLeadsCache = Array.from(byId.values());
+}
+
+async function loadCrmLeadsLanding() {
+    const list = document.getElementById('crm-leads-landing');
+    list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
+    try {
+        const leads = await api('/lojista/landing-leads');
+        ljMergeLeadsCache(leads);
+        list.innerHTML = leads.length ? leads.map(l => ljLeadCardHtml(l)).join('') : '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>';
     } catch (e) {
         list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
     }
+}
+
+// Fix de produção 35 — seção "Arquivados": fica recolhida por padrão (tela
+// limpa) e só busca/renderiza os leads arquivados quando o lojista clica pra
+// abrir. Fecha sem precisar buscar de novo; reabrir busca de novo (dado pode
+// ter mudado).
+let ljArquivadosAbertos = false;
+
+async function ljLoadArquivados() {
+    const box = document.getElementById('crm-leads-arquivados');
+    box.innerHTML = '<p class="text-slate-500 text-center py-4 text-xs"><i class="fa fa-spinner fa-spin"></i></p>';
+    try {
+        const leads = await api('/lojista/landing-leads?arquivados=1');
+        ljMergeLeadsCache(leads);
+        box.innerHTML = leads.length ? leads.map(l => ljLeadCardHtml(l)).join('') : '<p class="text-slate-600 text-xs text-center py-4">Nenhum lead arquivado.</p>';
+    } catch (e) {
+        box.innerHTML = `<p class="text-red-400 text-xs">${e.message}</p>`;
+    }
+}
+
+function ljToggleArquivados() {
+    ljArquivadosAbertos = !ljArquivadosAbertos;
+    const box = document.getElementById('crm-leads-arquivados');
+    const chevron = document.getElementById('crm-arquivados-chevron');
+    box.classList.toggle('hidden', !ljArquivadosAbertos);
+    chevron.classList.toggle('fa-chevron-right', !ljArquivadosAbertos);
+    chevron.classList.toggle('fa-chevron-down', ljArquivadosAbertos);
+    if (ljArquivadosAbertos) ljLoadArquivados();
+}
+
+async function ljArquivarLead(id) {
+    try {
+        await api(`/lojista/landing-leads/${id}/arquivar`, { method: 'POST' });
+        loadCrmLeadsLanding();
+        if (ljArquivadosAbertos) ljLoadArquivados();
+    } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function ljDesarquivarLead(id) {
+    try {
+        await api(`/lojista/landing-leads/${id}/desarquivar`, { method: 'POST' });
+        loadCrmLeadsLanding();
+        if (ljArquivadosAbertos) ljLoadArquivados();
+    } catch (e) { alert('❌ ' + e.message); }
 }
 
 async function ljConverterLead(id) {
@@ -6469,6 +6544,7 @@ async function ljConverterLead(id) {
                 : '✅ Cliente criado, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
         }
         loadCrmLeadsLanding();
+        if (ljArquivadosAbertos) ljLoadArquivados();
     } catch (e) { alert('❌ ' + e.message); }
 }
 
@@ -6482,6 +6558,7 @@ async function ljReenviarEmailLead(id) {
         const data = await api(`/lojista/landing-leads/${id}/reenviar-email`, { method: 'POST' });
         alert(data.email_enviado ? '✅ E-mail enviado com sucesso!' : '❌ Não foi possível enviar — confira o SMTP em Configurações Globais.');
         loadCrmLeadsLanding();
+        if (ljArquivadosAbertos) ljLoadArquivados();
     } catch (e) { alert('❌ ' + e.message); }
 }
 
@@ -6490,6 +6567,7 @@ async function ljExcluirLead(id) {
     try {
         await api(`/lojista/landing-leads/${id}`, { method: 'DELETE' });
         loadCrmLeadsLanding();
+        if (ljArquivadosAbertos) ljLoadArquivados();
     } catch (e) { alert('❌ ' + e.message); }
 }
 

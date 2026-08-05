@@ -167,6 +167,15 @@ const router = Router();
     // (admin.html e loja.html) — dá pra ver, lead por lead, se o e-mail saiu,
     // sem precisar de log de servidor pra cada suspeita de falha.
     await pool.query(`ALTER TABLE landing_leads ADD COLUMN IF NOT EXISTS email_termo_enviado BOOLEAN NOT NULL DEFAULT false`);
+
+    // Fix de produção 35 — o Carlos pediu, além de excluir, uma opção de
+    // ARQUIVAR o lead: some da lista principal (deixa a tela mais limpa) sem
+    // apagar o registro, e só volta a aparecer se o lojista/admin clicar
+    // explicitamente pra ver os "Arquivados". Diferente de "status" (que
+    // reflete o estágio comercial do lead — novo/aceito/convertido/
+    // cancelado), arquivado é só uma flag de visibilidade na tela, então fica
+    // numa coluna própria em vez de virar mais um valor do CHECK de status.
+    await pool.query(`ALTER TABLE landing_leads ADD COLUMN IF NOT EXISTS arquivado BOOLEAN NOT NULL DEFAULT false`);
   } catch (e: any) {
     console.error('[landings migration]', e.message);
   }
@@ -618,16 +627,42 @@ router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
 
 // GET /admin/landing-leads — lista pro painel do SuperAdmin (com filtros
 // opcionais por módulo/status).
+// Fix de produção 35 — por padrão só mostra leads NÃO arquivados (deixa a
+// tela limpa); ?arquivados=1 inverte e mostra só os arquivados (usado pela
+// seção "Arquivados", que só carrega quando o usuário clica pra abrir).
 router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
   try {
-    const { vertical_slug, status } = req.query;
-    const conds: string[] = [];
+    const { vertical_slug, status, arquivados } = req.query;
+    const conds: string[] = [`arquivado=${arquivados === '1' ? 'true' : 'false'}`];
     const params: any[] = [];
     if (vertical_slug) { params.push(vertical_slug); conds.push(`vertical_slug=$${params.length}`); }
     if (status) { params.push(status); conds.push(`status=$${params.length}`); }
-    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const where = `WHERE ${conds.join(' AND ')}`;
     const r = await pool.query(`SELECT * FROM landing_leads ${where} ORDER BY created_at DESC`, params);
     res.json(r.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/landing-leads/:id/arquivar e /desarquivar — Fix de produção 35.
+// Só mexe na flag de visibilidade, não no status comercial nem em nenhum
+// outro dado do lead — reversível a qualquer momento.
+router.post('/admin/landing-leads/:id/arquivar', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`UPDATE landing_leads SET arquivado=true, updated_at=NOW() WHERE id=$1 RETURNING id`, [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/admin/landing-leads/:id/desarquivar', requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`UPDATE landing_leads SET arquivado=false, updated_at=NOW() WHERE id=$1 RETURNING id`, [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -834,12 +869,41 @@ async function resolveLojistaVerticalSlug(req: Request): Promise<string> {
 router.get('/lojista/landing-leads', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
   try {
     const verticalSlug = await resolveLojistaVerticalSlug(req);
-    const { status } = req.query;
-    const conds = ['vertical_slug=$1'];
+    const { status, arquivados } = req.query;
+    const conds = ['vertical_slug=$1', `arquivado=${arquivados === '1' ? 'true' : 'false'}`];
     const params: any[] = [verticalSlug];
     if (status) { params.push(status); conds.push(`status=$${params.length}`); }
     const r = await pool.query(`SELECT * FROM landing_leads WHERE ${conds.join(' AND ')} ORDER BY created_at DESC`, params);
     res.json(r.rows);
+  } catch (err: any) {
+    handleUpsertError(err, res);
+  }
+});
+
+// POST /lojista/landing-leads/:id/arquivar e /desarquivar — mesma coisa do
+// lado SuperAdmin (Fix de produção 35), com a checagem de sempre de que o
+// lead é do próprio módulo.
+router.post('/lojista/landing-leads/:id/arquivar', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const lead = await pool.query(`SELECT vertical_slug FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (lead.rows[0].vertical_slug !== verticalSlug) return res.status(403).json({ error: 'Esse lead não é do seu módulo.' });
+    await pool.query(`UPDATE landing_leads SET arquivado=true, updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err: any) {
+    handleUpsertError(err, res);
+  }
+});
+
+router.post('/lojista/landing-leads/:id/desarquivar', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const lead = await pool.query(`SELECT vertical_slug FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (lead.rows[0].vertical_slug !== verticalSlug) return res.status(403).json({ error: 'Esse lead não é do seu módulo.' });
+    await pool.query(`UPDATE landing_leads SET arquivado=false, updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ success: true });
   } catch (err: any) {
     handleUpsertError(err, res);
   }
