@@ -38,6 +38,7 @@ import { sendWhatsAppMessage } from '../../shared/waSender';
 import { emitirNotaFiscal } from '../../shared/notaFiscalService';
 import { listBlueprints } from '../../verticals/blueprints';
 import { sendEmail, buildTermoAdesaoEmailHtml } from '../../shared/mailer';
+import { montarMensagensCobranca, DadosMensagemCobranca } from '../../shared/cobrancaMensagem';
 
 const router = Router();
 router.use(requireAuth);
@@ -352,6 +353,14 @@ export async function ensureTables() {
   // o lojista confirma o pagamento na mão depois de ver o comprovante.
   await pool.query(`ALTER TABLE agenda_cliente_asaas_cache ADD COLUMN IF NOT EXISTS baixado_manualmente BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE agenda_cliente_asaas_cache ADD COLUMN IF NOT EXISTS baixado_em TIMESTAMPTZ`);
+
+  // Fix de produção 22 — lembrete de cobrança no dia do vencimento marcado no
+  // Asaas (trackingBillingJob.ts). Cobre tanto a cobrança que a gente mesmo
+  // gera (recorrência de cliente) quanto a que já existia direto na conta
+  // Asaas do lojista e só foi trazida pelo "Sincronizar" — pra não mandar 2x
+  // pro mesmo cliente no mesmo dia, marca aqui se já foi avisado (a
+  // recorrência de cliente já marca isso na hora que gera + avisa).
+  await pool.query(`ALTER TABLE agenda_cliente_asaas_cache ADD COLUMN IF NOT EXISTS lembrete_enviado BOOLEAN NOT NULL DEFAULT false`);
 
   // Fase 13 — Nota fiscal automática (NFS-e via Asaas) + cobrança avulsa por WhatsApp
   await pool.query(`
@@ -2027,13 +2036,26 @@ router.get('/notas-fiscais', async (req, res) => {
 // COBRANÇA VIA WHATSAPP — reenvio manual (Fase 13)
 // ═══════════════════════════════════════════════════════
 
+// Fix de produção 23 — envia uma ou duas mensagens (a segunda só existe se
+// `cobranca_pix_separado` estiver ligado e houver Pix) com um intervalo curto
+// entre elas, mesmo padrão de sequência usado no job automático
+// (trackingBillingJob.ts). Reaproveitado pelos dois reenvios manuais abaixo.
+async function enviarMensagensCobranca(eid: string, telefone: string, msgs: string[]): Promise<void> {
+  for (let i = 0; i < msgs.length; i++) {
+    if (i > 0) await new Promise(resolve => setTimeout(resolve, 1_500));
+    await sendWhatsAppMessage(eid, telefone, msgs[i]);
+  }
+}
+
 // POST /agenda/frota-cobrancas/:id/notificar-whatsapp — reenvia o PIX de uma mensalidade
 router.post('/frota-cobrancas/:id/notificar-whatsapp', async (req, res) => {
   try {
     const eid = estabId(req);
     const r = await pool.query(
-      `SELECT c.*, f.cliente_nome, f.cliente_telefone
-       FROM agenda_frota_charges c JOIN agenda_frota f ON f.id = c.agenda_frota_id
+      `SELECT c.*, f.cliente_nome, f.cliente_telefone, est.business_config, est.name AS estab_name
+       FROM agenda_frota_charges c
+       JOIN agenda_frota f ON f.id = c.agenda_frota_id
+       JOIN establishments est ON est.id = c.establishment_id
        WHERE c.id=$1 AND c.establishment_id=$2`,
       [req.params.id, eid]
     );
@@ -2042,8 +2064,13 @@ router.post('/frota-cobrancas/:id/notificar-whatsapp', async (req, res) => {
     if (!c.cliente_telefone) return res.status(422).json({ error: 'Veículo sem telefone de cliente cadastrado.' });
     if (!c.pix_code) return res.status(422).json({ error: 'Essa cobrança ainda não tem PIX gerado.' });
 
-    const msg = `📡 *Cobrança pendente — mensalidade de rastreamento*\n\nOlá, ${c.cliente_nome || 'cliente'}! Você tem uma mensalidade em aberto (${c.competencia}) no valor de *R$ ${Number(c.valor).toFixed(2).replace('.', ',')}*.\n\nPix Copia e Cola:\n\`${c.pix_code}\`\n\nApós pagar, a confirmação é automática!`;
-    await sendWhatsAppMessage(eid, c.cliente_telefone, msg);
+    const bc = c.business_config || {};
+    const dados: DadosMensagemCobranca = {
+      nome: c.cliente_nome || 'cliente', empresa: c.estab_name, modulo: 'Rastreamento',
+      valor: c.valor, vencimentoLabel: c.competencia, pixPayload: c.pix_code,
+    };
+    const msgs = montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado);
+    await enviarMensagensCobranca(eid, c.cliente_telefone, msgs);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -2052,7 +2079,13 @@ router.post('/frota-cobrancas/:id/notificar-whatsapp', async (req, res) => {
 router.post('/clientes/:clienteId/cobrancas/:cacheId/notificar-whatsapp', async (req, res) => {
   try {
     const eid = estabId(req);
-    const clienteRes = await pool.query(`SELECT * FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.clienteId, eid]);
+    const clienteRes = await pool.query(
+      `SELECT ac.*, est.business_config
+       FROM agenda_clientes ac
+       JOIN establishments est ON est.id = ac.establishment_id
+       WHERE ac.id=$1 AND ac.establishment_id=$2`,
+      [req.params.clienteId, eid]
+    );
     if (!clienteRes.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
     const cliente = clienteRes.rows[0];
     if (!cliente.telefone) return res.status(422).json({ error: 'Cliente sem telefone cadastrado.' });
@@ -2063,18 +2096,17 @@ router.post('/clientes/:clienteId/cobrancas/:cacheId/notificar-whatsapp', async 
     );
     if (!cobRes.rows.length) return res.status(404).json({ error: 'Cobrança não encontrada.' });
     const cob = cobRes.rows[0];
-
-    let corpo: string;
-    if (cob.pix_payload) {
-      corpo = `Pix Copia e Cola:\n\`${cob.pix_payload}\``;
-    } else if (cob.invoice_url) {
-      corpo = `Link para pagamento:\n${cob.invoice_url}`;
-    } else {
+    if (!cob.pix_payload && !cob.invoice_url) {
       return res.status(422).json({ error: 'Essa cobrança não tem PIX nem link de pagamento salvo — gere uma nova cobrança.' });
     }
 
-    const msg = `💳 *Cobrança pendente*\n\nOlá, ${cliente.nome}! Você tem uma cobrança em aberto no valor de *R$ ${Number(cob.valor).toFixed(2).replace('.', ',')}*${cob.descricao ? ` (${cob.descricao})` : ''}.\n\n${corpo}`;
-    await sendWhatsAppMessage(eid, cliente.telefone, msg);
+    const bc = cliente.business_config || {};
+    const dados: DadosMensagemCobranca = {
+      nome: cliente.nome, valor: cob.valor, descricao: cob.descricao,
+      pixPayload: cob.pix_payload, invoiceUrl: cob.invoice_url,
+    };
+    const msgs = montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado);
+    await enviarMensagensCobranca(eid, cliente.telefone, msgs);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

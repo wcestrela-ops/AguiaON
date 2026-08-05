@@ -25,6 +25,8 @@ import pool from './db';
 import { sendWhatsAppMessage } from './waSender';
 import { generateFrotaPix } from './pixService';
 import { createCustomer as createAsaasCustomer, createPixCharge as createAsaasPixCharge } from './asaasClient';
+import { ensureTables as ensureAgendaTables } from '../routes/agenda/index';
+import { montarMensagensCobranca, DadosMensagemCobranca } from './cobrancaMensagem';
 
 function randomDelay(minMs = 8_000, maxMs = 20_000): number {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
@@ -34,15 +36,35 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-interface WaQueueItem { estId: string; phone: string; msg: string; }
+// Data de hoje em America/Sao_Paulo no formato YYYY-MM-DD — mesmo formato que
+// `vencimento` guarda (vem do `dueDate` do Asaas, sempre YYYY-MM-DD), pra dar
+// pra comparar com `=` direto em vez de parsear datas.
+function hojeSaoPauloISO(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+// Fix de produção 23 — cada item da fila agora carrega uma OU DUAS mensagens
+// (a segunda só existe quando `cobranca_pix_separado` está ligado nas
+// configurações do estabelecimento — o código Pix vai sozinho, sem mais
+// texto, facilitando copiar no celular). O delay anti-bloqueio de sempre
+// (8-20s) continua sendo ENTRE clientes diferentes; entre a mensagem
+// principal e o Pix separado do MESMO cliente usa um intervalo curto fixo
+// (só pra não ficar tudo colado, sem precisar do delay anti-ban completo).
+interface WaQueueItem { estId: string; phone: string; msgs: string[]; }
 
 async function sendWaQueue(items: WaQueueItem[]): Promise<void> {
   for (let i = 0; i < items.length; i++) {
     if (i > 0) await sleep(randomDelay());
-    const { estId, phone, msg } = items[i];
-    sendWhatsAppMessage(estId, phone, msg).catch((err: any) =>
-      console.error(`[trackingBilling] WA falhou para ${phone}:`, err.message)
-    );
+    const { estId, phone, msgs } = items[i];
+    (async () => {
+      for (let j = 0; j < msgs.length; j++) {
+        if (j > 0) await sleep(1_500);
+        try { await sendWhatsAppMessage(estId, phone, msgs[j]); }
+        catch (err: any) { console.error(`[trackingBilling] WA falhou para ${phone}:`, err.message); }
+      }
+    })().catch(() => {});
   }
 }
 
@@ -57,9 +79,73 @@ async function runCheck(): Promise<void> {
   });
   if (nowHHMM !== '09:15') return;
 
+  // Garante que agenda_cliente_asaas_cache (e a coluna lembrete_enviado do
+  // Fix 22) já existam — essa migração é lazy (só roda no primeiro request a
+  // /agenda/*), e esse job roda de forma independente desde a subida do
+  // servidor, sem passar por lá.
+  await ensureAgendaTables();
+
   await gerarCobrancasDoDia();
   await gerarCobrancasRecorrentesClientes();
+  await enviarLembretesCobrancasAsaas();
   await marcarInadimplentes();
+}
+
+// Fix de produção 22 — pedido do Carlos: depois de "Sincronizar" com o Asaas
+// (que só traz cobrança já existente lá pro cache local, sem avisar
+// ninguém), o cliente nunca recebia lembrete nenhum no dia do vencimento —
+// só cobrança feita por dentro do sistema (recorrência de cliente, acima)
+// avisava. Isso cobre qualquer cobrança pendente no cache (sincronizada do
+// Asaas OU gerada aqui) cujo vencimento seja hoje, com o mesmo delay
+// anti-bloqueio de sempre entre um envio e outro. `lembrete_enviado` evita
+// mandar 2x: a recorrência de cliente já marca a própria linha como avisada
+// na hora que gera (ela manda a mensagem na hora, não precisa esperar essa
+// varredura), então só sobra aqui o que ainda não foi avisado por ninguém.
+async function enviarLembretesCobrancasAsaas(): Promise<void> {
+  try {
+    const hoje = hojeSaoPauloISO();
+    const pendentes = await pool.query(`
+      SELECT ac.id, ac.valor, ac.descricao, ac.pix_payload, ac.invoice_url,
+             cli.nome, cli.telefone, ac.establishment_id, est.business_config
+      FROM agenda_cliente_asaas_cache ac
+      JOIN agenda_clientes cli ON cli.id = ac.cliente_id
+      JOIN establishments est ON est.id = ac.establishment_id
+      WHERE ac.tipo = 'payment'
+        AND ac.vencimento = $1
+        AND ac.status IN ('PENDING', 'AWAITING_RISK_ANALYSIS')
+        AND COALESCE(ac.lembrete_enviado, false) = false
+        AND cli.telefone IS NOT NULL
+    `, [hoje]);
+
+    if (!pendentes.rows.length) return;
+
+    const waQueue: WaQueueItem[] = [];
+    const idsAvisados: string[] = [];
+
+    for (const c of pendentes.rows) {
+      if (!c.pix_payload && !c.invoice_url) continue; // nada pra mandar ainda — tenta de novo amanhã
+
+      const bc = c.business_config || {};
+      const dados: DadosMensagemCobranca = {
+        nome: c.nome, valor: c.valor, descricao: c.descricao,
+        vencimentoLabel: 'hoje', pixPayload: c.pix_payload, invoiceUrl: c.invoice_url,
+      };
+      waQueue.push({
+        estId: c.establishment_id,
+        phone: c.telefone,
+        msgs: montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado),
+      });
+      idsAvisados.push(c.id);
+    }
+
+    if (idsAvisados.length) {
+      await pool.query(`UPDATE agenda_cliente_asaas_cache SET lembrete_enviado=true WHERE id = ANY($1::uuid[])`, [idsAvisados]);
+      sendWaQueue(waQueue).catch(() => {});
+      console.log(`[trackingBilling] ${idsAvisados.length} lembrete(s) de cobrança (Asaas) enviado(s).`);
+    }
+  } catch (err: any) {
+    console.error('[trackingBilling] enviarLembretesCobrancasAsaas:', err.message);
+  }
 }
 
 // Recorrência no nível do CLIENTE (Fase 14) — separada da recorrência por
@@ -77,12 +163,13 @@ async function gerarCobrancasRecorrentesClientes(): Promise<void> {
     const competencia = new Date().toISOString().slice(0, 7); // YYYY-MM
 
     const clientes = await pool.query(`
-      SELECT id, nome, telefone, establishment_id, asaas_customer_id,
-             valor_recorrente, descricao_recorrente
-      FROM agenda_clientes
-      WHERE recorrencia_ativa = true
-        AND dia_cobranca_recorrente = $1
-        AND valor_recorrente IS NOT NULL AND valor_recorrente > 0
+      SELECT ac.id, ac.nome, ac.telefone, ac.establishment_id, ac.asaas_customer_id,
+             ac.valor_recorrente, ac.descricao_recorrente, est.business_config
+      FROM agenda_clientes ac
+      JOIN establishments est ON est.id = ac.establishment_id
+      WHERE ac.recorrencia_ativa = true
+        AND ac.dia_cobranca_recorrente = $1
+        AND ac.valor_recorrente IS NOT NULL AND ac.valor_recorrente > 0
     `, [diaHoje]);
 
     if (!clientes.rows.length) return;
@@ -107,24 +194,36 @@ async function gerarCobrancasRecorrentesClientes(): Promise<void> {
           description: cliente.descricao_recorrente || `Mensalidade — ${cliente.nome}`,
         });
 
+        // Fix de produção 22: já marca lembrete_enviado=true quando essa
+        // linha for gerada e notificada aqui mesmo (na hora), pra a varredura
+        // diária de "cobrança do Asaas vencendo hoje" (enviarLembretesCobrancasAsaas,
+        // que cobre cobrança sincronizada de fora) não mandar uma segunda
+        // mensagem pro mesmo cliente sobre a mesma cobrança.
+        const vaiAvisarAgora = !!(cliente.telefone && pixPayload);
+
         // Idempotência: ON CONFLICT evita duplicar a cobrança do mesmo mês
         const inserted = await pool.query(
           `INSERT INTO agenda_cliente_asaas_cache
-             (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, competencia)
-           VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10)
+             (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, competencia, lembrete_enviado)
+           VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10,$11)
            ON CONFLICT (cliente_id, competencia) WHERE competencia IS NOT NULL DO NOTHING
            RETURNING id`,
           [cliente.id, cliente.establishment_id, payment.id, payment.value, payment.status,
-           payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null, competencia]
+           payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null, competencia, vaiAvisarAgora]
         );
         if (!inserted.rows.length) continue; // já existia (reinício do processo ou já cobrado)
         totalGeradas++;
 
-        if (cliente.telefone && pixPayload) {
+        if (vaiAvisarAgora) {
+          const bc = cliente.business_config || {};
+          const dados: DadosMensagemCobranca = {
+            nome: cliente.nome, valor: Number(cliente.valor_recorrente),
+            descricao: cliente.descricao_recorrente, vencimentoLabel: 'hoje', pixPayload,
+          };
           waQueue.push({
             estId: cliente.establishment_id,
             phone: cliente.telefone,
-            msg: `💳 *Olá, ${cliente.nome}!*\n\nSua mensalidade venceu hoje${cliente.descricao_recorrente ? ` (${cliente.descricao_recorrente})` : ''}.\n\nPix Copia e Cola:\n\`${pixPayload}\`\n\nApós pagar, a confirmação é automática!`,
+            msgs: montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado),
           });
         }
       } catch (cliErr: any) {
@@ -224,10 +323,15 @@ async function gerarCobrancasDoDia(): Promise<void> {
                 [pix.code, pix.provider, pix.provider_payment_id || null, charge.id]
               );
               if (v.cliente_telefone) {
+                const bc = est.business_config || {};
+                const dados: DadosMensagemCobranca = {
+                  nome: v.cliente_nome || 'cliente', empresa: est.name, modulo: 'Rastreamento',
+                  plano: v.plano_nome, valor: preco, vencimentoLabel: 'hoje', pixPayload: pix.code,
+                };
                 waQueue.push({
                   estId: est.id,
                   phone: v.cliente_telefone,
-                  msg: `📡 *Olá, ${v.cliente_nome || 'cliente'}!*\n\nSua mensalidade de rastreamento (*${v.plano_nome}*) na *${est.name}* venceu hoje.\n\n${pix.message}`,
+                  msgs: montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado),
                 });
               }
             } else {
