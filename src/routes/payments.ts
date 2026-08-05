@@ -5,6 +5,7 @@ import { decrypt } from '../shared/cryptoUtil';
 import { sseEmitEvent } from './delivery';
 import { markInvoicePaid } from '../shared/platformBilling';
 import { emitirNotaFiscal } from '../shared/notaFiscalService';
+import { montarMensagemPagamentoConfirmado } from '../shared/cobrancaMensagem';
 
 // Cria tabela de falhas de webhook na inicialização
 (async () => {
@@ -82,11 +83,16 @@ async function renewGymSubscription(subId: string, estName: string): Promise<voi
 }
 
 // Fase 7 — confirma cobrança de mensalidade do módulo Rastreamento
-async function renewFrotaCharge(chargeId: string, estName: string): Promise<void> {
+// Fix de produção 24: mensagem de confirmação agora usa o mesmo padrão
+// "PAGAMENTO CONFIRMADO" (com fatura/comprovante) que a empresa já usava,
+// customizável via business_config.mensagem_pagamento_confirmado_template.
+// `comprovanteUrl` só existe quando o webhook manda (payment.transactionReceiptUrl).
+async function renewFrotaCharge(chargeId: string, estName: string, comprovanteUrl?: string | null): Promise<void> {
   const chargeRes = await pool.query(
-    `SELECT c.*, f.cliente_nome, f.cliente_telefone, f.cliente_id, f.establishment_id AS est_id
+    `SELECT c.*, f.cliente_nome, f.cliente_telefone, f.cliente_id, f.establishment_id AS est_id, est.business_config
      FROM agenda_frota_charges c
      JOIN agenda_frota f ON f.id = c.agenda_frota_id
+     JOIN establishments est ON est.id = f.establishment_id
      WHERE c.id = $1 LIMIT 1`,
     [chargeId]
   );
@@ -117,7 +123,12 @@ async function renewFrotaCharge(chargeId: string, estName: string): Promise<void
   }
 
   if (charge.cliente_telefone) {
-    const msg = `✅ *Pagamento confirmado!*\n\nOlá, ${charge.cliente_nome || 'cliente'}! Sua mensalidade de rastreamento na *${estName}* foi confirmada. Obrigado!`;
+    const bc = charge.business_config || {};
+    const msg = montarMensagemPagamentoConfirmado(bc.mensagem_pagamento_confirmado_template, {
+      nome: charge.cliente_nome || 'cliente', empresa: estName, valor: Number(charge.valor),
+      descricao: `mensalidade — competência ${charge.competencia}`,
+      faturaNumero: charge.invoice_number, invoiceUrl: charge.invoice_url, comprovanteUrl,
+    });
     sendWhatsAppMessage(charge.est_id, charge.cliente_telefone, msg).catch(() => {});
   }
 
@@ -249,11 +260,26 @@ router.post('/webhook/asaas', async (req, res) => {
                 [payment.status || 'RECEIVED', cache.id]
             );
 
-            const clienteRes = await pool.query(`SELECT * FROM agenda_clientes WHERE id=$1`, [cache.cliente_id]);
+            const clienteRes = await pool.query(
+                `SELECT cli.*, est.vertical_slug, est.name AS estab_name, est.business_config
+                 FROM agenda_clientes cli JOIN establishments est ON est.id = cli.establishment_id
+                 WHERE cli.id=$1`,
+                [cache.cliente_id]
+            );
             const cliente = clienteRes.rows[0];
 
+            // Fix de produção 24: padrão rico de "PAGAMENTO CONFIRMADO" (com
+            // fatura/comprovante) só pro Rastreamento — outros módulos
+            // continuam com a mensagem simples de sempre.
             if (cliente?.telefone) {
-                const msg = `✅ *Pagamento confirmado!*\n\nOlá, ${cliente.nome || 'cliente'}! Recebemos seu pagamento${cache.descricao ? ` (${cache.descricao})` : ''}. Obrigado!`;
+                const bc = cliente.business_config || {};
+                const msg = cliente.vertical_slug === 'rastreamento'
+                    ? montarMensagemPagamentoConfirmado(bc.mensagem_pagamento_confirmado_template, {
+                        nome: cliente.nome || 'cliente', empresa: cliente.estab_name, valor: Number(cache.valor),
+                        descricao: cache.descricao, faturaNumero: cache.invoice_number,
+                        invoiceUrl: cache.invoice_url, comprovanteUrl: payment.transactionReceiptUrl,
+                      })
+                    : `✅ *Pagamento confirmado!*\n\nOlá, ${cliente.nome || 'cliente'}! Recebemos seu pagamento${cache.descricao ? ` (${cache.descricao})` : ''}. Obrigado!`;
                 sendWhatsAppMessage(cache.establishment_id, cliente.telefone, msg).catch(() => {});
             }
 
@@ -292,7 +318,7 @@ router.post('/webhook/asaas', async (req, res) => {
                 `SELECT e.name FROM establishments e JOIN agenda_frota_charges c ON c.establishment_id=e.id WHERE c.id=$1 LIMIT 1`,
                 [chargeId]
             );
-            await renewFrotaCharge(chargeId, estRes.rows[0]?.name || '');
+            await renewFrotaCharge(chargeId, estRes.rows[0]?.name || '', payment.transactionReceiptUrl || null);
             return;
         }
 

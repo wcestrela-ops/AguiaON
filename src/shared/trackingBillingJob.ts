@@ -24,9 +24,9 @@
 import pool from './db';
 import { sendWhatsAppMessage } from './waSender';
 import { generateFrotaPix } from './pixService';
-import { createCustomer as createAsaasCustomer, createPixCharge as createAsaasPixCharge } from './asaasClient';
+import { createCustomer as createAsaasCustomer, createPixCharge as createAsaasPixCharge, getPixPayload as getAsaasPixPayload } from './asaasClient';
 import { ensureTables as ensureAgendaTables } from '../routes/agenda/index';
-import { montarMensagensCobranca, DadosMensagemCobranca } from './cobrancaMensagem';
+import { montarMensagensCobranca, DadosMensagemCobranca, montarMensagemResumoAtraso, FaturaAtrasada } from './cobrancaMensagem';
 
 function randomDelay(minMs = 8_000, maxMs = 20_000): number {
   return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
@@ -41,6 +41,15 @@ function sleep(ms: number): Promise<void> {
 // pra comparar com `=` direto em vez de parsear datas.
 function hojeSaoPauloISO(): string {
   return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+// Mesma data, mas em dd/mm/aaaa — formato usado nas mensagens (o padrão que
+// a empresa já usava mostra a data por extenso, ex: "vencimento em
+// 05/08/2026", não a palavra "hoje").
+function hojeSaoPauloBR(): string {
+  return new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 }
@@ -88,7 +97,84 @@ async function runCheck(): Promise<void> {
   await gerarCobrancasDoDia();
   await gerarCobrancasRecorrentesClientes();
   await enviarLembretesCobrancasAsaas();
+  await enviarResumoAtrasos();
   await marcarInadimplentes();
+}
+
+// Fix de produção 24 — resumo de faturas atrasadas, agrupado por cliente.
+// Pedido do Carlos: quando o cliente acumula mais de uma fatura vencida,
+// mandar UM aviso consolidado (não um por fatura) — mesmo padrão que a
+// empresa já usava. A frequência de reenvio é configurável pelo lojista em
+// Configurações → Rastreamento (`business_config.aviso_atraso_frequencia_dias`
+// — 0/vazio desativa o aviso pra essa empresa).
+//
+// Escopo: cobrança de CLIENTE (agenda_cliente_asaas_cache), que tem data de
+// vencimento explícita. Cobrança por VEÍCULO (agenda_frota_charges) só
+// guarda "competência" (mês), sem um dia exato de vencimento — continua só
+// marcando "inadimplente" em silêncio, como já fazia (marcarInadimplentes),
+// sem entrar nesse resumo por enquanto.
+async function enviarResumoAtrasos(): Promise<void> {
+  try {
+    const hoje = hojeSaoPauloISO();
+
+    const atrasadas = await pool.query(`
+      SELECT ac.id, ac.cliente_id, ac.valor, ac.vencimento, ac.invoice_url, ac.invoice_number,
+             cli.nome, cli.telefone, cli.aviso_atraso_enviado_em,
+             ac.establishment_id, est.name AS estab_name, est.business_config
+      FROM agenda_cliente_asaas_cache ac
+      JOIN agenda_clientes cli ON cli.id = ac.cliente_id
+      JOIN establishments est ON est.id = ac.establishment_id
+      WHERE ac.tipo = 'payment'
+        AND ac.vencimento < $1
+        AND ac.status IN ('PENDING', 'AWAITING_RISK_ANALYSIS', 'OVERDUE')
+        AND cli.telefone IS NOT NULL
+      ORDER BY ac.cliente_id, ac.vencimento
+    `, [hoje]);
+
+    if (!atrasadas.rows.length) return;
+
+    const porCliente = new Map<string, typeof atrasadas.rows>();
+    for (const row of atrasadas.rows) {
+      if (!porCliente.has(row.cliente_id)) porCliente.set(row.cliente_id, []);
+      porCliente.get(row.cliente_id)!.push(row);
+    }
+
+    const waQueue: WaQueueItem[] = [];
+    const hojeMs = new Date(`${hoje}T00:00:00Z`).getTime();
+    let totalAvisados = 0;
+
+    for (const [clienteId, faturas] of porCliente) {
+      const bc = faturas[0].business_config || {};
+      const freqDias = parseInt(bc.aviso_atraso_frequencia_dias, 10);
+      if (!freqDias || freqDias <= 0) continue; // aviso desativado pra essa empresa
+
+      const ultimoAviso = faturas[0].aviso_atraso_enviado_em;
+      if (ultimoAviso) {
+        const diasDesde = Math.floor((Date.now() - new Date(ultimoAviso).getTime()) / 86_400_000);
+        if (diasDesde < freqDias) continue; // ainda dentro do intervalo configurado pelo lojista
+      }
+
+      const faturasMsg: FaturaAtrasada[] = faturas.map(f => ({
+        faturaNumero: f.invoice_number,
+        vencimentoLabel: new Date(`${f.vencimento}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' }),
+        diasAtraso: Math.max(1, Math.floor((hojeMs - new Date(`${f.vencimento}T00:00:00Z`).getTime()) / 86_400_000)),
+        valor: f.valor,
+        invoiceUrl: f.invoice_url,
+      }));
+
+      const msg = montarMensagemResumoAtraso(faturas[0].estab_name, faturas[0].nome, faturasMsg);
+      waQueue.push({ estId: faturas[0].establishment_id, phone: faturas[0].telefone, msgs: [msg] });
+      await pool.query(`UPDATE agenda_clientes SET aviso_atraso_enviado_em=NOW() WHERE id=$1`, [clienteId]);
+      totalAvisados++;
+    }
+
+    if (waQueue.length) {
+      sendWaQueue(waQueue).catch(() => {});
+      console.log(`[trackingBilling] ${totalAvisados} resumo(s) de fatura atrasada enviado(s).`);
+    }
+  } catch (err: any) {
+    console.error('[trackingBilling] enviarResumoAtrasos:', err.message);
+  }
 }
 
 // Fix de produção 22 — pedido do Carlos: depois de "Sincronizar" com o Asaas
@@ -105,7 +191,7 @@ async function enviarLembretesCobrancasAsaas(): Promise<void> {
   try {
     const hoje = hojeSaoPauloISO();
     const pendentes = await pool.query(`
-      SELECT ac.id, ac.valor, ac.descricao, ac.pix_payload, ac.invoice_url,
+      SELECT ac.id, ac.asaas_id, ac.valor, ac.descricao, ac.pix_payload, ac.invoice_url, ac.invoice_number,
              cli.nome, cli.telefone, ac.establishment_id, est.business_config
       FROM agenda_cliente_asaas_cache ac
       JOIN agenda_clientes cli ON cli.id = ac.cliente_id
@@ -125,10 +211,23 @@ async function enviarLembretesCobrancasAsaas(): Promise<void> {
     for (const c of pendentes.rows) {
       if (!c.pix_payload && !c.invoice_url) continue; // nada pra mandar ainda — tenta de novo amanhã
 
+      // Fix de produção 25 — cobrança trazida por sincronização nunca teve o
+      // Pix Copia e Cola buscado (só é buscado na hora que A GENTE cria a
+      // cobrança) — busca sob demanda aqui, só quando falta, e guarda no
+      // cache pra próxima vez não precisar buscar de novo.
+      let pixPayload = c.pix_payload;
+      if (!pixPayload && c.asaas_id) {
+        pixPayload = await getAsaasPixPayload(c.establishment_id, c.asaas_id);
+        if (pixPayload) {
+          await pool.query(`UPDATE agenda_cliente_asaas_cache SET pix_payload=$1 WHERE id=$2`, [pixPayload, c.id]);
+        }
+      }
+
       const bc = c.business_config || {};
       const dados: DadosMensagemCobranca = {
         nome: c.nome, valor: c.valor, descricao: c.descricao,
-        vencimentoLabel: 'hoje', pixPayload: c.pix_payload, invoiceUrl: c.invoice_url,
+        vencimentoLabel: hojeSaoPauloBR(), faturaNumero: c.invoice_number,
+        pixPayload, invoiceUrl: c.invoice_url,
       };
       waQueue.push({
         estId: c.establishment_id,
@@ -199,17 +298,17 @@ async function gerarCobrancasRecorrentesClientes(): Promise<void> {
         // diária de "cobrança do Asaas vencendo hoje" (enviarLembretesCobrancasAsaas,
         // que cobre cobrança sincronizada de fora) não mandar uma segunda
         // mensagem pro mesmo cliente sobre a mesma cobrança.
-        const vaiAvisarAgora = !!(cliente.telefone && pixPayload);
+        const vaiAvisarAgora = !!(cliente.telefone && (pixPayload || payment.invoiceUrl));
 
         // Idempotência: ON CONFLICT evita duplicar a cobrança do mesmo mês
         const inserted = await pool.query(
           `INSERT INTO agenda_cliente_asaas_cache
-             (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, competencia, lembrete_enviado)
-           VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10,$11)
+             (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, competencia, lembrete_enviado, invoice_number)
+           VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
            ON CONFLICT (cliente_id, competencia) WHERE competencia IS NOT NULL DO NOTHING
            RETURNING id`,
           [cliente.id, cliente.establishment_id, payment.id, payment.value, payment.status,
-           payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null, competencia, vaiAvisarAgora]
+           payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null, competencia, vaiAvisarAgora, payment.invoiceNumber || null]
         );
         if (!inserted.rows.length) continue; // já existia (reinício do processo ou já cobrado)
         totalGeradas++;
@@ -218,7 +317,8 @@ async function gerarCobrancasRecorrentesClientes(): Promise<void> {
           const bc = cliente.business_config || {};
           const dados: DadosMensagemCobranca = {
             nome: cliente.nome, valor: Number(cliente.valor_recorrente),
-            descricao: cliente.descricao_recorrente, vencimentoLabel: 'hoje', pixPayload,
+            descricao: cliente.descricao_recorrente, vencimentoLabel: hojeSaoPauloBR(),
+            faturaNumero: payment.invoiceNumber, pixPayload, invoiceUrl: payment.invoiceUrl,
           };
           waQueue.push({
             estId: cliente.establishment_id,
@@ -319,14 +419,15 @@ async function gerarCobrancasDoDia(): Promise<void> {
             const pix = await generateFrotaPix(est.id, charge.id, preco, v.cliente_nome || 'Cliente');
             if (pix) {
               await pool.query(
-                `UPDATE agenda_frota_charges SET pix_code=$1, pix_provider=$2, asaas_payment_id=$3 WHERE id=$4`,
-                [pix.code, pix.provider, pix.provider_payment_id || null, charge.id]
+                `UPDATE agenda_frota_charges SET pix_code=$1, pix_provider=$2, asaas_payment_id=$3, invoice_url=$4, invoice_number=$5 WHERE id=$6`,
+                [pix.code, pix.provider, pix.provider_payment_id || null, pix.invoice_url || null, pix.invoice_number || null, charge.id]
               );
               if (v.cliente_telefone) {
                 const bc = est.business_config || {};
                 const dados: DadosMensagemCobranca = {
                   nome: v.cliente_nome || 'cliente', empresa: est.name, modulo: 'Rastreamento',
-                  plano: v.plano_nome, valor: preco, vencimentoLabel: 'hoje', pixPayload: pix.code,
+                  plano: v.plano_nome, valor: preco, vencimentoLabel: hojeSaoPauloBR(),
+                  faturaNumero: pix.invoice_number, pixPayload: pix.code, invoiceUrl: pix.invoice_url,
                 };
                 waQueue.push({
                   estId: est.id,

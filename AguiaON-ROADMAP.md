@@ -671,3 +671,39 @@ Todas as 5 rotinas de envio (`trackingBillingJob.ts`: `gerarCobrancasDoDia`, `ge
 Nuance registrada, não resolvida: pro método "Pix manual" (chave fixa cadastrada, sem Asaas/Mercado Pago), o texto padrão chama de "Pix Copia e Cola" o que na verdade é uma chave Pix estática — antes cada função tinha uma frase específica pra esse caso ("Chave PIX (tipo):"); agora, com o texto unificado, ficou genérico. Quem usa Pix manual e quiser a distinção pode simplesmente ajustar o próprio template em Configurações.
 
 Verificação: `cobrancaMensagem.ts`, `trackingBillingJob.ts` e `agenda/index.ts` reconferidos via `ts.transpileModule` (OK, 0 diagnósticos); `loja.html` reconferido via parse de `<script>` (OK, 0 erros) e checagem de nomes de função duplicados (só os 2 pré-existentes e não relacionados, `loadVendas`/`fmtDate`, sem nada novo). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve testar preenchendo um texto customizado e ativando "Pix separado" em Configurações → Rastreamento, depois conferir numa cobrança de teste (manual ou automática) se o texto e a separação saem como esperado.
+
+## Fix de produção 24 — padrão de mensagens da Águia Gestão Veicular (fatura N°, pagamento confirmado, resumo de atraso)
+
+O Carlos mandou 3 exemplos reais de mensagem que a empresa já usava (herdadas do Águia Auto): (1) "HOJE VENCE SUA FATURA" com número da fatura e link hospedado no Asaas — sem Pix cru; (2) "PAGAMENTO CONFIRMADO" com link da fatura + link do comprovante; (3) um resumo consolidado quando o cliente acumula mais de uma fatura vencida, listando cada uma com dias de atraso. Pediu pra manter esse padrão. Confirmado com ele por pergunta: escopo só Rastreamento (não mexe em Academia/Delivery), e a frequência do aviso de atraso é configurável pelo lojista (não fixa).
+
+**Captura de dados novos do Asaas** — `invoiceNumber` ("N°..." que o cliente vê, diferente do id interno) e `transactionReceiptUrl` (link do comprovante, só existe depois de confirmado) não eram lidos antes:
+- `asaasClient.ts`: `AsaasPayment` ganhou os dois campos (só de tipagem — o dado já vinha da API, só não tinha onde declarar).
+- `pixService.ts`: `generateAsaasPix` (interno) e `generateFrotaPix` (`PixResult`) agora também devolvem `invoice_url`/`invoice_number` do Asaas.
+- Novas colunas: `agenda_frota_charges.invoice_url/invoice_number`, `agenda_cliente_asaas_cache.invoice_number` (`invoice_url` já existia) — persistidas no momento da criação da cobrança (job automático, recorrência de cliente, cobrança avulsa, sincronização).
+
+**`src/shared/cobrancaMensagem.ts` — 2 templates novos + 1 mensagem estruturada**:
+- `MENSAGEM_COBRANCA_PADRAO` reescrita pra bater com o padrão da empresa (fatura N°, vencimento por extenso, link da fatura com prioridade sobre o Pix cru — só cai pro Pix quando não há link, ex: manual_pix/mercadopago).
+- `montarMensagemPagamentoConfirmado()` — mensagem nova, com fatura + comprovante.
+- `montarMensagemResumoAtraso()` — monta o resumo consolidado (lista de faturas com vencimento, dias de atraso, valor, link) a partir de um array — quem decide QUANDO chamar é o job, não essa função.
+
+**`trackingBillingJob.ts` — nova rotina diária, `enviarResumoAtrasos()`**: varre `agenda_cliente_asaas_cache` por fatura vencida (`vencimento < hoje`, ainda não paga), agrupa por cliente, e manda UM resumo consolidado por cliente — respeitando `business_config.aviso_atraso_frequencia_dias` (7/15/30 dias, configurável em Configurações → Rastreamento; desativado por padrão) via uma nova coluna `agenda_clientes.aviso_atraso_enviado_em` que guarda quando foi o último aviso, pra não repetir antes do intervalo escolhido pelo lojista. Escopo dessa rotina: só cobrança de CLIENTE (que tem data de vencimento explícita) — cobrança por VEÍCULO (`agenda_frota_charges`) só guarda "competência" (mês, sem dia exato), então continua só virando "inadimplente" em silêncio como já era, sem entrar nesse resumo por ora.
+
+**`payments.ts` — mensagem de pagamento confirmado enriquecida**: `renewFrotaCharge` (Rastreamento por veículo) e o branch de "cobrança avulsa de cliente" no webhook do Asaas agora usam `montarMensagemPagamentoConfirmado` com fatura + comprovante — mas só quando `establishment.vertical_slug === 'rastreamento'` (a cobrança avulsa de cliente é uma tabela genérica, usada por outros módulos também; esses continuam com a mensagem simples de sempre).
+
+**`loja.html`**: 2 campos novos em Configurações → Rastreamento — "Mensagem de pagamento confirmado" (textarea, mesmo mecanismo genérico de sempre) e "Aviso de fatura(s) atrasada(s) — frequência" (select: Desativado/7/15/30 dias).
+
+Verificação: todos os arquivos TS tocados (`cobrancaMensagem.ts`, `trackingBillingJob.ts`, `agenda/index.ts`, `pixService.ts`, `asaasClient.ts`, `payments.ts`) reconferidos via `ts.transpileModule` (OK, 0 diagnósticos); `loja.html` reconferido via parse de `<script>` (OK, 0 erros) e checagem de duplicidade de função (só os 2 pré-existentes, sem nada novo). Não testado contra o ambiente real — depende do próximo deploy. Nota: pra faturas já existentes antes desse fix, `invoice_number`/`invoice_url` ficam vazios até a próxima cobrança ser gerada (não há backfill retroativo); o Carlos deve testar com uma cobrança nova pra ver o padrão completo.
+
+## Fix de produção 25 — buscar o Pix Copia e Cola do Asaas pra fatura única (mensagem 2)
+
+O Carlos perguntou se dava pra puxar do Asaas o Pix Copia e Cola de uma fatura e mandar como segunda mensagem quando a cobrança é uma fatura única (mensagem 1 = fatura, mensagem 2 = Pix) — e confirmou que no caso de VÁRIAS faturas atrasadas (Fix 24) o Pix não deve ir, só os links, o que já é como o resumo consolidado funciona.
+
+Causa raiz: o código Pix só era buscado no Asaas no exato momento em que O SISTEMA cria a cobrança (`createPixCharge`, logo após o `POST /payments`) — cobrança trazida por sincronização (`sync-asaas`) ou pelo lembrete diário de fatura vencendo hoje (Fix 22, que lê o que já está no cache) nunca tinha esse código, só o link da fatura.
+
+Fix: nova função `getPixPayload(estId, paymentId)` em `asaasClient.ts`, que busca o Pix de qualquer pagamento já existente no Asaas (`GET /payments/{id}/pixQrCode`) — dado que já temos o `asaas_id` salvo. Usada em dois lugares, sob demanda (só quando falta, e guarda no cache pra não buscar de novo):
+- `enviarLembretesCobrancasAsaas` (o lembrete diário de fatura única vencendo hoje, `trackingBillingJob.ts`) — exatamente o cenário que o Carlos descreveu.
+- `POST /agenda/clientes/:clienteId/cobrancas/:cacheId/notificar-whatsapp` (reenvio manual "Cobrar via WhatsApp" no cadastro do cliente).
+
+Importante: a mensagem 2 (Pix separado) só sai se "Mandar o código Pix Copia e Cola numa mensagem separada" estiver ativado em Configurações → Rastreamento (toggle já existente desde o Fix 23) — sem isso ligado, a fatura única continua indo só com o link, sem o Pix. Isso é intencional (mesmo interruptor que o Carlos já tinha pra decidir isso) — vale ele conferir se está ligado.
+
+Verificação: `asaasClient.ts`, `trackingBillingJob.ts` e `agenda/index.ts` reconferidos via `ts.transpileModule` (OK, 0 diagnósticos). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve conferir se "Pix separado" está ativado em Configurações → Rastreamento e testar com uma fatura sincronizada que ainda não tinha o código Pix salvo.

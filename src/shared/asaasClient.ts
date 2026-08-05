@@ -38,6 +38,12 @@ export interface AsaasPayment {
   description?: string | null;
   invoiceUrl?: string | null;
   billingType?: string;
+  /** Fix de produção 24 — "N°..." que o cliente vê na fatura, diferente do
+   *  `id` interno (usado nas mensagens de cobrança/pagamento confirmado). */
+  invoiceNumber?: string | null;
+  /** Só vem preenchido depois de confirmado — link do comprovante de
+   *  pagamento (também usado nas mensagens de pagamento confirmado). */
+  transactionReceiptUrl?: string | null;
 }
 
 export interface AsaasSubscription {
@@ -112,6 +118,22 @@ export async function createCustomer(estId: string, input: { name: string; phone
 }
 
 // ─── Cobranças e assinaturas por cliente ───────────────────────
+
+// Fix de produção 25 — o Pix Copia e Cola só é buscado no Asaas na hora que
+// A GENTE cria a cobrança (createPixCharge, logo depois do POST /payments).
+// Cobrança trazida por sincronização (getCustomerPayments/sync-asaas) ou já
+// existente no cache antes desse fix nunca teve esse código puxado — essa
+// função busca sob demanda pra qualquer pagamento existente (dado o próprio
+// asaas_id), usada pelo lembrete/reenvio quando falta o Pix no cache local.
+export async function getPixPayload(estId: string, paymentId: string): Promise<string | null> {
+  try {
+    const data = await request(estId, `/payments/${paymentId}/pixQrCode`);
+    return data?.payload || null;
+  } catch (err: any) {
+    console.warn(`[asaasClient] getPixPayload falhou (payment=${paymentId}):`, err.message);
+    return null;
+  }
+}
 
 export async function getCustomerPayments(estId: string, customerId: string): Promise<AsaasPayment[]> {
   const data = await request(estId, '/payments', { query: { customer: customerId, limit: 100 } });

@@ -30,6 +30,7 @@ import {
   getCustomerPayments as getAsaasCustomerPayments,
   getCustomerSubscriptions as getAsaasCustomerSubscriptions,
   createPixCharge as createAsaasPixCharge,
+  getPixPayload as getAsaasPixPayload,
   getMunicipalOptions,
   listMunicipalServices,
   saveFiscalInfo,
@@ -192,6 +193,13 @@ export async function ensureTables() {
     )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_charges_estab ON agenda_frota_charges(establishment_id)`);
   await pool.query(`ALTER TABLE agenda_frota_charges ADD COLUMN IF NOT EXISTS asaas_payment_id TEXT`);
+  // Fix de produção 24 — "Fatura N°..." e o link da fatura hospedada no
+  // Asaas, usados nas mensagens de cobrança/pagamento confirmado com o
+  // mesmo padrão que a empresa já usava (Águia Auto). Só vem preenchido
+  // quando o método de pagamento é Asaas (manual_pix/mercadopago não têm
+  // esse conceito de fatura hospedada).
+  await pool.query(`ALTER TABLE agenda_frota_charges ADD COLUMN IF NOT EXISTS invoice_url TEXT`);
+  await pool.query(`ALTER TABLE agenda_frota_charges ADD COLUMN IF NOT EXISTS invoice_number TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_gpswox_device ON agenda_frota(gpswox_device_id)`);
 
   // Fase 8 — comandos remotos, histórico, compartilhamento
@@ -361,6 +369,15 @@ export async function ensureTables() {
   // pro mesmo cliente no mesmo dia, marca aqui se já foi avisado (a
   // recorrência de cliente já marca isso na hora que gera + avisa).
   await pool.query(`ALTER TABLE agenda_cliente_asaas_cache ADD COLUMN IF NOT EXISTS lembrete_enviado BOOLEAN NOT NULL DEFAULT false`);
+
+  // Fix de produção 24 — mesma "Fatura N°..." do agenda_frota_charges acima,
+  // aqui pro lado da cobrança de CLIENTE (recorrência, avulsa, sincronizada).
+  await pool.query(`ALTER TABLE agenda_cliente_asaas_cache ADD COLUMN IF NOT EXISTS invoice_number TEXT`);
+  // Data do último "resumo de faturas atrasadas" mandado pra esse cliente —
+  // controla a frequência configurável (Configurações → Rastreamento) do
+  // aviso de atraso, pra não mandar de novo antes do intervalo escolhido
+  // pelo lojista (7/15/30 dias).
+  await pool.query(`ALTER TABLE agenda_clientes ADD COLUMN IF NOT EXISTS aviso_atraso_enviado_em TIMESTAMPTZ`);
 
   // Fase 13 — Nota fiscal automática (NFS-e via Asaas) + cobrança avulsa por WhatsApp
   await pool.query(`
@@ -1785,10 +1802,10 @@ router.post('/clientes/:id/cobrar', async (req, res) => {
     });
 
     await pool.query(
-      `INSERT INTO agenda_cliente_asaas_cache (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload)
-       VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (cliente_id, tipo, asaas_id) DO UPDATE SET valor=$4, status=$5, vencimento=$6, descricao=$7, invoice_url=$8, pix_payload=$9, synced_at=NOW()`,
-      [cliente.id, eid, payment.id, payment.value, payment.status, payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null]
+      `INSERT INTO agenda_cliente_asaas_cache (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, invoice_number)
+       VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (cliente_id, tipo, asaas_id) DO UPDATE SET valor=$4, status=$5, vencimento=$6, descricao=$7, invoice_url=$8, pix_payload=$9, invoice_number=$10, synced_at=NOW()`,
+      [cliente.id, eid, payment.id, payment.value, payment.status, payment.dueDate, payment.description || null, payment.invoiceUrl || null, pixPayload || null, payment.invoiceNumber || null]
     );
 
     res.json({ success: true, payment, pix_payload: pixPayload });
@@ -1869,10 +1886,10 @@ router.post('/clientes/sync-asaas', async (req, res) => {
         ]);
         for (const p of payments) {
           await pool.query(
-            `INSERT INTO agenda_cliente_asaas_cache (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url)
-             VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8)
-             ON CONFLICT (cliente_id, tipo, asaas_id) DO UPDATE SET valor=$4, status=$5, vencimento=$6, descricao=$7, invoice_url=$8, synced_at=NOW()`,
-            [clienteId, eid, p.id, p.value, p.status, p.dueDate, p.description || null, p.invoiceUrl || null]
+            `INSERT INTO agenda_cliente_asaas_cache (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, invoice_number)
+             VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9)
+             ON CONFLICT (cliente_id, tipo, asaas_id) DO UPDATE SET valor=$4, status=$5, vencimento=$6, descricao=$7, invoice_url=$8, invoice_number=$9, synced_at=NOW()`,
+            [clienteId, eid, p.id, p.value, p.status, p.dueDate, p.description || null, p.invoiceUrl || null, p.invoiceNumber || null]
           );
           cobrancasImportadas++;
         }
@@ -2100,10 +2117,21 @@ router.post('/clientes/:clienteId/cobrancas/:cacheId/notificar-whatsapp', async 
       return res.status(422).json({ error: 'Essa cobrança não tem PIX nem link de pagamento salvo — gere uma nova cobrança.' });
     }
 
+    // Fix de produção 25 — cobrança sincronizada nunca teve o Pix buscado
+    // (só é buscado na hora que a gente cria a cobrança) — busca sob demanda
+    // aqui no reenvio manual, e guarda no cache pra próxima vez.
+    let pixPayload = cob.pix_payload;
+    if (!pixPayload && cob.asaas_id) {
+      pixPayload = await getAsaasPixPayload(eid, cob.asaas_id);
+      if (pixPayload) {
+        await pool.query(`UPDATE agenda_cliente_asaas_cache SET pix_payload=$1 WHERE id=$2`, [pixPayload, cob.id]);
+      }
+    }
+
     const bc = cliente.business_config || {};
     const dados: DadosMensagemCobranca = {
       nome: cliente.nome, valor: cob.valor, descricao: cob.descricao,
-      pixPayload: cob.pix_payload, invoiceUrl: cob.invoice_url,
+      pixPayload, invoiceUrl: cob.invoice_url,
     };
     const msgs = montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado);
     await enviarMensagensCobranca(eid, cliente.telefone, msgs);

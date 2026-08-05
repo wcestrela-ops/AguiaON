@@ -61,7 +61,13 @@ function buildManualPixMessage(cfg: EstabPaymentConfig, total: number, orderNumb
 }
 
 // ─── Asaas ────────────────────────────────────────────────────
-async function generateAsaasPix(cfg: EstabPaymentConfig, orderId: string, total: number, customerName: string): Promise<{ payload: string; paymentId: string } | null> {
+// Fix de produção 24: além do Pix Copia e Cola, agora também devolve
+// `invoiceUrl` (a fatura hospedada no Asaas — o link que aparece como
+// "Fatura:" nas mensagens de cobrança/pagamento confirmado) e
+// `invoiceNumber` (o "N°..." que identifica a fatura pro cliente, diferente
+// do id interno do pagamento) — os dois já vêm de graça na resposta da
+// criação do pagamento, só não eram lidos antes.
+async function generateAsaasPix(cfg: EstabPaymentConfig, orderId: string, total: number, customerName: string): Promise<{ payload: string; paymentId: string; invoiceUrl: string | null; invoiceNumber: string | null } | null> {
   try {
     const apiKey = cfg.asaas_api_key;
     const baseUrl = 'https://api.asaas.com/v3';
@@ -116,7 +122,12 @@ async function generateAsaasPix(cfg: EstabPaymentConfig, orderId: string, total:
     const pixData = await pixRes.json() as any;
 
     if (!pixData.payload) return null;
-    return { payload: pixData.payload, paymentId: charge.id }; // payload = copia e cola
+    return {
+      payload: pixData.payload, // copia e cola
+      paymentId: charge.id,
+      invoiceUrl: charge.invoiceUrl || null,
+      invoiceNumber: charge.invoiceNumber || null,
+    };
   } catch (err: any) {
     console.error('[pixService] Asaas error:', err.message);
     return null;
@@ -230,6 +241,11 @@ export interface PixResult {
   /** Id da cobrança no provedor (hoje só preenchido pra Asaas) — usado pra
    *  vincular a nota fiscal (scheduleInvoice) diretamente a essa cobrança. */
   provider_payment_id?: string;
+  /** Fix de produção 24 — só preenchido pra Asaas: link da fatura hospedada
+   *  (o que aparece como "Fatura:" na mensagem de cobrança/pagamento) e o
+   *  número dela (o "N°..." que o cliente vê, diferente do id interno). */
+  invoice_url?: string | null;
+  invoice_number?: string | null;
 }
 
 /** Gera PIX para renovação de assinatura gym. Usa prefixo `gym_` no external_reference. */
@@ -370,7 +386,10 @@ export async function generateFrotaPix(
         ``,
         `⏱️ Válido por 24h. Após pagar a confirmação é automática!`,
       ].join('\n');
-      return { code, message, provider: 'asaas', used_failover: usedFailover, provider_payment_id: asaas.paymentId };
+      return {
+        code, message, provider: 'asaas', used_failover: usedFailover, provider_payment_id: asaas.paymentId,
+        invoice_url: asaas.invoiceUrl, invoice_number: asaas.invoiceNumber,
+      };
     }
 
     if (method === 'mercadopago') {
