@@ -3002,6 +3002,10 @@
                         ` : ''}
                         ${l.aceite_em ? `
                             <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
+                            ${l.email ? (l.email_termo_enviado
+                                ? `<p class="text-emerald-400 text-[10px]"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia do termo enviada por e-mail</p>`
+                                : `<p class="text-amber-400 text-[10px]"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia do termo NÃO enviada — confira o SMTP em Configurações Globais</p>`
+                            ) : ''}
                             <div class="flex gap-4">
                                 <button onclick="baixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                                 ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}

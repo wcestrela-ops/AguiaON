@@ -6461,6 +6461,10 @@ async function ljOpenLeadsModal() {
                 ` : ''}
                 ${l.aceite_em ? `
                     <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
+                    ${l.email ? (l.email_termo_enviado
+                        ? `<p class="text-emerald-400 text-[10px]"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia do termo enviada por e-mail</p>`
+                        : `<p class="text-amber-400 text-[10px]"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia do termo NÃO enviada — confira o SMTP em Configurações Globais</p>`
+                    ) : ''}
                     <div class="flex gap-4">
                         <button onclick="ljBaixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                         ${l.status === 'aceito' ? `<button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
@@ -7592,6 +7596,7 @@ async function sincronizarAsaas() {
 
 // ── Detalhe do cliente: histórico Asaas + cobrança avulsa ──
 let _clienteDetalheId = null;
+let _termoClienteAtual = null; // Fix de produção 21 — termo de adesão do cliente aberto no momento
 
 async function verClienteDetalhe(id) {
   _clienteDetalheId = id;
@@ -7615,7 +7620,30 @@ async function renderClienteDetalhe() {
     const cobrancas = historico.filter(h => h.tipo === 'payment');
     const semDono = todosVeiculos.filter(v => !v.cliente_id);
 
+    // Fix de produção 21 — termo de adesão do cliente (só existe se ele veio
+    // de um lead de landing; cliente cadastrado manualmente não tem). 404 é
+    // esperado nesse caso, não um erro de verdade — por isso o try/catch
+    // separado, sem deixar o resto do detalhe do cliente quebrar por causa
+    // disso.
+    let termo = null;
+    try { termo = await api(`/agenda/clientes/${_clienteDetalheId}/termo-adesao`); } catch (e) { termo = null; }
+    _termoClienteAtual = termo;
+
     box.innerHTML = `
+      ${termo ? `
+      <div class="mb-4 pb-4 border-b border-slate-800">
+        <p class="text-xs font-bold text-slate-300 mb-2"><i class="fa fa-file-signature mr-1 text-indigo-400"></i>Termo de Adesão</p>
+        <p class="text-slate-500 text-[11px] mb-2">Aceito por ${esc(termo.aceite_nome)} em ${termo.aceite_em ? new Date(termo.aceite_em).toLocaleString('pt-BR') : '—'}</p>
+        ${c.email ? (termo.email_termo_enviado
+            ? `<p class="text-emerald-400 text-[10px] mb-2"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia enviada por e-mail</p>`
+            : `<p class="text-amber-400 text-[10px] mb-2"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia ainda não enviada por e-mail</p>`
+          ) : `<p class="text-slate-500 text-[10px] mb-2"><i class="fa fa-circle-info mr-1"></i>Cliente sem e-mail cadastrado — não dá pra mandar cópia</p>`}
+        <div class="flex gap-2">
+          <button onclick="baixarContratoCliente()" class="btn-outline text-xs flex-1"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
+          <button onclick="reenviarContratoClienteEmail()" class="btn-outline text-xs flex-1" ${!c.email ? 'disabled title="Cliente sem e-mail cadastrado"' : ''}><i class="fa fa-paper-plane mr-1"></i>Reenviar por E-mail</button>
+        </div>
+      </div>
+      ` : ''}
       <div class="mb-4 pb-4 border-b border-slate-800">
         <div class="flex items-center gap-2 mb-2">
           <p class="text-xs font-bold text-slate-300"><i class="fa fa-repeat mr-1 text-indigo-400"></i>Recorrência do cliente</p>
@@ -7690,6 +7718,53 @@ async function renderClienteDetalhe() {
   } catch (e) {
     box.innerHTML = `<p class="text-sm text-red-400">${e.message}</p>`;
   }
+}
+
+// Baixar o Termo de Adesão do cliente já convertido (Fix de produção 21) —
+// mesma técnica de print-to-PDF do lj/admin (sem lib de PDF nova): monta a
+// página a partir de `_termoClienteAtual` (carregado junto no
+// renderClienteDetalhe) e abre numa aba nova.
+function contratoHtmlDoCliente(t) {
+  const esc2 = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>Termo de Adesão — ${esc2(t.nome)}</title>
+    <style>
+      body { font-family: -apple-system, Arial, sans-serif; max-width: 720px; margin: 40px auto; color:#111; line-height:1.5; padding: 0 20px; }
+      h1 { font-size: 20px; margin-bottom: 4px; }
+      .meta { font-size: 12px; color:#555; margin-bottom: 24px; }
+      .conteudo { white-space: pre-wrap; font-size: 13px; border:1px solid #ccc; border-radius:8px; padding:20px; background:#fafafa; }
+      .aceite { margin-top:24px; font-size:12px; color:#333; border-top:1px solid #ccc; padding-top:12px; }
+      .no-print button { font-size:13px; padding:10px 18px; border-radius:8px; border:none; background:#4f46e5; color:#fff; cursor:pointer; margin-top:24px; }
+      @media print { .no-print { display:none; } }
+    </style></head><body>
+    <h1>Termo de Adesão</h1>
+    <div class="meta">Módulo: ${esc2(t.modulo_label)}${t.plano_nome ? ' — plano ' + esc2(t.plano_nome) : ''} · Cliente: ${esc2(t.nome)}${t.empresa ? ' — ' + esc2(t.empresa) : ''}</div>
+    <div class="conteudo">${esc2(t.contrato_texto || '(termo sem texto salvo)')}</div>
+    <div class="aceite">
+      <strong>Aceite eletrônico</strong><br>
+      Aceito por: ${esc2(t.aceite_nome)} — CPF: ${esc2(t.aceite_cpf)}<br>
+      Data/hora: ${t.aceite_em ? new Date(t.aceite_em).toLocaleString('pt-BR') : '—'}<br>
+      IP: ${esc2(t.aceite_ip)}<br>
+      Dispositivo: ${esc2(t.aceite_user_agent)}
+    </div>
+    <div class="no-print"><button onclick="window.print()">Imprimir / Salvar como PDF</button></div>
+    </body></html>`;
+}
+
+function baixarContratoCliente() {
+  if (!_termoClienteAtual) return alert('❌ Termo não carregado — feche e abra o cliente de novo.');
+  const w = window.open('', '_blank');
+  if (!w) return alert('❌ Seu navegador bloqueou a nova aba. Permita pop-ups pra esse site e tente de novo.');
+  w.document.write(contratoHtmlDoCliente(_termoClienteAtual));
+  w.document.close();
+}
+
+async function reenviarContratoClienteEmail() {
+  try {
+    const data = await api(`/agenda/clientes/${_clienteDetalheId}/termo-adesao/reenviar-email`, { method: 'POST' });
+    alert(data.email_enviado ? '✅ E-mail reenviado com sucesso!' : '❌ Não foi possível enviar — confira o SMTP em Configurações Globais.');
+    renderClienteDetalhe();
+  } catch (e) { alert('❌ ' + e.message); }
 }
 
 async function salvarRecorrenciaCliente() {
@@ -7798,7 +7873,7 @@ function renderCobrancas() {
       <td class="text-xs">${c.paid_at ? new Date(c.paid_at).toLocaleDateString('pt-BR') : '—'}</td>
       <td>${c.status === 'pending' && c.cliente_telefone ? (
         c.tipo === 'cliente'
-          ? `<button onclick="notificarCobrancaClienteWA('${c.cliente_id}','${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>`
+          ? `<button onclick="notificarCobrancaClienteListaWA('${c.cliente_id}','${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>`
           : `<button onclick="notificarCobrancaFrotaWA('${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>`
       ) : '—'}</td>
     </tr>`;
@@ -7821,9 +7896,12 @@ async function notificarCobrancaFrotaWA(id) {
 }
 
 // Cobrança de nível CLIENTE (recorrência ou avulsa) — Fix de produção 17,
-// mesma rota já usada dentro do detalhe do cliente, só chamada agora também
-// a partir da lista consolidada de Cobranças.
-async function notificarCobrancaClienteWA(clienteId, cacheId) {
+// mesma rota já usada dentro do detalhe do cliente (notificarCobrancaClienteWA,
+// que só recebe cacheId e usa _clienteDetalheId implícito). Nome diferente de
+// propósito — as duas funções tinham o mesmo nome antes, e uma sobrescrevia a
+// outra silenciosamente (function declaration duplicada no mesmo escopo),
+// quebrando o botão de WhatsApp dentro do detalhe do cliente.
+async function notificarCobrancaClienteListaWA(clienteId, cacheId) {
   try {
     await api(`/agenda/clientes/${clienteId}/cobrancas/${cacheId}/notificar-whatsapp`, { method: 'POST' });
     alert('✅ Cobrança enviada via WhatsApp!');

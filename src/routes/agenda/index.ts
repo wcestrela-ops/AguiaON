@@ -36,6 +36,8 @@ import {
 } from '../../shared/asaasClient';
 import { sendWhatsAppMessage } from '../../shared/waSender';
 import { emitirNotaFiscal } from '../../shared/notaFiscalService';
+import { listBlueprints } from '../../verticals/blueprints';
+import { sendEmail, buildTermoAdesaoEmailHtml } from '../../shared/mailer';
 
 const router = Router();
 router.use(requireAuth);
@@ -1604,6 +1606,91 @@ router.put('/clientes/:id/recorrencia', async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
     res.json(r.rows[0]);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Termo de Adesão do cliente (Fix de produção 21) — pedido do Carlos: depois
+// que um lead da landing vira cliente (POST /admin|lojista/landing-leads/:id/
+// converter, em landings.ts), o Termo de Adesão que ele assinou só dava pra
+// ver/baixar de volta lá na tela de Leads. Como o lead "some" da lista de
+// leads depois de convertido (na prática ele agora é procurado em Clientes,
+// não mais em Leads), faz sentido também poder baixar e reenviar o termo
+// direto do cadastro do cliente — inclusive serve de forma de teste: se o
+// reenvio manual aqui funcionar, confirma que o SMTP e o texto do termo estão
+// OK, isolado do fluxo automático do aceite.
+//
+// O vínculo entre cliente e o termo que ele assinou é `landing_leads.
+// cliente_id` (preenchido no momento da conversão) — um cliente pode não ter
+// nenhum lead vinculado (se foi cadastrado manualmente, sem passar pela
+// landing), então essas rotas tratam esse caso como 404 "sem termo", não erro.
+// ─────────────────────────────────────────────────────────────
+
+async function buscarLeadDoCliente(clienteId: string) {
+  const r = await pool.query(
+    `SELECT * FROM landing_leads WHERE cliente_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    [clienteId]
+  );
+  return r.rows[0] || null;
+}
+
+// GET /agenda/clientes/:id/termo-adesao — dados pro botão "Baixar Contrato"
+// no cadastro do cliente (o front monta a página/print a partir disso, mesma
+// técnica já usada na tela de Leads).
+router.get('/clientes/:id/termo-adesao', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const cliente = await pool.query(`SELECT id, nome FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    if (!cliente.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    const lead = await buscarLeadDoCliente(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Esse cliente não veio de um lead da landing — não tem termo de adesão pra baixar.' });
+
+    const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
+    res.json({
+      nome: cliente.rows[0].nome,
+      empresa: lead.empresa,
+      plano_nome: lead.plano_nome,
+      modulo_label: bp?.label || lead.vertical_slug,
+      contrato_texto: lead.contrato_texto,
+      aceite_nome: lead.aceite_nome,
+      aceite_cpf: lead.aceite_cpf,
+      aceite_ip: lead.aceite_ip,
+      aceite_user_agent: lead.aceite_user_agent,
+      aceite_em: lead.aceite_em,
+      email_termo_enviado: lead.email_termo_enviado,
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /agenda/clientes/:id/termo-adesao/reenviar-email — botão "Reenviar por
+// E-mail" no cadastro do cliente. Usa o e-mail ATUAL do cadastro do cliente
+// (não o que estava no lead na hora — pode ter sido corrigido depois), mas o
+// texto do termo continua sendo o que foi de fato aceito.
+router.post('/clientes/:id/termo-adesao/reenviar-email', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const clienteRes = await pool.query(`SELECT * FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    if (!clienteRes.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const cliente = clienteRes.rows[0];
+    if (!cliente.email) return res.status(422).json({ error: 'Esse cliente não tem e-mail cadastrado.' });
+
+    const lead = await buscarLeadDoCliente(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Esse cliente não veio de um lead da landing — não tem termo de adesão pra reenviar.' });
+
+    const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
+    const moduloLabel = bp?.label || lead.vertical_slug;
+    const corpoTermo = lead.contrato_texto || `Você aceitou contratar ${moduloLabel}. Em breve entraremos em contato com os próximos passos.`;
+
+    const enviado = await sendEmail(
+      cliente.email,
+      `Termo de Adesão — ${moduloLabel}`,
+      buildTermoAdesaoEmailHtml(cliente.nome, moduloLabel, corpoTermo)
+    );
+    if (enviado) {
+      await pool.query(`UPDATE landing_leads SET email_termo_enviado=true WHERE id=$1`, [lead.id]);
+    }
+    res.json({ success: enviado, email_enviado: enviado });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

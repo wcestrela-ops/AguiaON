@@ -32,13 +32,13 @@
  * possível novo lojista daquele módulo — não é o CRM de uma loja específica.
  */
 import { Router, Request } from 'express';
-import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import pool from '../shared/db';
 import { requireAdmin, requireAuth, requireRole, TokenPayload } from '../shared/authMiddleware';
 import { listBlueprints } from '../verticals/blueprints';
 import { extractSubdomainSlug } from '../shared/tenantResolver';
 import { findOrCreateClienteUser, ensureTables as ensureAgendaTables } from './agenda/index';
+import { getSmtpSettings, sendEmail, buildTermoAdesaoEmailHtml } from '../shared/mailer';
 
 const router = Router();
 
@@ -158,6 +158,14 @@ const router = Router();
         ADD COLUMN IF NOT EXISTS contato_emergencia_nome      TEXT,
         ADD COLUMN IF NOT EXISTS contato_emergencia_telefone  TEXT
     `);
+
+    // Fix de produção 19 — antes o resultado de "o e-mail do termo saiu ou
+    // não" só existia na resposta HTTP daquele request (front) e num log de
+    // servidor que ninguém tem acesso fácil pra conferir depois. Persistir
+    // isso na própria linha do lead deixa auditável direto na lista de leads
+    // (admin.html e loja.html) — dá pra ver, lead por lead, se o e-mail saiu,
+    // sem precisar de log de servidor pra cada suspeita de falha.
+    await pool.query(`ALTER TABLE landing_leads ADD COLUMN IF NOT EXISTS email_termo_enviado BOOLEAN NOT NULL DEFAULT false`);
   } catch (e: any) {
     console.error('[landings migration]', e.message);
   }
@@ -171,46 +179,14 @@ function preencherContrato(template: string, dados: Record<string, string>): str
 }
 
 // Fix de produção 10 — cópia do Termo de Adesão por e-mail depois do aceite.
-// Mesmo padrão de envio de e-mail já usado em otp_service.ts/gymExpiryJob.ts
-// (lê SMTP de global_settings, nodemailer direto — sem serviço externo).
-// Best-effort: se não tiver SMTP configurado ou a mensagem falhar, não
-// derruba o aceite (o aceite já foi salvo antes de chamar isso).
+// Fix de produção 20: a leitura de SMTP + criação de transporter + template
+// viraram funções compartilhadas em shared/mailer.ts (reaproveitadas também
+// pelo reenvio manual a partir do cadastro do cliente, em agenda/index.ts) —
+// aqui só monta o assunto (que depende do pwa_name) e delega o resto.
 async function enviarCopiaTermoPorEmail(to: string, nome: string, moduloLabel: string, contratoTexto: string): Promise<boolean> {
-  try {
-    const settings = await pool.query(
-      `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
-    ).then(r => Object.fromEntries(r.rows.map((row: any) => [row.key, row.value])));
-
-    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) {
-      console.warn('[landings] envio de cópia do termo pulado — SMTP não configurado em Configurações Globais.');
-      return false;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port || '587'),
-      secure: false,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-    });
-
-    await transporter.sendMail({
-      from: settings.smtp_from || settings.smtp_user,
-      to,
-      subject: `Termo de Adesão — ${moduloLabel} (${settings.pwa_name || 'AguiaON'})`,
-      html: `
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
-          <h2 style="color:#6366f1;margin:0 0 8px">Termo de Adesão</h2>
-          <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${nome}</strong>! Aqui está a cópia do termo de adesão que você aceitou pra ${moduloLabel}.</p>
-          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:20px;white-space:pre-wrap;font-size:12px;color:#cbd5e1">${contratoTexto}</div>
-          <p style="margin:24px 0 0;font-size:11px;color:#475569">Guarde este e-mail — ele é o comprovante do seu aceite eletrônico.</p>
-        </div>
-      `,
-    });
-    return true;
-  } catch (err: any) {
-    console.error('[landings] falha ao enviar cópia do termo por email:', err.message);
-    return false;
-  }
+  const settings = await getSmtpSettings();
+  const subject = `Termo de Adesão — ${moduloLabel} (${settings.pwa_name || 'AguiaON'})`;
+  return sendEmail(to, subject, buildTermoAdesaoEmailHtml(nome, moduloLabel, contratoTexto));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -582,6 +558,11 @@ router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
     } else {
       console.warn(`[landings] lead ${lead.id} aceito sem e-mail cadastrado — cópia do termo não enviada.`);
     }
+
+    // Fix de produção 19 — persiste o resultado do envio na própria linha,
+    // pra dar pra ver na lista de leads (sem precisar de log de servidor)
+    // se aquele e-mail específico saiu ou não.
+    await pool.query(`UPDATE landing_leads SET email_termo_enviado=$1 WHERE id=$2`, [emailEnviado, req.params.id]);
 
     const landingRes = await pool.query(`SELECT contato_whatsapp FROM vertical_landings WHERE vertical_slug=$1`, [lead.vertical_slug]);
 
