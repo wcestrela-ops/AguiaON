@@ -780,3 +780,14 @@ Passos pro Carlos, depois desse commit:
 3. Conferir no navegador (com cache limpo/aba anônima, já que favicon/manifest costumam ficar em cache agressivo) se o ícone novo aparece na aba e ao "instalar" o PWA.
 
 Verificação: `icon.svg` reconferido como XML válido (`xml.etree.ElementTree`, sem erros — a primeira tentativa quebrou por um comentário com `--` duplo dentro, inválido em XML, corrigido); os 3 PNGs reabertos com Pillow pra confirmar que não corromperam (192×192, 512×512 e 64×64, todos RGBA). Não testado contra o ambiente real — depende do commit+push+migração acima.
+
+## Fix de produção 31 — Wordmark "AG"/"ON" padronizado pra "Águia"/"ON" + limite de texto do gerador
+
+Pedido do Carlos, direto de prints do painel: (1) no gerador de ícone (Configurações → Ícone do App PWA → aba "Gerador"), o campo "Texto 1 (claro)" tem limite de 4 caracteres — ele tentou digitar "Águia" (5 letras) e ficou cortado em "Águi", empurrando o "a" pro campo 2 (virou "aON" em vez de "ON"); (2) o wordmark "AG"+"ON" (duas cores, branco+índigo) que aparece no cabeçalho de várias páginas públicas (Marketplace, Login, Portal, etc.) deveria virar "ÁguiaON", padronizando a marca em toda a plataforma.
+
+Fix:
+- `admin.html` — `maxlength` do campo `ico-text1` (Texto 1) alterado de `4` pra `5`, o suficiente pra "Águia" caber inteiro sem cortar. Não mexi no `ico-text2` (continua 4) nem na lógica de desenho do canvas — só liberei espaço pro nome certo caber no campo.
+- Wordmark "AG"+`<span>`ON`</span>` trocado por "Águia"+`<span>`ON`</span>` (mesma cor/estilo de cada parte, só troca o texto) em todos os lugares onde aparecia hardcoded: `marketplace.html`, `login.html`, `portal.html`, `landing.html`, `parceiro.html`, `admin.html` (logo da sidebar), `index.html` (2 ocorrências) e `index_old.html` (2 ocorrências, arquivo antigo mas deixei consistente também).
+- `manifest.json` — `short_name` trocado de `"AGON"` pra `"ÁguiaON"` (nome curto usado embaixo do ícone quando o PWA é instalado).
+
+Verificação: `manifest.json` reconferido como JSON válido; todos os 8 arquivos HTML reconferidos (blocos `<script>` parseiam OK, nenhuma quebra introduzida); busca por `AG<span...>ON</span>` no diretório inteiro não retorna mais nenhuma ocorrência — a troca foi completa. Não testado visualmente contra o ambiente real — depende do próximo deploy (commit+push, já que só editei os arquivos locais).
