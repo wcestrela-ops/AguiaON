@@ -1097,20 +1097,65 @@ router.post('/frota/:id/cobrar', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /agenda/frota-cobrancas — histórico de cobranças da empresa
+// GET /agenda/frota-cobrancas — histórico de cobranças da empresa.
+//
+// Fix de produção 17: até aqui essa lista só trazia cobrança por VEÍCULO
+// (agenda_frota_charges — geradas por gerarCobrancasDoDia). Cobrança no nível
+// do CLIENTE (agenda_cliente_asaas_cache, tipo='payment') — tanto a
+// recorrência mensal configurada em Clientes → "Recorrência" quanto a
+// cobrança avulsa do botão "Cobrar" — nunca aparecia aqui, só dentro do
+// histórico de cada cliente (Clientes → "Ver cobranças"). O Carlos reportou
+// exatamente isso: criou uma recorrência, ela "sumia" da seção Cobranças.
+// Agora a rota junta as duas fontes, normalizando pro mesmo formato que o
+// front já espera (status em pending/paid/failed — a tabela de cliente guarda
+// o status cru do Asaas, tipo RECEIVED/OVERDUE/PENDING etc., que precisa virar
+// esse vocabulário).
 router.get('/frota-cobrancas', async (req, res) => {
   try {
     const eid = estabId(req);
-    const result = await pool.query(
-      `SELECT c.*, f.placa, f.cliente_nome, f.cliente_telefone
+
+    const frotaRes = await pool.query(
+      `SELECT c.id, c.competencia, c.valor, c.status, c.paid_at, c.created_at,
+              f.placa, f.cliente_nome, f.cliente_telefone
        FROM agenda_frota_charges c
        JOIN agenda_frota f ON f.id = c.agenda_frota_id
-       WHERE c.establishment_id=$1
-       ORDER BY c.created_at DESC
-       LIMIT 200`,
+       WHERE c.establishment_id=$1`,
       [eid]
     );
-    res.json(result.rows);
+
+    const clienteRes = await pool.query(
+      `SELECT ac.id, ac.cliente_id, ac.competencia, ac.valor, ac.status, ac.vencimento, ac.baixado_em, ac.synced_at,
+              cli.nome AS cliente_nome, cli.telefone AS cliente_telefone
+       FROM agenda_cliente_asaas_cache ac
+       JOIN agenda_clientes cli ON cli.id = ac.cliente_id
+       WHERE ac.establishment_id=$1 AND ac.tipo='payment'`,
+      [eid]
+    );
+
+    const PAGO = new Set(['RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH']);
+    const FALHOU = new Set(['OVERDUE', 'CANCELLED', 'REFUNDED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE', 'REFUND_REQUESTED']);
+    const normalizarStatus = (s: string) => (PAGO.has(s) ? 'paid' : FALHOU.has(s) ? 'failed' : 'pending');
+
+    const frota = frotaRes.rows.map(c => ({
+      id: c.id, tipo: 'frota', competencia: c.competencia, placa: c.placa,
+      cliente_nome: c.cliente_nome, cliente_telefone: c.cliente_telefone,
+      valor: c.valor, status: c.status, paid_at: c.paid_at,
+      _sort: c.created_at,
+    }));
+
+    const clientes = clienteRes.rows.map(c => ({
+      id: c.id, tipo: 'cliente', cliente_id: c.cliente_id, competencia: c.competencia, placa: null,
+      cliente_nome: c.cliente_nome, cliente_telefone: c.cliente_telefone,
+      valor: c.valor, status: normalizarStatus(c.status), paid_at: c.baixado_em || null,
+      _sort: c.baixado_em || c.synced_at,
+    }));
+
+    const rows = [...frota, ...clientes]
+      .sort((a, b) => new Date(b._sort).getTime() - new Date(a._sort).getTime())
+      .slice(0, 200)
+      .map(({ _sort, ...rest }) => rest);
+
+    res.json(rows);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

@@ -181,7 +181,10 @@ async function enviarCopiaTermoPorEmail(to: string, nome: string, moduloLabel: s
       `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
     ).then(r => Object.fromEntries(r.rows.map((row: any) => [row.key, row.value])));
 
-    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) return false;
+    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) {
+      console.warn('[landings] envio de cópia do termo pulado — SMTP não configurado em Configurações Globais.');
+      return false;
+    }
 
     const transporter = nodemailer.createTransport({
       host: settings.smtp_host,
@@ -563,9 +566,21 @@ router.post('/public/landing/leads/:id/aceitar', async (req, res) => {
     const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
     const moduloLabel = bp?.label || lead.vertical_slug;
 
+    // Fix de produção 17: antes só mandava o e-mail se já existisse um
+    // contrato_texto preenchido (dependia do campo "Termo de Adesão" da
+    // landing estar preenchido no momento em que o lead foi criado) — se
+    // esse campo estivesse vazio (ex: editor salvo sem template ainda), o
+    // e-mail simplesmente não saía, sem nenhum log explicando o motivo. Isso
+    // provavelmente é a causa raiz de "SMTP funciona no teste, mas o e-mail
+    // do lead não sai": o SMTP está OK, só faltava contrato_texto. Agora
+    // manda sempre que houver e-mail (com um texto de fallback se não houver
+    // termo), e loga explicitamente quando pula por falta de e-mail.
     let emailEnviado = false;
-    if (lead.email && lead.contrato_texto) {
-      emailEnviado = await enviarCopiaTermoPorEmail(lead.email, lead.nome, moduloLabel, lead.contrato_texto);
+    if (lead.email) {
+      const corpoTermo = lead.contrato_texto || `Você aceitou contratar ${moduloLabel}. Em breve entraremos em contato com os próximos passos.`;
+      emailEnviado = await enviarCopiaTermoPorEmail(lead.email, lead.nome, moduloLabel, corpoTermo);
+    } else {
+      console.warn(`[landings] lead ${lead.id} aceito sem e-mail cadastrado — cópia do termo não enviada.`);
     }
 
     const landingRes = await pool.query(`SELECT contato_whatsapp FROM vertical_landings WHERE vertical_slug=$1`, [lead.vertical_slug]);

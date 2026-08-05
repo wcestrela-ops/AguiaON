@@ -6421,12 +6421,14 @@ function ljPreviewLanding() {
 // Leads da landing pelo painel da loja (Fix de produção 16) — mesma listagem
 // que o SuperAdmin já tinha, só que sempre restrita ao próprio módulo (o
 // backend confere isso, aqui é só consumo).
+let ljLeadsCache = [];
 async function ljOpenLeadsModal() {
     document.getElementById('lj-leads-modal').classList.remove('hidden');
     const list = document.getElementById('lj-leads-list');
     list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
     try {
         const leads = await api('/lojista/landing-leads');
+        ljLeadsCache = leads;
         if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
 
         const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
@@ -6457,9 +6459,12 @@ async function ljOpenLeadsModal() {
                 ${(l.contato_emergencia_nome || l.contato_emergencia_telefone) ? `
                     <p class="text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
                 ` : ''}
-                ${l.status === 'aceito' ? `
+                ${l.aceite_em ? `
                     <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
-                    <button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>
+                    <div class="flex gap-4">
+                        <button onclick="ljBaixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
+                        ${l.status === 'aceito' ? `<button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
+                    </div>
                 ` : ''}
             </div>`).join('');
     } catch (e) {
@@ -6477,6 +6482,46 @@ async function ljConverterLead(id) {
         }
         ljOpenLeadsModal();
     } catch (e) { alert('❌ ' + e.message); }
+}
+
+// Baixar o Termo de Adesão aceito (Fix de produção 18) — mesma técnica do
+// admin.html: sem lib de PDF no servidor, monta a página formatada aqui a
+// partir dos dados já carregados (ljLeadsCache) e deixa o navegador
+// imprimir/"Salvar como PDF".
+function ljContratoHtmlDoLead(l) {
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+        <title>Termo de Adesão — ${esc(l.nome)}</title>
+        <style>
+            body { font-family: -apple-system, Arial, sans-serif; max-width: 720px; margin: 40px auto; color:#111; line-height:1.5; padding: 0 20px; }
+            h1 { font-size: 20px; margin-bottom: 4px; }
+            .meta { font-size: 12px; color:#555; margin-bottom: 24px; }
+            .conteudo { white-space: pre-wrap; font-size: 13px; border:1px solid #ccc; border-radius:8px; padding:20px; background:#fafafa; }
+            .aceite { margin-top:24px; font-size:12px; color:#333; border-top:1px solid #ccc; padding-top:12px; }
+            .no-print button { font-size:13px; padding:10px 18px; border-radius:8px; border:none; background:#4f46e5; color:#fff; cursor:pointer; margin-top:24px; }
+            @media print { .no-print { display:none; } }
+        </style></head><body>
+        <h1>Termo de Adesão</h1>
+        <div class="meta">Cliente: ${esc(l.nome)}${l.empresa ? ' — ' + esc(l.empresa) : ''}${l.plano_nome ? ' · plano ' + esc(l.plano_nome) : ''}</div>
+        <div class="conteudo">${esc(l.contrato_texto || '(termo sem texto salvo)')}</div>
+        <div class="aceite">
+            <strong>Aceite eletrônico</strong><br>
+            Aceito por: ${esc(l.aceite_nome)} — CPF: ${esc(l.aceite_cpf)}<br>
+            Data/hora: ${l.aceite_em ? new Date(l.aceite_em).toLocaleString('pt-BR') : '—'}<br>
+            IP: ${esc(l.aceite_ip)}<br>
+            Dispositivo: ${esc(l.aceite_user_agent)}
+        </div>
+        <div class="no-print"><button onclick="window.print()">Imprimir / Salvar como PDF</button></div>
+        </body></html>`;
+}
+
+function ljBaixarContratoLead(id) {
+    const lead = ljLeadsCache.find(l => l.id === id);
+    if (!lead) return alert('❌ Lead não encontrado — recarregue a lista de leads.');
+    const w = window.open('', '_blank');
+    if (!w) return alert('❌ Seu navegador bloqueou a nova aba. Permita pop-ups pra esse site e tente de novo.');
+    w.document.write(ljContratoHtmlDoLead(lead));
+    w.document.close();
 }
 
 // ════════ CATÁLOGO UNIVERSAL ════════
@@ -7751,7 +7796,11 @@ function renderCobrancas() {
       <td class="font-medium">${fmtMoney(c.valor)}</td>
       <td><span class="badge badge-${st.badge}">${st.label}</span></td>
       <td class="text-xs">${c.paid_at ? new Date(c.paid_at).toLocaleDateString('pt-BR') : '—'}</td>
-      <td>${c.status === 'pending' && c.cliente_telefone ? `<button onclick="notificarCobrancaFrotaWA('${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>` : '—'}</td>
+      <td>${c.status === 'pending' && c.cliente_telefone ? (
+        c.tipo === 'cliente'
+          ? `<button onclick="notificarCobrancaClienteWA('${c.cliente_id}','${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>`
+          : `<button onclick="notificarCobrancaFrotaWA('${c.id}')" title="Cobrar via WhatsApp" class="text-green-400 hover:text-green-300"><i class="fab fa-whatsapp"></i></button>`
+      ) : '—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="text-center text-slate-500 py-6">Nenhuma cobrança encontrada</td></tr>';
 
@@ -7767,6 +7816,16 @@ function renderCobrancas() {
 async function notificarCobrancaFrotaWA(id) {
   try {
     await api(`/agenda/frota-cobrancas/${id}/notificar-whatsapp`, { method: 'POST' });
+    alert('✅ Cobrança enviada via WhatsApp!');
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+// Cobrança de nível CLIENTE (recorrência ou avulsa) — Fix de produção 17,
+// mesma rota já usada dentro do detalhe do cliente, só chamada agora também
+// a partir da lista consolidada de Cobranças.
+async function notificarCobrancaClienteWA(clienteId, cacheId) {
+  try {
+    await api(`/agenda/clientes/${clienteId}/cobrancas/${cacheId}/notificar-whatsapp`, { method: 'POST' });
     alert('✅ Cobrança enviada via WhatsApp!');
   } catch (e) { alert('❌ ' + e.message); }
 }

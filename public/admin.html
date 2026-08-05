@@ -2961,6 +2961,7 @@
         }
 
         // ════ LEADS DE LANDING ════
+        let leadsCache = [];
         async function openLeadsModal() {
             document.getElementById('leads-modal').classList.remove('hidden');
             const list = document.getElementById('leads-list');
@@ -2968,6 +2969,7 @@
             try {
                 const res = await fetch('/admin/landing-leads', { headers: adminHeaders() });
                 const leads = await res.json();
+                leadsCache = leads;
                 if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
 
                 const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
@@ -2998,9 +3000,12 @@
                         ${(l.contato_emergencia_nome || l.contato_emergencia_telefone) ? `
                             <p class="text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
                         ` : ''}
-                        ${l.status === 'aceito' ? `
+                        ${l.aceite_em ? `
                             <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
-                            <button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>
+                            <div class="flex gap-4">
+                                <button onclick="baixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
+                                ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
+                            </div>
                         ` : ''}
                     </div>`).join('');
             } catch (e) {
@@ -3020,6 +3025,50 @@
                 }
                 openLeadsModal();
             } catch (e) { alert('❌ ' + e.message); }
+        }
+
+        // Baixar o Termo de Adesão aceito (Fix de produção 18). Não existe
+        // lib de PDF no backend (nem cabe adicionar uma dependência nova só
+        // pra isso), então em vez de gerar PDF no servidor, montamos a página
+        // formatada aqui mesmo — com os dados do lead que já estão em
+        // memória (leadsCache, evita precisar de outra rota autenticada) — e
+        // deixamos o navegador imprimir/"Salvar como PDF" (mesma técnica que
+        // qualquer app usa quando não tem gerador de PDF: print-to-PDF nativo
+        // do navegador, sem depender de biblioteca nenhuma).
+        function contratoHtmlDoLead(l) {
+            const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+                <title>Termo de Adesão — ${esc(l.nome)}</title>
+                <style>
+                    body { font-family: -apple-system, Arial, sans-serif; max-width: 720px; margin: 40px auto; color:#111; line-height:1.5; padding: 0 20px; }
+                    h1 { font-size: 20px; margin-bottom: 4px; }
+                    .meta { font-size: 12px; color:#555; margin-bottom: 24px; }
+                    .conteudo { white-space: pre-wrap; font-size: 13px; border:1px solid #ccc; border-radius:8px; padding:20px; background:#fafafa; }
+                    .aceite { margin-top:24px; font-size:12px; color:#333; border-top:1px solid #ccc; padding-top:12px; }
+                    .no-print button { font-size:13px; padding:10px 18px; border-radius:8px; border:none; background:#4f46e5; color:#fff; cursor:pointer; margin-top:24px; }
+                    @media print { .no-print { display:none; } }
+                </style></head><body>
+                <h1>Termo de Adesão</h1>
+                <div class="meta">Módulo: ${esc(l.vertical_slug)}${l.plano_nome ? ' — plano ' + esc(l.plano_nome) : ''} · Cliente: ${esc(l.nome)}${l.empresa ? ' — ' + esc(l.empresa) : ''}</div>
+                <div class="conteudo">${esc(l.contrato_texto || '(termo sem texto salvo)')}</div>
+                <div class="aceite">
+                    <strong>Aceite eletrônico</strong><br>
+                    Aceito por: ${esc(l.aceite_nome)} — CPF: ${esc(l.aceite_cpf)}<br>
+                    Data/hora: ${l.aceite_em ? new Date(l.aceite_em).toLocaleString('pt-BR') : '—'}<br>
+                    IP: ${esc(l.aceite_ip)}<br>
+                    Dispositivo: ${esc(l.aceite_user_agent)}
+                </div>
+                <div class="no-print"><button onclick="window.print()">Imprimir / Salvar como PDF</button></div>
+                </body></html>`;
+        }
+
+        function baixarContratoLead(id) {
+            const lead = leadsCache.find(l => l.id === id);
+            if (!lead) return alert('❌ Lead não encontrado — recarregue a lista de leads.');
+            const w = window.open('', '_blank');
+            if (!w) return alert('❌ Seu navegador bloqueou a nova aba. Permita pop-ups pra esse site e tente de novo.');
+            w.document.write(contratoHtmlDoLead(lead));
+            w.document.close();
         }
 
         async function loadLandings() {
