@@ -3006,8 +3006,9 @@
                                 ? `<p class="text-emerald-400 text-[10px]"><i class="fa fa-envelope-circle-check mr-1"></i>Cópia do termo enviada por e-mail</p>`
                                 : `<p class="text-amber-400 text-[10px]"><i class="fa fa-triangle-exclamation mr-1"></i>Cópia do termo NÃO enviada — confira o SMTP em Configurações Globais</p>`
                             ) : ''}
-                            <div class="flex gap-4">
+                            <div class="flex gap-4 flex-wrap">
                                 <button onclick="baixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
+                                ${l.email ? `<button onclick="reenviarEmailLead('${l.id}')" class="text-amber-400 text-xs font-bold"><i class="fa fa-envelope mr-1"></i>Enviar por Email</button>` : ''}
                                 ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
                             </div>
                         ` : `
@@ -3031,6 +3032,18 @@
                         ? '✅ Cliente criado na loja de gestão veicular. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
                         : '✅ Cliente criado na loja de gestão veicular, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
                 }
+                openLeadsModal();
+            } catch (e) { alert('❌ ' + e.message); }
+        }
+
+        // Fix de produção 33 — botão pra testar/reenviar o e-mail do termo
+        // direto do lead, útil pra depurar SMTP sem precisar de aceite novo.
+        async function reenviarEmailLead(id) {
+            try {
+                const res = await fetch(`/admin/landing-leads/${id}/reenviar-email`, { method: 'POST', headers: adminHeaders() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao enviar.');
+                alert(data.email_enviado ? '✅ E-mail enviado com sucesso!' : '❌ Não foi possível enviar — confira o SMTP em Configurações Globais.');
                 openLeadsModal();
             } catch (e) { alert('❌ ' + e.message); }
         }

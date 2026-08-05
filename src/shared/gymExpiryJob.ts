@@ -13,7 +13,7 @@
 import pool from './db';
 import { sendWhatsAppMessage } from './waSender';
 import { generateGymPix } from './pixService';
-import nodemailer from 'nodemailer';
+import { sendEmail } from './mailer';
 
 const CYCLE_LABEL: Record<string, string> = {
   weekly: 'semanal', monthly: 'mensal', bimonthly: 'bimestral',
@@ -47,51 +47,40 @@ async function sendWaQueue(items: WaQueueItem[]): Promise<void> {
 }
 
 // ── Email de cobrança ─────────────────────────────────────────
+// Fix de produção 33 — este arquivo tinha SUA PRÓPRIA cópia da lógica de
+// SMTP (igual o otp_service.ts tinha antes do Fix 27), com o mesmo bug:
+// lia `smtp_pass` direto do banco sem descriptografar (admin.ts criptografa
+// qualquer chave com "pass"/"key"/"secret"/"token" no nome ao salvar) — a
+// autenticação SMTP usava o texto criptografado como senha e falhava, ou
+// ficava vazio e pulava o envio, silenciosamente. Corrigido reaproveitando
+// `sendEmail`/`getSmtpSettings` de `mailer.ts` (já corrigido), em vez de
+// manter uma terceira cópia divergente da mesma lógica.
 async function sendBillingEmail(
   to: string, clientName: string, estName: string,
   planName: string, planValue: number, expiryFmt: string,
   pixCode: string | null
 ): Promise<void> {
-  try {
-    const settings = await pool.query(
-      `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
-    ).then(r => Object.fromEntries(r.rows.map((row: any) => [row.key, row.value])));
+  const pixBlock = pixCode
+    ? `<div style="background:#0f172a;border:1px solid #f97316;border-radius:12px;padding:20px;margin:16px 0">
+         <p style="margin:0 0 8px;font-size:12px;color:#94a3b8">PIX Copia e Cola:</p>
+         <p style="margin:0;font-size:11px;color:#fff;word-break:break-all;font-family:monospace">${pixCode}</p>
+       </div>
+       <p style="font-size:13px;color:#94a3b8">Após o pagamento, sua assinatura será renovada automaticamente.</p>`
+    : `<p style="font-size:13px;color:#94a3b8">Entre em contato com ${estName} para renovar.</p>`;
 
-    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) return;
-
-    const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port || '587'),
-      secure: false,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-    });
-
-    const pixBlock = pixCode
-      ? `<div style="background:#0f172a;border:1px solid #f97316;border-radius:12px;padding:20px;margin:16px 0">
-           <p style="margin:0 0 8px;font-size:12px;color:#94a3b8">PIX Copia e Cola:</p>
-           <p style="margin:0;font-size:11px;color:#fff;word-break:break-all;font-family:monospace">${pixCode}</p>
-         </div>
-         <p style="font-size:13px;color:#94a3b8">Após o pagamento, sua assinatura será renovada automaticamente.</p>`
-      : `<p style="font-size:13px;color:#94a3b8">Entre em contato com ${estName} para renovar.</p>`;
-
-    await transporter.sendMail({
-      from: settings.smtp_from || settings.smtp_user,
-      to,
-      subject: `⚠️ Seu plano ${planName} venceu hoje — ${estName}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
-          <h2 style="color:#f97316;margin:0 0 8px">Plano vencido</h2>
-          <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${clientName}</strong>!</p>
-          <p style="margin:0 0 16px">Seu plano <strong style="color:#fff">${planName}</strong> na <strong style="color:#fff">${estName}</strong> venceu em <strong>${expiryFmt}</strong>.</p>
-          <p style="font-size:18px;font-weight:700;color:#fff;margin:0 0 16px">Valor: R$ ${planValue.toFixed(2).replace('.', ',')}</p>
-          ${pixBlock}
-          <p style="margin:24px 0 0;font-size:11px;color:#475569">Você recebeu este email pois está cadastrado na plataforma Águia-ON.</p>
-        </div>
-      `,
-    });
-  } catch (err: any) {
-    console.error('[gymExpiry] email billing error:', err.message);
-  }
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
+      <h2 style="color:#f97316;margin:0 0 8px">Plano vencido</h2>
+      <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${clientName}</strong>!</p>
+      <p style="margin:0 0 16px">Seu plano <strong style="color:#fff">${planName}</strong> na <strong style="color:#fff">${estName}</strong> venceu em <strong>${expiryFmt}</strong>.</p>
+      <p style="font-size:18px;font-weight:700;color:#fff;margin:0 0 16px">Valor: R$ ${planValue.toFixed(2).replace('.', ',')}</p>
+      ${pixBlock}
+      <p style="margin:24px 0 0;font-size:11px;color:#475569">Você recebeu este email pois está cadastrado na plataforma Águia-ON.</p>
+    </div>
+  `;
+  await sendEmail(to, `⚠️ Seu plano ${planName} venceu hoje — ${estName}`, html).catch((err: any) =>
+    console.error('[gymExpiry] email billing error:', err.message)
+  );
 }
 
 // ── Email de aviso antecipado ─────────────────────────────────
@@ -99,37 +88,18 @@ async function sendExpirySoonEmail(
   to: string, clientName: string, estName: string,
   planName: string, cycleLabel: string, expiryFmt: string
 ): Promise<void> {
-  try {
-    const settings = await pool.query(
-      `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
-    ).then(r => Object.fromEntries(r.rows.map((row: any) => [row.key, row.value])));
-
-    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) return;
-
-    const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port || '587'),
-      secure: false,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-    });
-
-    await transporter.sendMail({
-      from: settings.smtp_from || settings.smtp_user,
-      to,
-      subject: `⏰ Seu plano ${planName} vence em 3 dias — ${estName}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
-          <h2 style="color:#f59e0b;margin:0 0 8px">Lembrete de vencimento</h2>
-          <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${clientName}</strong>!</p>
-          <p style="margin:0 0 16px">Seu plano <strong style="color:#fff">${planName}</strong> (${cycleLabel}) na <strong style="color:#fff">${estName}</strong> vence em <strong>${expiryFmt}</strong>.</p>
-          <p style="font-size:13px;color:#94a3b8">Renove com antecedência para não perder o acesso!</p>
-          <p style="margin:24px 0 0;font-size:11px;color:#475569">Você recebeu este email pois está cadastrado na plataforma Águia-ON.</p>
-        </div>
-      `,
-    });
-  } catch (err: any) {
-    console.error('[gymExpiry] email expiry_soon error:', err.message);
-  }
+  const html = `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
+      <h2 style="color:#f59e0b;margin:0 0 8px">Lembrete de vencimento</h2>
+      <p style="margin:0 0 20px;color:#94a3b8">Olá, <strong style="color:#fff">${clientName}</strong>!</p>
+      <p style="margin:0 0 16px">Seu plano <strong style="color:#fff">${planName}</strong> (${cycleLabel}) na <strong style="color:#fff">${estName}</strong> vence em <strong>${expiryFmt}</strong>.</p>
+      <p style="font-size:13px;color:#94a3b8">Renove com antecedência para não perder o acesso!</p>
+      <p style="margin:24px 0 0;font-size:11px;color:#475569">Você recebeu este email pois está cadastrado na plataforma Águia-ON.</p>
+    </div>
+  `;
+  await sendEmail(to, `⏰ Seu plano ${planName} vence em 3 dias — ${estName}`, html).catch((err: any) =>
+    console.error('[gymExpiry] email expiry_soon error:', err.message)
+  );
 }
 
 export function startGymExpiryJob(): void {

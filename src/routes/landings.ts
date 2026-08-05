@@ -780,6 +780,31 @@ router.delete('/admin/landing-leads/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// POST /admin/landing-leads/:id/reenviar-email — Fix de produção 33. O
+// Carlos pediu um botão de "Enviar por Email" junto do "Baixar Contrato" do
+// lead, pra dar pra testar/reenviar sem precisar aceitar um termo novo —
+// útil justamente pra depurar problema de SMTP (que era o caso: `smtp_pass`
+// ficava criptografado sem descriptografar em `getSmtpSettings`, corrigido
+// em `mailer.ts`). Reaproveita a mesma função usada no aceite automático.
+router.post('/admin/landing-leads/:id/reenviar-email', requireAdmin, async (req, res) => {
+  try {
+    const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    const lead = leadRes.rows[0];
+    if (!lead.email) return res.status(400).json({ error: 'Esse lead não tem e-mail cadastrado.' });
+
+    const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
+    const moduloLabel = bp?.label || lead.vertical_slug;
+    const corpoTermo = lead.contrato_texto || `Você aceitou contratar ${moduloLabel}. Em breve entraremos em contato com os próximos passos.`;
+    const emailEnviado = await enviarCopiaTermoPorEmail(lead.email, lead.nome, moduloLabel, corpoTermo);
+
+    await pool.query(`UPDATE landing_leads SET email_termo_enviado=$1 WHERE id=$2`, [emailEnviado, req.params.id]);
+    res.json({ success: true, email_enviado: emailEnviado });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────
 // Leads pelo painel da própria loja — Fix de produção 16. O Carlos apontou
 // que os leads da landing do Rastreamento só apareciam no painel do
@@ -854,6 +879,31 @@ router.delete('/lojista/landing-leads/:id', requireAuth, requireRole('LOJISTA', 
     }
     await pool.query(`DELETE FROM landing_leads WHERE id=$1`, [req.params.id]);
     res.json({ success: true });
+  } catch (err: any) {
+    handleUpsertError(err, res);
+  }
+});
+
+// POST /lojista/landing-leads/:id/reenviar-email — mesma coisa do lado
+// SuperAdmin (Fix de produção 33), com a checagem de sempre de vertical.
+router.post('/lojista/landing-leads/:id/reenviar-email', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    const lead = leadRes.rows[0];
+    if (lead.vertical_slug !== verticalSlug) {
+      return res.status(403).json({ error: 'Esse lead não é do seu módulo.' });
+    }
+    if (!lead.email) return res.status(400).json({ error: 'Esse lead não tem e-mail cadastrado.' });
+
+    const bp = listBlueprints().find((b: any) => b.slug === lead.vertical_slug);
+    const moduloLabel = bp?.label || lead.vertical_slug;
+    const corpoTermo = lead.contrato_texto || `Você aceitou contratar ${moduloLabel}. Em breve entraremos em contato com os próximos passos.`;
+    const emailEnviado = await enviarCopiaTermoPorEmail(lead.email, lead.nome, moduloLabel, corpoTermo);
+
+    await pool.query(`UPDATE landing_leads SET email_termo_enviado=$1 WHERE id=$2`, [emailEnviado, req.params.id]);
+    res.json({ success: true, email_enviado: emailEnviado });
   } catch (err: any) {
     handleUpsertError(err, res);
   }

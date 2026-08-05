@@ -53,6 +53,13 @@ const router = Router();
     // (`orderTimeout.ts`, roda a cada 60s pra QUALQUER estabelecimento,
     // independente da vertical) vinha falhando silenciosamente há tempos.
     await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS order_number INTEGER`);
+    // Fix de produção 33 — mesma classe de bug do order_number acima:
+    // `daily_code` também é usado em todo o módulo de Delivery (código curto
+    // do pedido, ex: exibido no recibo/track) sem nunca ter migração
+    // versionada. Log de produção confirmou: `column o.daily_code does not
+    // exist`, vindo do mesmo job orderTimeout.ts (roda pra qualquer
+    // estabelecimento, mesmo sem Delivery configurado).
+    await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS daily_code TEXT`);
 
     // user_addresses nunca tinha CREATE TABLE em lugar nenhum do projeto — só
     // era usada (SELECT/INSERT/UPDATE) em delivery.ts e client.ts, assumindo

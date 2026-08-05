@@ -9,12 +9,24 @@
 // e os dois arquivos passam a chamar as mesmas funções.
 import nodemailer from 'nodemailer';
 import pool from './db';
+import { decrypt, isSensitiveKey } from './cryptoUtil';
 
+// Fix de produção 33 — causa raiz real do "SMTP funciona no teste mas o
+// e-mail não sai": `admin.ts` (POST /admin/settings/update) criptografa
+// QUALQUER chave que pareça sensível (`isSensitiveKey` — contém "key",
+// "secret", "token" ou "pass"), o que inclui `smtp_pass`. Essa função lia o
+// valor cru do banco sem descriptografar, então `sendEmail()` tentava
+// autenticar no SMTP usando o texto CRIPTOGRAFADO como se fosse a senha —
+// falha de autenticação (ou, se a linha nunca foi salva, fica vazio e cai no
+// aviso "SMTP não configurado"). O botão "Testar" em Configurações Globais
+// nunca pegava esse bug porque ele testa com o valor DIGITADO na tela (em
+// texto puro), nunca o que está de fato salvo no banco — por isso o teste
+// sempre passava mesmo com o envio real quebrado.
 export async function getSmtpSettings(): Promise<Record<string, string>> {
   const r = await pool.query(
     `SELECT key, value FROM global_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','pwa_name')`
   );
-  return Object.fromEntries(r.rows.map((row: any) => [row.key, row.value]));
+  return Object.fromEntries(r.rows.map((row: any) => [row.key, isSensitiveKey(row.key) ? decrypt(row.value) : row.value]));
 }
 
 // Best-effort: nunca lança — quem chama só decide o que fazer com o
