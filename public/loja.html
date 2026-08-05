@@ -3647,7 +3647,14 @@ async function init() {
     document.getElementById('store-name').textContent = me.name || 'Minha Loja';
     document.getElementById('store-badge').textContent = me.vertical_slug || '';
     document.getElementById('store-badge').classList.remove('hidden');
-    if (me.slug) {
+    // Fix de produção 26 — módulo "serviço único" (Rastreamento) não é multi-
+    // empresa e a vitrine (loja) fica vazia/sem função pra ele; o Carlos pediu
+    // pra manter só uma URL pública no ar (a da landing). Por isso o botão
+    // "Ver Loja" só aparece pras verticais que realmente usam a vitrine —
+    // pro "serviço único" some daqui e some substituído pelo "Ver Landing
+    // Page" logo abaixo (a URL antiga da loja passa a redirecionar pra lá,
+    // ver server.ts `resolveServicoUnicoRedirect`).
+    if (me.slug && me.modelo_negocio !== 'servico_unico') {
       const btnLoja = document.getElementById('btn-ver-loja');
       if (btnLoja) btnLoja.href = `${window.location.origin}/${me.slug}`;
     }

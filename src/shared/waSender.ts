@@ -64,11 +64,16 @@ function applyTemplate(template: string, vars: Record<string, string>): string {
 }
 
 // ─── Envio via Evolution API ─────────────────────────────────
-async function sendViaEvolution(estId: string, phone: string, text: string): Promise<void> {
+// Fix de produção 27 — passou a devolver boolean (sucesso/falha) em vez de
+// void, pra que `sendWhatsAppMessageWithStatus` (usada pelo OTP de
+// recuperação de senha) saiba se deve cair no fallback de e-mail/log. Os
+// chamadores antigos (`sendWhatsAppMessage`, fire-and-forget) simplesmente
+// ignoram esse retorno — nenhum comportamento existente muda.
+async function sendViaEvolution(estId: string, phone: string, text: string): Promise<boolean> {
   const { url, token } = await getEvolutionConfig();
   if (!url || !token) {
     console.warn('[waSender] Evolution não configurado.');
-    return;
+    return false;
   }
 
   // Busca o nome real da instância salvo no banco (pode diferir do padrão est_UUID)
@@ -95,13 +100,14 @@ async function sendViaEvolution(estId: string, phone: string, text: string): Pro
   if (!res.ok) {
     const errText = await res.text();
     console.error(`[waSender/evolution] HTTP=${res.status} instance=${instance} err=${errText}`);
-  } else {
-    console.log(`[waSender/evolution] ✅ enviado → ${instance} phone=${phone.slice(0,8)}...`);
+    return false;
   }
+  console.log(`[waSender/evolution] ✅ enviado → ${instance} phone=${phone.slice(0,8)}...`);
+  return true;
 }
 
 // ─── Envio via API de terceiros ───────────────────────────────
-async function sendViaCustomAPI(apiUrl: string, apiToken: string, phone: string, text: string): Promise<void> {
+async function sendViaCustomAPI(apiUrl: string, apiToken: string, phone: string, text: string): Promise<boolean> {
   const cleanPhone = phone.replace(/\D/g, '');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiToken) headers['Authorization'] = `Bearer ${apiToken}`;
@@ -112,7 +118,11 @@ async function sendViaCustomAPI(apiUrl: string, apiToken: string, phone: string,
     headers,
     body: JSON.stringify({ number: cleanPhone, text, message: text, phone: cleanPhone }),
   });
-  if (!res.ok) console.error(`[waSender/custom] ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    console.error(`[waSender/custom] ${res.status} ${await res.text()}`);
+    return false;
+  }
+  return true;
 }
 
 // ─── Função principal de envio ────────────────────────────────
@@ -151,6 +161,33 @@ export async function sendWhatsAppMessage(estId: string, phone: string, text: st
     }
   } catch (err: any) {
     console.error('[waSender] Erro:', err.message);
+  }
+}
+
+// Fix de produção 27 — mesma lógica de `sendWhatsAppMessage`, mas devolve se
+// o envio realmente saiu (usada pelo OTP de recuperação de senha, que precisa
+// decidir se cai no fallback de e-mail/log quando o WhatsApp falha).
+export async function sendWhatsAppMessageWithStatus(estId: string, phone: string, text: string): Promise<boolean> {
+  if (!phone || !text || !estId) return false;
+  try {
+    await ensureLgpdColumns();
+    const optRes = await pool.query(
+      `SELECT whatsapp_optout FROM users WHERE whatsapp = $1 LIMIT 1`,
+      [phone.replace(/\D/g, '')]
+    );
+    if (optRes.rows[0]?.whatsapp_optout === true) {
+      console.log(`[waSender] Envio bloqueado por opt-out LGPD — phone: ${phone}`);
+      return false;
+    }
+
+    const cfg = await getEstabWAConfig(estId);
+    if (cfg.api_type === 'custom' && cfg.custom_api_url) {
+      return await sendViaCustomAPI(cfg.custom_api_url, cfg.custom_api_token || '', phone, text);
+    }
+    return await sendViaEvolution(estId, phone, text);
+  } catch (err: any) {
+    console.error('[waSender] Erro (withStatus):', err.message);
+    return false;
   }
 }
 

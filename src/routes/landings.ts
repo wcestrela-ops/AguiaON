@@ -232,6 +232,45 @@ export async function resolveVerticalLanding(req: Request): Promise<any | null> 
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Fix de produção 26 — unifica a URL pública da loja com a da landing pra
+// módulos "serviço único" (ex: Rastreamento). O Carlos: como não é multi-
+// empresa (só existe 1 establishment usando aquele vertical_slug), a página
+// da loja (vitrine.html) fica vazia/sem função — só a landing (com as
+// "planos", que já fazem o papel de vitrine de produto) deve ficar no ar.
+// Em vez de apagar o slug do establishment (ainda é usado internamente por
+// agenda/asaas/vitrine antiga/etc — ver `establishments.slug`), a URL antiga
+// da loja passa a REDIRECIONAR (301) pra landing publicada assim que ela
+// existir. Se ainda não tiver landing publicada, retorna null e quem chamou
+// cai no comportamento de sempre (mostra a vitrine) — não quebra nada antes
+// do lojista publicar a landing pela primeira vez.
+export async function resolveServicoUnicoRedirect(slug: string): Promise<string | null> {
+  try {
+    const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE slug=$1`, [slug]);
+    const verticalSlug = estab.rows[0]?.vertical_slug;
+    if (!isServicoUnico(verticalSlug)) return null;
+
+    const r = await pool.query(
+      `SELECT domain_mode, domain_value FROM vertical_landings WHERE vertical_slug=$1 AND published=true`,
+      [verticalSlug]
+    );
+    const landing = r.rows[0];
+    if (!landing?.domain_value) return null;
+
+    if (landing.domain_mode === 'subdomain') {
+      const baseDomain = (process.env.PLATFORM_BASE_DOMAIN || 'aguiaon.com').toLowerCase().trim();
+      return `https://${landing.domain_value}.${baseDomain}`;
+    }
+    // domain_mode 'path' — evita redirect pra si mesmo (caso a landing tenha
+    // sido publicada usando o próprio slug da loja como domain_value).
+    if (landing.domain_value === slug) return null;
+    return `/${landing.domain_value}`;
+  } catch (err: any) {
+    console.error('[landings] falha ao resolver redirect de loja única:', err.message);
+    return null;
+  }
+}
+
 // GET /public/landing/resolve — usada pelo landing.html no carregamento.
 // Reaproveita a mesma lógica de resolução por Host+path do servidor, então
 // a landing "sabe" qual conteúdo mostrar sem precisar de template engine.

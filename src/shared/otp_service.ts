@@ -1,75 +1,65 @@
-import nodemailer from 'nodemailer';
 import pool from './db';
-import { decrypt } from './cryptoUtil';
+import { getSmtpSettings, sendEmail } from './mailer';
+import { sendWhatsAppMessageWithStatus } from './waSender';
 
 // Gera código de 6 dígitos
 function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Lê as configurações de SMTP e Evolution diretamente do banco
-async function getSettings(): Promise<Record<string, string>> {
-  const result = await pool.query('SELECT key, value FROM global_settings');
-  return Object.fromEntries(result.rows.map((r: any) => [r.key, r.key === 'evolution_token' ? decrypt(r.value) : r.value]));
-}
+// Fix de produção 27 — este arquivo tinha SUA PRÓPRIA lógica de SMTP e de
+// Evolution API, duplicada e divergente da que o resto do app já usa (e que
+// o Carlos confirmou que funciona — Termo de Adesão por e-mail, cobranças
+// por WhatsApp). Duas causas raiz encontradas pro "recuperação de senha não
+// chega por e-mail nem WhatsApp":
+//   1) E-mail: a porta do SMTP vinha HARDCODED em 587, ignorando o
+//      `smtp_port` configurado em Configurações Globais — se a conta do
+//      Carlos usa outra porta, a autenticação falhava (era exatamente o
+//      erro "Invalid login" que apareceu no log). Corrigido reaproveitando
+//      `mailer.ts` (mesmo módulo usado pelo Termo de Adesão), que já lê a
+//      porta certa.
+//   2) WhatsApp: buscava `evolution_url`/`evolution_token` sem o filtro
+//      `category='WHATSAPP'` que o resto do app usa, e mandava pra uma
+//      instância chamada `wa_platform_instance` — uma chave que não existe
+//      em lugar nenhum do sistema (nunca foi salva por nenhuma tela), então
+//      sempre caía no nome genérico "default", que não existe na Evolution
+//      de verdade. Corrigido reaproveitando `waSender.ts` (o mesmo envio de
+//      WhatsApp já usado por pedidos/cobranças), que resolve a instância
+//      certa por estabelecimento.
 
-// Envia via Email (SMTP configurado no admin)
-async function sendViaEmail(to: string, code: string, settings: Record<string, string>): Promise<boolean> {
+// Envia via Email (SMTP configurado no admin) — mesma função usada pelo
+// Termo de Adesão (`mailer.ts`), só muda o template.
+async function sendViaEmail(to: string, code: string): Promise<boolean> {
   try {
-    if (!settings.smtp_host || !settings.smtp_user || !settings.smtp_pass) return false;
-
-    const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: 587,
-      secure: false,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-    });
-
-    await transporter.sendMail({
-      from: settings.smtp_from || settings.smtp_user,
-      to,
-      subject: `${settings.pwa_name || 'Águia-ON'} — Código de verificação`,
-      html: `
-        <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
-          <h2 style="color:#6366f1;margin:0 0 16px">Código de verificação</h2>
-          <p style="margin:0 0 24px">Use o código abaixo para confirmar sua ação:</p>
-          <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px;text-align:center">
-            <span style="font-size:36px;font-weight:900;letter-spacing:12px;color:#fff">${code}</span>
-          </div>
-          <p style="margin:24px 0 0;font-size:12px;color:#475569">Válido por 10 minutos. Não compartilhe este código.</p>
+    const settings = await getSmtpSettings();
+    const subject = `${settings.pwa_name || 'Águia-ON'} — Código de verificação`;
+    const html = `
+      <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#020617;color:#cbd5e1;border-radius:16px">
+        <h2 style="color:#6366f1;margin:0 0 16px">Código de verificação</h2>
+        <p style="margin:0 0 24px">Use o código abaixo para confirmar sua ação:</p>
+        <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px;text-align:center">
+          <span style="font-size:36px;font-weight:900;letter-spacing:12px;color:#fff">${code}</span>
         </div>
-      `,
-    });
-
-    return true;
+        <p style="margin:24px 0 0;font-size:12px;color:#475569">Válido por 10 minutos. Não compartilhe este código.</p>
+      </div>
+    `;
+    return await sendEmail(to, subject, html);
   } catch (err: any) {
     console.error('❌ Falha ao enviar email OTP:', err.message);
     return false;
   }
 }
 
-// Envia via WhatsApp (Evolution API configurada no admin)
-async function sendViaWhatsApp(whatsapp: string, code: string, settings: Record<string, string>): Promise<boolean> {
+// Envia via WhatsApp — precisa saber de QUAL estabelecimento (pra resolver a
+// instância certa da Evolution, ou a API custom do lojista). Sem estId (ex:
+// SuperAdmin, ou cliente de cadastro genérico sem loja vinculada) não tem
+// como saber qual número/instância usar, então esse canal fica indisponível
+// pra esses casos — o e-mail continua sendo a via de recuperação.
+async function sendViaWhatsApp(estId: string | null | undefined, whatsapp: string, code: string): Promise<boolean> {
+  if (!estId || !whatsapp) return false;
   try {
-    if (!settings.evolution_url || !settings.evolution_token) return false;
-
-    const appName = settings.pwa_name || 'Águia-ON';
-    const message = `*${appName}* — Código de verificação:\n\n*${code}*\n\nVálido por 10 minutos. Não compartilhe este código.`;
-
-    const instance = settings.wa_platform_instance || 'default';
-    const response = await fetch(`${settings.evolution_url}/message/sendText/${instance}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': settings.evolution_token,
-      },
-      body: JSON.stringify({
-        number: whatsapp.replace(/\D/g, ''),
-        text: message,
-      }),
-    });
-
-    return response.ok;
+    const message = `*Código de verificação:*\n\n*${code}*\n\nVálido por 10 minutos. Não compartilhe este código.`;
+    return await sendWhatsAppMessageWithStatus(estId, whatsapp, message);
   } catch (err: any) {
     console.error('❌ Falha ao enviar WhatsApp OTP:', err.message);
     return false;
@@ -82,10 +72,10 @@ export async function sendOtp(
   userId: string,
   whatsapp: string,
   email: string | null,
-  purpose: string = 'PROFILE_EDIT'
+  purpose: string = 'PROFILE_EDIT',
+  estId?: string | null
 ): Promise<{ sent: boolean; channels: string[] }> {
   const code = generateCode();
-  const settings = await getSettings();
 
   // Salva o código no banco (invalida anteriores do mesmo actor/propósito)
   await pool.query(
@@ -99,8 +89,8 @@ export async function sendOtp(
 
   // Dispara pelos dois canais em paralelo
   const [emailOk, whatsappOk] = await Promise.all([
-    email ? sendViaEmail(email, code, settings) : Promise.resolve(false),
-    sendViaWhatsApp(whatsapp, code, settings),
+    email ? sendViaEmail(email, code) : Promise.resolve(false),
+    sendViaWhatsApp(estId, whatsapp, code),
   ]);
 
   const channels: string[] = [];

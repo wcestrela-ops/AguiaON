@@ -707,3 +707,46 @@ Fix: nova função `getPixPayload(estId, paymentId)` em `asaasClient.ts`, que bu
 Importante: a mensagem 2 (Pix separado) só sai se "Mandar o código Pix Copia e Cola numa mensagem separada" estiver ativado em Configurações → Rastreamento (toggle já existente desde o Fix 23) — sem isso ligado, a fatura única continua indo só com o link, sem o Pix. Isso é intencional (mesmo interruptor que o Carlos já tinha pra decidir isso) — vale ele conferir se está ligado.
 
 Verificação: `asaasClient.ts`, `trackingBillingJob.ts` e `agenda/index.ts` reconferidos via `ts.transpileModule` (OK, 0 diagnósticos). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve conferir se "Pix separado" está ativado em Configurações → Rastreamento e testar com uma fatura sincronizada que ainda não tinha o código Pix salvo.
+
+## Fix de produção 26 — Unificar URL da loja e da landing (Rastreamento)
+
+Pedido do Carlos: o Rastreamento (módulo "serviço único", não multi-empresa) ficava com DUAS URLs públicas — a da loja (`aguiaon.com/aguia-gestao-veicular`, página de vitrine vazia/sem função pra esse módulo) e a da landing (`aguiaon.com/rastreamento`, com o formulário de contratação). Ele pediu pra sobrar só uma: `aguiaon.com/rastreamento`.
+
+Investigação (feita por subagente, só leitura, antes de mexer em código): confirmado que a vitrine (`vitrine.html`) não mostra nada útil pro Rastreamento (sem catálogo aplicável); nenhuma funcionalidade depende exclusivamente da URL da loja; o bloco de "planos" da landing já faz o papel de vitrine de produto, alimentando o mesmo fluxo de lead → contrato; e `upsertVerticalLanding` já impede publicar uma landing com o mesmo `domain_value` do slug de um establishment existente (então não dava pra simplesmente "mover" a landing pro slug da loja).
+
+Decisão: manter o `establishments.slug` existente intacto (ainda usado internamente por agenda/Asaas/etc — não é só uma URL), mas fazer a URL antiga da loja REDIRECIONAR (301) pra landing publicada, em vez de servir a vitrine vazia.
+
+Fix:
+- Nova função `resolveServicoUnicoRedirect(slug)` em `landings.ts` — dado o slug acessado, busca o `vertical_slug` do establishment dono daquele slug; se o módulo for "serviço único" (`isServicoUnico`) E já existir uma landing publicada pra essa vertical, devolve a URL canônica dela (`/`+domain_value no modo path, ou `https://{domain_value}.aguiaon.com` no modo subdomínio). Se não achar landing publicada ainda, devolve `null` — nesse caso a rota antiga continua mostrando a vitrine normalmente (não quebra nada antes do lojista publicar a landing pela 1ª vez).
+- `server.ts`, rota `/:slug` — depois de checar se é uma landing por Host+path (comportamento de sempre), agora checa `resolveServicoUnicoRedirect(slug)`; se vier uma URL, redireciona (301) pra lá antes de cair na vitrine.
+- `loja.html` — o botão "Ver Loja" do cabeçalho do painel só aparece pra módulos que não são "serviço único" (pra eles, só o botão "Ver Landing Page", que já existia desde o Fix 11/16, continua aparecendo — aponta pra mesma URL que o redirect usa).
+
+Resultado prático: assim que o Rastreamento publicar a landing, `aguiaon.com/aguia-gestao-veicular` passa a redirecionar automaticamente pra `aguiaon.com/rastreamento` — só essa última fica "viva" pro público, sem apagar nada internamente.
+
+Verificação: `landings.ts` e `server.ts` reconferidos via `ts.transpileModule` (OK, 0 diagnósticos); `loja.html` reconferido (todos os blocos `<script>` parseiam OK, e o check de nomes de função duplicados não aponta nada novo — só os 2 duplicados pré-existentes e não relacionados, `loadVendas`/`fmtDate`, de sempre). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve conferir se a landing do Rastreamento já está publicada (Configurações → Landing Page) antes de esperar o redirect funcionar — sem publicação, a URL antiga continua mostrando a vitrine, como já era.
+
+## Fix de produção 27 — Recuperação de senha (OTP) não chegava por e-mail nem WhatsApp
+
+Pedido do Carlos: o código de recuperação de senha ("Esqueci minha senha") não estava chegando por e-mail nem por WhatsApp, caindo sempre no log do servidor (`🔐 OTP GERADO (sem canal configurado)`), junto com um erro visível no log: `❌ Falha ao enviar email OTP: Invalid login: 535 5.7.8 Error: authentication failed`.
+
+Causa raiz — `otp_service.ts` tinha sua PRÓPRIA lógica de envio, duplicada e divergente da que o resto do sistema já usa (e que o Carlos confirmou que funciona, testando o SMTP e o WhatsApp do Termo de Adesão):
+- **E-mail**: a porta do SMTP vinha fixa em `587` no código, ignorando o `smtp_port` configurado em Configurações Globais — se a conta usa outra porta, a autenticação falha exatamente como no log (`Invalid login`). `mailer.ts` (o módulo usado pelo Termo de Adesão) já lê a porta certa há tempos; `otp_service.ts` nunca tinha sido migrado pra usá-lo.
+- **WhatsApp**: buscava `evolution_url`/`evolution_token` direto da tabela `global_settings`, sem o filtro `category='WHATSAPP'` que o resto do app usa (`waSender.ts`, `chat.ts`), e mandava a mensagem pra uma instância chamada `wa_platform_instance` — uma configuração que nunca existiu em nenhuma tela do sistema, então sempre caía no nome genérico `"default"`, que não existe de verdade na Evolution API. Isso falhava silenciosamente (sem log de erro), por isso só o e-mail aparecia no log de falha.
+
+Fix:
+- `otp_service.ts` reescrito pra reaproveitar `mailer.ts` (e-mail) e `waSender.ts` (WhatsApp) — os dois módulos já usados e testados pelo fluxo do Termo de Adesão/cobranças — em vez de manter uma terceira implementação paralela.
+- `waSender.ts` ganhou `sendWhatsAppMessageWithStatus(estId, phone, text)`, uma versão de `sendWhatsAppMessage` que devolve `true`/`false` conforme o envio realmente saiu (a versão original é "fire-and-forget", sem retorno, usada pelos fluxos de pedido/cobrança que não mudam).
+- `sendOtp()` ganhou um 5º parâmetro opcional `estId` — precisa saber de QUAL estabelecimento pra resolver a instância certa de WhatsApp (cada loja tem a própria). Repassado nos 2 pontos onde já existe essa informação: `POST /auth/forgot-password` (`entity.id` se for LOJISTA, `entity.establishment_id` se for CLIENT) e `POST /client/otp/send` (`user.establishmentId` do próprio token).
+- SuperAdmin (login OTP) e o cadastro genérico de cliente (`POST /auth/register`, sem loja vinculada) continuam sem um estabelecimento associado — pra esses dois casos o canal WhatsApp fica indisponível por falta de instância pra usar (comportamento honesto, não finge sucesso), mas o e-mail agora funciona normalmente pros três casos.
+
+Verificação: `otp_service.ts`, `waSender.ts`, `auth.ts` e `client.ts` reconferidos via `ts.transpileModule` (OK, 0 diagnósticos). Não testado contra o ambiente real — depende do próximo deploy; o Carlos deve testar "Esqueci minha senha" depois do deploy pra confirmar que o e-mail chega (a causa mais provável, dado o erro de autenticação no log) e que o WhatsApp chega quando o usuário/loja tiver um estabelecimento vinculado com Evolution configurada.
+
+## Fix de produção 28 — Coluna `order_number` ausente em `delivery_orders`
+
+Pedido do Carlos: o log de produção mostrava, repetindo sem parar, `[orderTimeout] runCheck error: column o.order_number does not exist`.
+
+Causa raiz: `order_number` é usado em todo o módulo de Delivery (`delivery.ts`, `webhooks.ts`, `payments.ts` — numeração sequencial de pedido por loja, via `MAX(order_number)+1`), mas em NENHUM lugar do projeto (nem `database/migration_v15_delivery.sql`, nem nenhum `ALTER TABLE` em código) essa coluna era criada — ela só existe onde alguém rodou um `ALTER TABLE` manual direto no banco em algum momento. Nesta instalação (só o módulo Rastreamento está ativo — Delivery nunca foi configurado/usado, como confirmado no Fix 26), a coluna nunca chegou a existir. O job `orderTimeout.ts` roda a cada 60 segundos verificando pedidos pendentes de TODOS os estabelecimentos, independente da vertical usada — por isso o erro aparecia sem parar mesmo sem ninguém usar Delivery.
+
+Fix: adicionado `ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS order_number INTEGER` na mesma migração idempotente que já existe em `delivery.ts` (executa uma vez na inicialização do servidor, junto com `lat`/`lng`) — mesmo padrão já usado nesse arquivo pra corrigir lacunas de migração parecidas.
+
+Verificação: `delivery.ts` reconferido via `ts.transpileModule` (OK, 0 diagnósticos). Não testado contra o ambiente real — depende do próximo deploy; o erro deve parar de aparecer no log assim que a migração rodar no boot.

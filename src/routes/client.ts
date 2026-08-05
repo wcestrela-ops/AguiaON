@@ -260,7 +260,9 @@ router.post('/otp/send', async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
     const { whatsapp, email } = result.rows[0];
-    const otp = await sendOtp(user.userId, whatsapp, email, 'PROFILE_EDIT');
+    // Fix de produção 27 — repassa o establishmentId do próprio token pra
+    // sendOtp saber qual instância de WhatsApp usar (ver otp_service.ts).
+    const otp = await sendOtp(user.userId, whatsapp, email, 'PROFILE_EDIT', user.establishmentId || null);
 
     res.json({ sent: true, channels: otp.channels });
   } catch (err: any) {

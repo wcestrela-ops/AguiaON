@@ -289,7 +289,15 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     // mudasse). sendOtp já dispara pelos dois canais em paralelo (e-mail e
     // WhatsApp) — se um falhar, o outro ainda funciona.
     const otpUserId = entity.type === 'SUPERADMIN' ? 'superadmin' : entity.id;
-    const result = await sendOtp(otpUserId, entity.whatsapp || '', entity.email, 'PASSWORD_RESET');
+    // Fix de produção 27 — o envio por WhatsApp precisa saber de qual
+    // estabelecimento (pra resolver a instância certa da Evolution/API
+    // custom do lojista): LOJISTA é o próprio establishment (entity.id),
+    // CLIENT carrega o establishment_id de quem o cadastrou (pode ser nulo
+    // pra cadastro genérico sem loja), SUPERADMIN não tem loja nenhuma.
+    const estId = entity.type === 'LOJISTA' ? entity.id
+      : entity.type === 'CLIENT' ? (entity.establishment_id || null)
+      : null;
+    const result = await sendOtp(otpUserId, entity.whatsapp || '', entity.email, 'PASSWORD_RESET', estId);
     return res.json({ sent: true, channels: result.channels });
 
   } catch (err: any) {

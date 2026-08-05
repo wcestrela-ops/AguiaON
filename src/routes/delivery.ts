@@ -43,6 +43,16 @@ const router = Router();
   try {
     await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS lat DECIMAL(10,7)`);
     await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS lng DECIMAL(10,7)`);
+    // Fix de produção 28 — `order_number` é usado em todo o módulo de
+    // delivery (numeração sequencial por loja, via MAX()+1) desde sempre,
+    // mas nunca tinha um CREATE/ALTER TABLE versionado em lugar nenhum do
+    // projeto (nem aqui, nem em database/migration_v15_delivery.sql) — só
+    // funcionava porque foi criado manualmente direto no banco em algum
+    // momento. Nesta instalação (só Rastreamento ativo, Delivery nunca
+    // configurado) a coluna nunca existiu, e o job de timeout de pedidos
+    // (`orderTimeout.ts`, roda a cada 60s pra QUALQUER estabelecimento,
+    // independente da vertical) vinha falhando silenciosamente há tempos.
+    await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS order_number INTEGER`);
 
     // user_addresses nunca tinha CREATE TABLE em lugar nenhum do projeto — só
     // era usada (SELECT/INSERT/UPDATE) em delivery.ts e client.ts, assumindo

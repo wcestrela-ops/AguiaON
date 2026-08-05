@@ -22,7 +22,7 @@ import actionRoutes from './routes/actions';
 import clientRoutes from './routes/client';
 import lojistaRoutes from './routes/lojista';
 import publicRoutes from './routes/public';
-import landingRoutes, { resolveVerticalLanding } from './routes/landings';
+import landingRoutes, { resolveVerticalLanding, resolveServicoUnicoRedirect } from './routes/landings';
 import paymentRoutes from './routes/payments';
 import agendaRoutes from './routes/agenda/index';
 import webhookRoutes from './routes/webhooks';
@@ -324,6 +324,13 @@ app.get('/:slug', async (req, res, next) => {
   // domain_value que colida com establishments.slug).
   const landing = await resolveVerticalLanding(req);
   if (landing) return res.sendFile(path.join(__dirname, '../public/landing.html'));
+  // Fix de produção 26 — loja de módulo "serviço único" (ex: Águia Gestão
+  // Veicular / Rastreamento): não é multi-empresa, então a vitrine fica sem
+  // função. Se já existe landing publicada pra essa vertical, redireciona a
+  // URL antiga da loja pra lá, deixando só uma URL pública no ar
+  // (aguiaon.com/rastreamento em vez de + aguiaon.com/aguia-gestao-veicular).
+  const redirectUrl = await resolveServicoUnicoRedirect(req.params.slug);
+  if (redirectUrl) return res.redirect(301, redirectUrl);
   res.sendFile(path.join(__dirname, '../public/vitrine.html')); // Nova página de Vitrine
 });
 
