@@ -94,7 +94,12 @@ async function runCheck(): Promise<void> {
   // servidor, sem passar por lá.
   await ensureAgendaTables();
 
-  await gerarCobrancasDoDia();
+  // Fix de produção 32 — gerarCobrancasDoDia() (cobrança automática POR
+  // VEÍCULO) foi desativada. O Carlos confirmou que a Frota nunca deveria
+  // emitir fatura — é só sincronização com o GPSWOX + vínculo com o cliente.
+  // Cobrança de verdade continua só no nível do Cliente, pelas duas funções
+  // abaixo (recorrência mensal fixa e cobrança avulsa).
+  // await gerarCobrancasDoDia();
   await gerarCobrancasRecorrentesClientes();
   await enviarLembretesCobrancasAsaas();
   await enviarResumoAtrasos();
@@ -368,6 +373,9 @@ async function marcarInadimplentes(): Promise<void> {
   }
 }
 
+// Fix de produção 32 — DESATIVADA (não chamada mais em runCheck() acima).
+// Mantida no arquivo, comentada a chamada, por cautela — não apagada — mas
+// cobrança por veículo não deve mais rodar (ver nota em runCheck()).
 async function gerarCobrancasDoDia(): Promise<void> {
   try {
     const diaHoje = parseInt(

@@ -3206,6 +3206,21 @@
         <input type="email" id="cliente-email" class="input" />
         <span class="help-text">Se a empresa tiver conta Asaas configurada, o cliente também é criado lá automaticamente ao salvar.</span>
       </div>
+      <!-- Fix de produção 32 — mesmos campos que o formulário de lead da
+           landing já coleta (Fix 10), agora também no cadastro manual rápido. -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Data de nascimento</label>
+          <input type="date" id="cliente-nascimento" class="input" />
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 block mb-1">Contato de emergência</label>
+        <div class="grid grid-cols-2 gap-3">
+          <input type="text" id="cliente-emergencia-nome" class="input" placeholder="Nome" />
+          <input type="text" id="cliente-emergencia-telefone" class="input" placeholder="Telefone" />
+        </div>
+      </div>
       <div>
         <label class="text-xs text-slate-400 block mb-1">Observações</label>
         <textarea id="cliente-obs" class="input" rows="2"></textarea>
@@ -6485,7 +6500,11 @@ async function ljOpenLeadsModal() {
                         <button onclick="ljBaixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                         ${l.status === 'aceito' ? `<button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
                     </div>
-                ` : ''}
+                ` : `
+                    <div class="flex justify-end">
+                        <button onclick="ljExcluirLead('${l.id}')" title="Excluir" class="text-slate-600 hover:text-red-400 text-xs"><i class="fa fa-trash"></i></button>
+                    </div>
+                `}
             </div>`).join('');
     } catch (e) {
         list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
@@ -6500,6 +6519,17 @@ async function ljConverterLead(id) {
                 ? '✅ Cliente criado. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
                 : '✅ Cliente criado, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
         }
+        ljOpenLeadsModal();
+    } catch (e) { alert('❌ ' + e.message); }
+}
+
+// Fix de produção 32 — excluir lead (só disponível pra lead que ainda não
+// assinou o Termo de Adesão — o backend bloqueia os que já assinaram, pra
+// não perder o comprovante do aceite eletrônico).
+async function ljExcluirLead(id) {
+    if (!confirm('Excluir este lead?')) return;
+    try {
+        await api(`/lojista/landing-leads/${id}`, { method: 'DELETE' });
         ljOpenLeadsModal();
     } catch (e) { alert('❌ ' + e.message); }
 }
@@ -6975,7 +7005,7 @@ async function loadFrota() {
     // Preenche o nome do plano localmente (a API não faz join com agenda_servicos)
     const planoPorId = Object.fromEntries(servicosCache.map(s => [s.id, s.nome]));
     frotaCache.forEach(v => { v.plano_nome = v.plano_id ? (planoPorId[v.plano_id] || null) : null; });
-    renderFrota(frotaCache);
+    filterFrota(); // aplica o filtro de status atual (esconde 'inativo' por padrão — ver Fix 32)
     loadFrotaGpswoxStatus();
     populateFrotaClienteSelect();
   } catch (e) {
@@ -7024,13 +7054,24 @@ function renderFrota(rows) {
           <button onclick="historicoFrota('${v.id}')" title="Histórico de trajeto" class="text-slate-400 hover:text-white text-xs mr-2"><i class="fa fa-route"></i></button>
           <button onclick="compartilharFrota('${v.id}')" title="Compartilhar localização" class="text-indigo-400 hover:text-indigo-300 text-xs mr-2"><i class="fa fa-share-alt"></i></button>
         ` : `<span class="text-slate-600 text-xs mr-2" title="Sem GPS vinculado"><i class="fa fa-map-marker-alt"></i></span>`}
-        ${v.plano_id
-          ? `<button onclick="cobrarFrota('${v.id}')" title="Cobrar mensalidade" class="text-orange-400 hover:text-orange-300 text-xs mr-2"><i class="fa fa-money-bill-wave"></i></button>`
-          : ''}
         <button onclick="notasFrota('${v.id}','${(v.cliente_nome||v.placa||'').replace(/'/g,"\\'")}')" title="Notas / histórico de contato" class="text-purple-400 hover:text-purple-300 text-xs mr-2"><i class="fa fa-note-sticky"></i></button>
-        <button onclick="editFrota(${JSON.stringify(v).replace(/"/g,'&quot;')})" class="text-slate-400 hover:text-white text-xs"><i class="fa fa-pencil"></i></button>
+        <button onclick="editFrota(${JSON.stringify(v).replace(/"/g,'&quot;')})" title="Editar" class="text-slate-400 hover:text-white text-xs mr-2"><i class="fa fa-pencil"></i></button>
+        <button onclick="excluirVeiculo('${v.id}')" title="Excluir" class="text-red-400 hover:text-red-300 text-xs"><i class="fa fa-trash"></i></button>
       </td>
     </tr>`).join('') || '<tr><td colspan="6" class="text-center text-slate-500 py-6">Nenhum veículo</td></tr>';
+}
+
+// Fix de produção 32 — a Frota deixou de emitir cobrança (o Carlos confirmou
+// que ela é só sincronização com o GPSWOX + vínculo com o cliente; cobrança
+// de verdade agora só acontece no nível do Cliente). Excluir aqui é
+// soft-delete (status='inativo'), preservando histórico de localização/notas
+// já registrado — não usa DELETE físico pra não perder esses dados.
+async function excluirVeiculo(id) {
+  if (!confirm('Excluir este veículo? O histórico de localização e notas continua no banco, só some da lista.')) return;
+  try {
+    await api(`/agenda/frota/${id}`, { method: 'DELETE' });
+    loadFrota();
+  } catch (e) { alert('❌ ' + e.message); }
 }
 
 // ── Comandos remotos (bloquear/desbloquear motor) ──────────
@@ -7373,39 +7414,23 @@ async function verLocalizacaoFrota(id) {
   }
 }
 
-// ── Cobrança de mensalidade ────────────────────────────────
-async function cobrarFrota(id) {
-  openModal('modal-frota-info');
-  document.getElementById('frota-info-title').textContent = '💰 Cobrança de mensalidade';
-  const box = document.getElementById('frota-info-body');
-  box.innerHTML = '<p class="text-sm text-slate-400">Gerando cobrança...</p>';
-  try {
-    const r = await api(`/agenda/frota/${id}/cobrar`, { method: 'POST' });
-    if (r.already_paid) {
-      box.innerHTML = `<p class="text-sm text-green-400"><i class="fa fa-check mr-1"></i>A mensalidade deste mês já está paga.</p>`;
-      return;
-    }
-    box.innerHTML = `
-      <p class="text-sm mb-2">Plano <strong>${r.plano_nome || ''}</strong> — R$ ${parseFloat(r.charge.valor).toFixed(2).replace('.', ',')}</p>
-      <div class="bg-slate-900 rounded-lg border border-slate-800 p-3 mb-3">
-        <p class="text-[10px] text-slate-500 mb-1">PIX Copia e Cola:</p>
-        <p class="text-xs font-mono break-all">${r.pix.code}</p>
-      </div>
-      <div class="flex gap-2">
-        <button onclick="navigator.clipboard.writeText('${r.pix.code.replace(/'/g, "\\'")}').then(()=>alert('Copiado!'))" class="btn-outline text-sm flex-1"><i class="fa fa-copy mr-1"></i>Copiar código</button>
-        ${r.cliente_telefone ? `<a href="https://wa.me/${r.cliente_telefone.replace(/\D/g,'')}?text=${encodeURIComponent(r.pix.message)}" target="_blank" class="btn-primary text-sm flex-1 text-center"><i class="fa fa-paper-plane mr-1"></i>Enviar por WhatsApp</a>` : ''}
-      </div>`;
-  } catch (e) {
-    box.innerHTML = `<p class="text-sm text-red-400">${e.message}</p>`;
-  }
-}
+// Fix de produção 32 — cobrança de mensalidade POR VEÍCULO foi removida (o
+// Carlos confirmou: a Frota é só sincronização GPSWOX + vínculo com cliente;
+// cobrança de verdade agora só existe no nível do Cliente — recorrência ou
+// avulsa). O botão que chamava essa função foi retirado de renderFrota();
+// a rota de backend (POST /agenda/frota/:id/cobrar) também foi desativada.
 
 function filterFrota() {
   const q = document.getElementById('frota-busca').value.toLowerCase();
   const s = document.getElementById('frota-status').value;
   const filtered = frotaCache.filter(v => {
     const matchQ = !q || (v.placa||'').toLowerCase().includes(q) || (v.cliente_nome||'').toLowerCase().includes(q) || (v.modelo||'').toLowerCase().includes(q);
-    const matchS = !s || v.status === s;
+    // Fix de produção 32 — "excluir" veículo é soft-delete (status='inativo',
+    // DELETE /agenda/frota/:id preserva histórico de GPS/notas em vez de
+    // apagar a linha). Em "Todos" (sem filtro escolhido) ele fica escondido —
+    // é o que faz o "excluir" parecer de verdade; só reaparece se o lojista
+    // escolher "Inativo" explicitamente no filtro de status.
+    const matchS = s ? v.status === s : v.status !== 'inativo';
     return matchQ && matchS;
   });
   renderFrota(filtered);
@@ -7552,6 +7577,9 @@ function abrirNovoCliente() {
   document.getElementById('cliente-telefone').value = '';
   document.getElementById('cliente-cpf').value = '';
   document.getElementById('cliente-email').value = '';
+  document.getElementById('cliente-nascimento').value = '';
+  document.getElementById('cliente-emergencia-nome').value = '';
+  document.getElementById('cliente-emergencia-telefone').value = '';
   document.getElementById('cliente-obs').value = '';
   openModal('modal-cliente');
 }
@@ -7563,6 +7591,9 @@ function editarCliente(c) {
   document.getElementById('cliente-telefone').value = c.telefone || '';
   document.getElementById('cliente-cpf').value = c.cpf_cnpj || '';
   document.getElementById('cliente-email').value = c.email || '';
+  document.getElementById('cliente-nascimento').value = c.data_nascimento ? String(c.data_nascimento).slice(0, 10) : '';
+  document.getElementById('cliente-emergencia-nome').value = c.contato_emergencia_nome || '';
+  document.getElementById('cliente-emergencia-telefone').value = c.contato_emergencia_telefone || '';
   document.getElementById('cliente-obs').value = c.observacoes || '';
   openModal('modal-cliente');
 }
@@ -7574,6 +7605,9 @@ async function salvarCliente() {
     telefone: document.getElementById('cliente-telefone').value || null,
     cpf_cnpj: document.getElementById('cliente-cpf').value || null,
     email: document.getElementById('cliente-email').value || null,
+    data_nascimento: document.getElementById('cliente-nascimento').value || null,
+    contato_emergencia_nome: document.getElementById('cliente-emergencia-nome').value || null,
+    contato_emergencia_telefone: document.getElementById('cliente-emergencia-telefone').value || null,
     observacoes: document.getElementById('cliente-obs').value || null,
   };
   if (!body.nome?.trim()) { alert('Nome é obrigatório.'); return; }
@@ -7730,10 +7764,26 @@ async function renderClienteDetalhe() {
             </div>
           </div>`;
         }).join('') || '<p class="text-slate-500 text-xs text-center py-3">Nenhuma cobrança ainda</p>'}
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-slate-800">
+        <button onclick="excluirClienteDoModal()" class="w-full text-red-400 hover:text-red-300 text-xs font-bold border border-red-900/40 hover:border-red-700 rounded-lg py-2 transition-all"><i class="fa fa-trash mr-1"></i>Excluir Cliente</button>
       </div>`;
   } catch (e) {
     box.innerHTML = `<p class="text-sm text-red-400">${e.message}</p>`;
   }
+}
+
+// Fix de produção 32 — excluir cliente direto de dentro do modal de detalhe
+// (antes só dava pra excluir fechando o modal e voltando pra lista). Reusa a
+// mesma rota/confirmação de excluirCliente(), só fecha o modal em seguida.
+async function excluirClienteDoModal() {
+  if (!confirm('Excluir este cliente? Veículos vinculados a ele continuam cadastrados, só perdem o vínculo.')) return;
+  try {
+    await api(`/agenda/clientes/${_clienteDetalheId}`, { method: 'DELETE' });
+    closeModal('modal-frota-info');
+    loadClientes();
+  } catch (e) { alert('❌ ' + e.message); }
 }
 
 // Baixar o Termo de Adesão do cliente já convertido (Fix de produção 21) —
@@ -7794,7 +7844,18 @@ async function salvarRecorrenciaCliente() {
     });
     const idx = clientesCache.findIndex(x => x.id === _clienteDetalheId);
     if (idx >= 0) clientesCache[idx] = { ...clientesCache[idx], ...atualizado };
-    alert('✅ Recorrência salva!');
+    // Fix de produção 32 — ativar a recorrência agora já gera e envia a 1ª
+    // cobrança na hora (ver PUT /agenda/clientes/:id/recorrencia); por isso a
+    // tela precisa recarregar pra mostrar essa cobrança na seção "Cobranças"
+    // logo abaixo, em vez de só um alerta genérico.
+    if (atualizado.aviso_1a_cobranca) {
+      alert(`✅ Recorrência salva!\n\n⚠️ ${atualizado.aviso_1a_cobranca}`);
+    } else if (atualizado.primeira_cobranca) {
+      alert('✅ Recorrência salva! 1ª cobrança já gerada e enviada ao cliente — veja em "Cobranças" abaixo.');
+    } else {
+      alert('✅ Recorrência salva!');
+    }
+    renderClienteDetalhe();
   } catch (e) { alert('❌ ' + e.message); }
 }
 

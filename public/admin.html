@@ -3010,7 +3010,11 @@
                                 <button onclick="baixarContratoLead('${l.id}')" class="text-sky-400 text-xs font-bold"><i class="fa fa-download mr-1"></i>Baixar Contrato</button>
                                 ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
                             </div>
-                        ` : ''}
+                        ` : `
+                            <div class="flex justify-end">
+                                <button onclick="excluirLandingLead('${l.id}')" title="Excluir" class="text-slate-600 hover:text-red-400 text-xs"><i class="fa fa-trash"></i></button>
+                            </div>
+                        `}
                     </div>`).join('');
             } catch (e) {
                 list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
@@ -3027,6 +3031,18 @@
                         ? '✅ Cliente criado na loja de gestão veicular. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
                         : '✅ Cliente criado na loja de gestão veicular, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
                 }
+                openLeadsModal();
+            } catch (e) { alert('❌ ' + e.message); }
+        }
+
+        // Fix de produção 32 — excluir lead (bloqueado no backend pra lead
+        // que já assinou o Termo de Adesão, pra não perder o comprovante).
+        async function excluirLandingLead(id) {
+            if (!confirm('Excluir este lead?')) return;
+            try {
+                const res = await fetch(`/admin/landing-leads/${id}`, { method: 'DELETE', headers: adminHeaders() });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Falha ao excluir.');
                 openLeadsModal();
             } catch (e) { alert('❌ ' + e.message); }
         }

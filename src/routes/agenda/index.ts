@@ -22,6 +22,9 @@ import {
   deleteGeofence,
   isGpsFailoverEligible,
 } from '../../shared/gpswoxClient';
+// generateFrotaPix: só era usado por POST /frota/:id/cobrar, desativada no
+// Fix de produção 32 (cobrança por veículo foi removida) — import mantido
+// comentado na rota, não removido daqui, pra não quebrar se for reativado.
 import { generateFrotaPix } from '../../shared/pixService';
 import { sendSms } from '../../shared/smsSender';
 import {
@@ -1078,52 +1081,58 @@ router.get('/frota/:id/localizacao', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 // FROTA — Cobrança de mensalidade (Fase 7, portado do Águia Auto)
 // ═══════════════════════════════════════════════════════
-
-// POST /agenda/frota/:id/cobrar — gera (ou reaproveita) a cobrança do mês
-// corrente para o veículo e retorna o PIX pronto para enviar ao cliente.
-router.post('/frota/:id/cobrar', async (req, res) => {
-  try {
-    const eid = estabId(req);
-    const veh = await pool.query(
-      `SELECT f.*, s.preco AS plano_preco, s.nome AS plano_nome
-       FROM agenda_frota f
-       LEFT JOIN agenda_servicos s ON s.id = f.plano_id
-       WHERE f.id=$1 AND f.establishment_id=$2`,
-      [req.params.id, eid]
-    );
-    if (!veh.rows.length) return res.status(404).json({ error: 'Veículo não encontrado.' });
-    const v = veh.rows[0];
-    if (!v.plano_id || !v.plano_preco) return res.status(422).json({ error: 'Veículo sem plano de mensalidade vinculado.' });
-
-    const competencia = new Date().toISOString().slice(0, 7); // YYYY-MM
-
-    // Idempotência: reaproveita cobrança já gerada nesse mês (pendente)
-    let charge = (await pool.query(
-      `SELECT * FROM agenda_frota_charges WHERE agenda_frota_id=$1 AND competencia=$2`,
-      [v.id, competencia]
-    )).rows[0];
-
-    if (!charge) {
-      charge = (await pool.query(
-        `INSERT INTO agenda_frota_charges (agenda_frota_id, establishment_id, competencia, valor)
-         VALUES ($1,$2,$3,$4) RETURNING *`,
-        [v.id, eid, competencia, v.plano_preco]
-      )).rows[0];
-    } else if (charge.status === 'paid') {
-      return res.json({ already_paid: true, charge });
-    }
-
-    const pix = await generateFrotaPix(eid, charge.id, parseFloat(v.plano_preco), v.cliente_nome || 'Cliente', undefined);
-    if (!pix) return res.status(422).json({ error: 'Nenhum método de pagamento configurado (Asaas, Mercado Pago ou PIX manual). Configure em Configurações → Pagamentos.' });
-
-    await pool.query(
-      `UPDATE agenda_frota_charges SET pix_code=$1, pix_provider=$2, asaas_payment_id=$3 WHERE id=$4`,
-      [pix.code, pix.provider, pix.provider_payment_id || null, charge.id]
-    );
-
-    res.json({ charge, pix, cliente_telefone: v.cliente_telefone, cliente_nome: v.cliente_nome, plano_nome: v.plano_nome });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
-});
+//
+// Fix de produção 32 — DESATIVADA. O Carlos confirmou que a Frota nunca
+// deveria emitir fatura: ela é só sincronização com o GPSWOX (rastreamento
+// de verdade) e o vínculo veículo↔cliente; cobrança sempre foi pra ser coisa
+// de PESSOA, não de veículo. Cobrança de cliente já existe de sobra
+// (recorrência mensal fixa e cobrança avulsa, ambas em /clientes/:id/...).
+// Rota comentada (não apagada) por cautela, mesmo padrão do /veiculos em
+// server.ts — se algo externo ainda bater aqui, dá pra rastrear rápido; o
+// botão que chamava essa rota (cobrarFrota, loja.html) já foi removido.
+//
+// router.post('/frota/:id/cobrar', async (req, res) => {
+//   try {
+//     const eid = estabId(req);
+//     const veh = await pool.query(
+//       `SELECT f.*, s.preco AS plano_preco, s.nome AS plano_nome
+//        FROM agenda_frota f
+//        LEFT JOIN agenda_servicos s ON s.id = f.plano_id
+//        WHERE f.id=$1 AND f.establishment_id=$2`,
+//       [req.params.id, eid]
+//     );
+//     if (!veh.rows.length) return res.status(404).json({ error: 'Veículo não encontrado.' });
+//     const v = veh.rows[0];
+//     if (!v.plano_id || !v.plano_preco) return res.status(422).json({ error: 'Veículo sem plano de mensalidade vinculado.' });
+//
+//     const competencia = new Date().toISOString().slice(0, 7); // YYYY-MM
+//
+//     let charge = (await pool.query(
+//       `SELECT * FROM agenda_frota_charges WHERE agenda_frota_id=$1 AND competencia=$2`,
+//       [v.id, competencia]
+//     )).rows[0];
+//
+//     if (!charge) {
+//       charge = (await pool.query(
+//         `INSERT INTO agenda_frota_charges (agenda_frota_id, establishment_id, competencia, valor)
+//          VALUES ($1,$2,$3,$4) RETURNING *`,
+//         [v.id, eid, competencia, v.plano_preco]
+//       )).rows[0];
+//     } else if (charge.status === 'paid') {
+//       return res.json({ already_paid: true, charge });
+//     }
+//
+//     const pix = await generateFrotaPix(eid, charge.id, parseFloat(v.plano_preco), v.cliente_nome || 'Cliente', undefined);
+//     if (!pix) return res.status(422).json({ error: 'Nenhum método de pagamento configurado (Asaas, Mercado Pago ou PIX manual). Configure em Configurações → Pagamentos.' });
+//
+//     await pool.query(
+//       `UPDATE agenda_frota_charges SET pix_code=$1, pix_provider=$2, asaas_payment_id=$3 WHERE id=$4`,
+//       [pix.code, pix.provider, pix.provider_payment_id || null, charge.id]
+//     );
+//
+//     res.json({ charge, pix, cliente_telefone: v.cliente_telefone, cliente_nome: v.cliente_nome, plano_nome: v.plano_nome });
+//   } catch (err: any) { res.status(500).json({ error: err.message }); }
+// });
 
 // GET /agenda/frota-cobrancas — histórico de cobranças da empresa.
 //
@@ -1567,7 +1576,11 @@ export async function findOrCreateClienteUser(nome: string, telefone?: string | 
 router.post('/clientes', async (req, res) => {
   try {
     const eid = estabId(req);
-    const { nome, telefone, email, cpf_cnpj, observacoes } = req.body;
+    // Fix de produção 32 — data de nascimento e contato de emergência (nome+
+    // telefone) já existiam no formulário de lead da landing (Fix 10), mas o
+    // cadastro manual rápido de cliente (esse aqui) nunca coletava — o Carlos
+    // pediu pra igualar.
+    const { nome, telefone, email, cpf_cnpj, observacoes, data_nascimento, contato_emergencia_nome, contato_emergencia_telefone } = req.body;
     if (!nome?.trim()) return res.status(400).json({ error: 'nome é obrigatório.' });
 
     let asaasCustomerId: string | null = null;
@@ -1581,9 +1594,12 @@ router.post('/clientes', async (req, res) => {
     const userId = await findOrCreateClienteUser(nome.trim(), telefone, email);
 
     const r = await pool.query(
-      `INSERT INTO agenda_clientes (establishment_id, nome, telefone, email, cpf_cnpj, asaas_customer_id, observacoes, origem, user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8) RETURNING *`,
-      [eid, nome.trim(), telefone || null, email || null, cpf_cnpj || null, asaasCustomerId, observacoes || null, userId]
+      `INSERT INTO agenda_clientes
+         (establishment_id, nome, telefone, email, cpf_cnpj, asaas_customer_id, observacoes, origem, user_id,
+          data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11) RETURNING *`,
+      [eid, nome.trim(), telefone || null, email || null, cpf_cnpj || null, asaasCustomerId, observacoes || null, userId,
+       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null]
     );
     res.status(201).json({ ...r.rows[0], asaas_sincronizado: !!asaasCustomerId, login_disponivel: !!userId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -1593,7 +1609,7 @@ router.post('/clientes', async (req, res) => {
 router.put('/clientes/:id', async (req, res) => {
   try {
     const eid = estabId(req);
-    const { nome, telefone, email, cpf_cnpj, observacoes } = req.body;
+    const { nome, telefone, email, cpf_cnpj, observacoes, data_nascimento, contato_emergencia_nome, contato_emergencia_telefone } = req.body;
 
     const atual = await pool.query(`SELECT nome, user_id FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
     if (!atual.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
@@ -1605,9 +1621,11 @@ router.put('/clientes/:id', async (req, res) => {
     }
 
     const r = await pool.query(
-      `UPDATE agenda_clientes SET nome=COALESCE($1,nome), telefone=$2, email=$3, cpf_cnpj=$4, observacoes=$5, user_id=$6, updated_at=NOW()
-       WHERE id=$7 AND establishment_id=$8 RETURNING *`,
-      [nome || null, telefone || null, email || null, cpf_cnpj || null, observacoes || null, userId, req.params.id, eid]
+      `UPDATE agenda_clientes SET nome=COALESCE($1,nome), telefone=$2, email=$3, cpf_cnpj=$4, observacoes=$5, user_id=$6,
+         data_nascimento=$7, contato_emergencia_nome=$8, contato_emergencia_telefone=$9, updated_at=NOW()
+       WHERE id=$10 AND establishment_id=$11 RETURNING *`,
+      [nome || null, telefone || null, email || null, cpf_cnpj || null, observacoes || null, userId,
+       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null, req.params.id, eid]
     );
     res.json(r.rows[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -1616,6 +1634,18 @@ router.put('/clientes/:id', async (req, res) => {
 // PUT /agenda/clientes/:id/recorrencia — liga/desliga e configura a
 // mensalidade fixa do cliente (Fase 14), separado do PUT genérico acima pra
 // não misturar dados cadastrais com configuração financeira.
+//
+// Fix de produção 32 — antes disso, ativar a recorrência só AGENDAVA: a
+// primeira cobrança de verdade (PIX no Asaas + aviso por WhatsApp) só saía
+// no dia configurado, via job diário (gerarCobrancasRecorrentesClientes,
+// trackingBillingJob.ts) — por isso a seção "Cobranças" ficava vazia na hora
+// de salvar, e o Carlos achou que parecia quebrado. O Carlos confirmou que
+// prefere gerar a 1ª cobrança JÁ, na hora de ativar (as próximas continuam
+// saindo automaticamente todo mês pelo job de sempre). Só dispara nessa
+// transição desativado→ativado — só editar valor/dia/descrição com a
+// recorrência já ativa não gera cobrança nova (evitaria cobrar 2x no mesmo
+// mês sem querer; o `ON CONFLICT (cliente_id, competencia)` do job também
+// protege contra duplicidade, mas aqui nem chega a tentar).
 router.put('/clientes/:id/recorrencia', async (req, res) => {
   try {
     const eid = estabId(req);
@@ -1624,14 +1654,71 @@ router.put('/clientes/:id/recorrencia', async (req, res) => {
       if (!valor_recorrente || Number(valor_recorrente) <= 0) return res.status(400).json({ error: 'Informe um valor válido pra ativar a recorrência.' });
       if (!dia_cobranca_recorrente || dia_cobranca_recorrente < 1 || dia_cobranca_recorrente > 28) return res.status(400).json({ error: 'Dia de cobrança deve ser entre 1 e 28.' });
     }
+
+    const antes = await pool.query(`SELECT recorrencia_ativa FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    if (!antes.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    const estavaAtiva = !!antes.rows[0].recorrencia_ativa;
+
     const r = await pool.query(
       `UPDATE agenda_clientes SET
          recorrencia_ativa=$1, valor_recorrente=$2, dia_cobranca_recorrente=$3, descricao_recorrente=$4, updated_at=NOW()
        WHERE id=$5 AND establishment_id=$6 RETURNING *`,
       [!!recorrencia_ativa, valor_recorrente || null, dia_cobranca_recorrente || null, descricao_recorrente || null, req.params.id, eid]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
-    res.json(r.rows[0]);
+    let cliente = r.rows[0];
+    let primeiraCobranca: any = null;
+
+    if (recorrencia_ativa && !estavaAtiva) {
+      try {
+        if (!cliente.asaas_customer_id) {
+          const created = await createAsaasCustomer(eid, { name: cliente.nome, phone: cliente.telefone, email: cliente.email, cpfCnpj: cliente.cpf_cnpj });
+          await pool.query(`UPDATE agenda_clientes SET asaas_customer_id=$1, updated_at=NOW() WHERE id=$2`, [created.id, cliente.id]);
+          cliente = { ...cliente, asaas_customer_id: created.id };
+        }
+
+        const { payment, pixPayload } = await createAsaasPixCharge(eid, {
+          customerId: cliente.asaas_customer_id,
+          value: Number(valor_recorrente),
+          description: descricao_recorrente || `Mensalidade — ${cliente.nome}`,
+        });
+
+        const competencia = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const vaiAvisar = !!(cliente.telefone && (pixPayload || payment.invoiceUrl));
+        const inserted = await pool.query(
+          `INSERT INTO agenda_cliente_asaas_cache
+             (cliente_id, establishment_id, tipo, asaas_id, valor, status, vencimento, descricao, invoice_url, pix_payload, competencia, lembrete_enviado, invoice_number)
+           VALUES ($1,$2,'payment',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           ON CONFLICT (cliente_id, competencia) WHERE competencia IS NOT NULL DO NOTHING
+           RETURNING *`,
+          [cliente.id, eid, payment.id, payment.value, payment.status, payment.dueDate, payment.description || null,
+           payment.invoiceUrl || null, pixPayload || null, competencia, vaiAvisar, payment.invoiceNumber || null]
+        );
+        primeiraCobranca = inserted.rows[0] || null;
+
+        if (vaiAvisar) {
+          const estRow = await pool.query(`SELECT business_config FROM establishments WHERE id=$1`, [eid]);
+          const bc = estRow.rows[0]?.business_config || {};
+          const vencimentoLabel = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const dados: DadosMensagemCobranca = {
+            nome: cliente.nome, valor: Number(valor_recorrente), descricao: descricao_recorrente,
+            vencimentoLabel, faturaNumero: payment.invoiceNumber, pixPayload, invoiceUrl: payment.invoiceUrl,
+          };
+          const msgs = montarMensagensCobranca(bc.mensagem_cobranca_template, dados, !!bc.cobranca_pix_separado);
+          for (let i = 0; i < msgs.length; i++) {
+            if (i > 0) await new Promise(resolve => setTimeout(resolve, 1500));
+            await sendWhatsAppMessage(eid, cliente.telefone, msgs[i]).catch(() => {});
+          }
+        }
+      } catch (cobrancaErr: any) {
+        // Recorrência já foi ativada e salva — só a 1ª cobrança falhou (ex:
+        // Asaas não configurado). Não desfaz a ativação: as próximas
+        // tentativas continuam saindo pelo job diário normalmente.
+        console.error(`[clientes] falha ao gerar 1ª cobrança da recorrência (cliente ${cliente.id}):`, cobrancaErr.message);
+        return res.json({ ...cliente, aviso_1a_cobranca: `Recorrência ativada, mas a 1ª cobrança falhou: ${cobrancaErr.message}. A próxima tentativa será automática, no dia configurado.` });
+      }
+    }
+
+    res.json({ ...cliente, primeira_cobranca: primeiraCobranca });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

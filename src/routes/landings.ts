@@ -758,6 +758,28 @@ router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res)
   }
 });
 
+// Fix de produção 32 — o Carlos pediu opção de excluir lead, igual já existe
+// pro CRM interno da Frota (agenda_frota_leads). Bloqueia exclusão de lead
+// que já assinou o Termo de Adesão (aceite_em preenchido) — é o comprovante
+// do aceite eletrônico do cliente, apagar isso perderia o registro/prova; se
+// o cliente já virou cliente de verdade e quer sumir da lista, o jeito é
+// excluir o CLIENTE (que continua intacto — a exclusão do lead não mexe nele
+// de qualquer forma, já que é `landing_leads.cliente_id` apontando pra
+// `agenda_clientes`, nunca o contrário).
+router.delete('/admin/landing-leads/:id', requireAdmin, async (req, res) => {
+  try {
+    const lead = await pool.query(`SELECT aceite_em FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (lead.rows[0].aceite_em) {
+      return res.status(409).json({ error: 'Esse lead já assinou o Termo de Adesão — excluir apagaria o comprovante do aceite. Se o cliente não deve mais aparecer, exclua o cadastro dele em Clientes.' });
+    }
+    await pool.query(`DELETE FROM landing_leads WHERE id=$1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────
 // Leads pelo painel da própria loja — Fix de produção 16. O Carlos apontou
 // que os leads da landing do Rastreamento só apareciam no painel do
@@ -811,6 +833,27 @@ router.post('/lojista/landing-leads/:id/converter', requireAuth, requireRole('LO
     }
     const result = await convertLandingLead(req.params.id);
     res.json(result);
+  } catch (err: any) {
+    handleUpsertError(err, res);
+  }
+});
+
+// DELETE /lojista/landing-leads/:id — mesma trava do lado do SuperAdmin
+// (bloqueia lead com Termo de Adesão já assinado), mais a checagem de sempre
+// de que o lead pedido é da própria vertical (nunca de outro módulo).
+router.delete('/lojista/landing-leads/:id', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const lead = await pool.query(`SELECT vertical_slug, aceite_em FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!lead.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (lead.rows[0].vertical_slug !== verticalSlug) {
+      return res.status(403).json({ error: 'Esse lead não é do seu módulo.' });
+    }
+    if (lead.rows[0].aceite_em) {
+      return res.status(409).json({ error: 'Esse lead já assinou o Termo de Adesão — excluir apagaria o comprovante do aceite. Se o cliente não deve mais aparecer, exclua o cadastro dele em Clientes.' });
+    }
+    await pool.query(`DELETE FROM landing_leads WHERE id=$1`, [req.params.id]);
+    res.json({ success: true });
   } catch (err: any) {
     handleUpsertError(err, res);
   }
