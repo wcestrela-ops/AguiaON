@@ -597,7 +597,11 @@ router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /admin/landing-leads/:id/converter — marca o lead como convertido.
+// Extraído da rota (Fix de produção 16) pra ser reaproveitado tanto pelo
+// SuperAdmin (POST /admin/landing-leads/:id/converter, sem restrição) quanto
+// pelo painel da própria loja (POST /lojista/landing-leads/:id/converter,
+// restrito ao próprio módulo — ver mais abaixo). Marca o lead como
+// convertido.
 //
 // Regra geral (Delivery, Agenda etc., módulos multiloja): a criação da loja
 // de verdade continua pelo fluxo já existente no painel (criar nova loja) —
@@ -615,82 +619,143 @@ router.get('/admin/landing-leads', requireAdmin, async (req, res) => {
 // senha" no primeiro acesso. Dados de veículo (placa, modelo, ano, cor) são
 // específicos do formulário do Rastreamento — viram um agenda_frota só nesse
 // caso; um módulo de serviço único diferente não teria esses campos.
+async function convertLandingLead(leadId: string) {
+  const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [leadId]);
+  if (!leadRes.rows.length) throw new LandingUpsertError(404, 'Lead não encontrado.');
+  const lead = leadRes.rows[0];
+
+  if (lead.cliente_id) {
+    throw new LandingUpsertError(400, 'Esse lead já foi convertido em cliente.');
+  }
+
+  let clienteId: string | null = null;
+  let loginDisponivel = false;
+
+  if (isServicoUnico(lead.vertical_slug)) {
+    // Garante que agenda_clientes (e o CHECK de origem atualizado) já
+    // existam — essa migração normalmente só roda no primeiro request a
+    // /agenda/*, e essa rota não passa por lá.
+    await ensureAgendaTables();
+
+    // A loja desse módulo é achada pelo próprio vertical_slug (um módulo
+    // "serviço único" só tem uma, por definição) — não por um slug de loja
+    // fixo no código, o que deixa isso pronto pra qualquer módulo futuro
+    // marcado como serviço único, sem precisar tocar nesse arquivo de novo.
+    const estab = await pool.query(
+      `SELECT id FROM establishments WHERE vertical_slug=$1 ORDER BY created_at ASC LIMIT 1`,
+      [lead.vertical_slug]
+    );
+    if (!estab.rows.length) {
+      throw new LandingUpsertError(500, `Nenhuma loja encontrada pro módulo "${lead.vertical_slug}". Confirme se a loja única desse módulo já foi criada antes de converter.`);
+    }
+    const eid = estab.rows[0].id;
+
+    const userId = await findOrCreateClienteUser(lead.nome, lead.whatsapp, lead.email);
+    loginDisponivel = !!userId;
+
+    const clienteRes = await pool.query(
+      `INSERT INTO agenda_clientes
+         (establishment_id, nome, telefone, email, cpf_cnpj, observacoes, origem, user_id,
+          endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
+          data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
+       VALUES ($1,$2,$3,$4,$5,$6,'landing_modulo',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       RETURNING id`,
+      [
+        eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null,
+        lead.empresa ? `Empresa: ${lead.empresa}` : null, userId,
+        lead.endereco_cep || null, lead.endereco_rua || null, lead.endereco_numero || null,
+        lead.endereco_bairro || null, lead.endereco_cidade || null, lead.endereco_estado || null,
+        lead.data_nascimento || null, lead.contato_emergencia_nome || null, lead.contato_emergencia_telefone || null,
+      ]
+    );
+    clienteId = clienteRes.rows[0].id;
+
+    // Veículo — específico do formulário do Rastreamento (placa/modelo/
+    // ano/cor não existem no formulário de outro módulo de serviço único).
+    // Só cria se algum dado veio preenchido (placa é opcional de propósito:
+    // às vezes o cliente ainda não tem placa/rastreador instalado).
+    if (lead.vertical_slug === 'rastreamento' && (lead.veiculo_placa || lead.veiculo_modelo || lead.veiculo_ano || lead.veiculo_cor)) {
+      const anoNum = lead.veiculo_ano ? parseInt(lead.veiculo_ano, 10) : null;
+      await pool.query(
+        `INSERT INTO agenda_frota (establishment_id, cliente_id, cliente_nome, cliente_telefone, placa, modelo, ano, cor, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ativo')`,
+        [eid, clienteId, lead.nome, lead.whatsapp || null, lead.veiculo_placa || null, lead.veiculo_modelo || null,
+         Number.isFinite(anoNum) ? anoNum : null, lead.veiculo_cor || null]
+      );
+    }
+  }
+
+  const r = await pool.query(
+    `UPDATE landing_leads SET status='convertido', cliente_id=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
+    [clienteId, leadId]
+  );
+  return { ...r.rows[0], login_disponivel: loginDisponivel };
+}
+
 router.post('/admin/landing-leads/:id/converter', requireAdmin, async (req, res) => {
   try {
-    const leadRes = await pool.query(`SELECT * FROM landing_leads WHERE id=$1`, [req.params.id]);
-    if (!leadRes.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
-    const lead = leadRes.rows[0];
-
-    if (lead.cliente_id) {
-      return res.status(400).json({ error: 'Esse lead já foi convertido em cliente.' });
-    }
-
-    let clienteId: string | null = null;
-    let loginDisponivel = false;
-
-    if (isServicoUnico(lead.vertical_slug)) {
-      // Garante que agenda_clientes (e o CHECK de origem atualizado) já
-      // existam — essa migração normalmente só roda no primeiro request a
-      // /agenda/*, e essa rota não passa por lá.
-      await ensureAgendaTables();
-
-      // A loja desse módulo é achada pelo próprio vertical_slug (um módulo
-      // "serviço único" só tem uma, por definição) — não por um slug de loja
-      // fixo no código, o que deixa isso pronto pra qualquer módulo futuro
-      // marcado como serviço único, sem precisar tocar nesse arquivo de novo.
-      const estab = await pool.query(
-        `SELECT id FROM establishments WHERE vertical_slug=$1 ORDER BY created_at ASC LIMIT 1`,
-        [lead.vertical_slug]
-      );
-      if (!estab.rows.length) {
-        return res.status(500).json({
-          error: `Nenhuma loja encontrada pro módulo "${lead.vertical_slug}". Confirme se a loja única desse módulo já foi criada antes de converter.`,
-        });
-      }
-      const eid = estab.rows[0].id;
-
-      const userId = await findOrCreateClienteUser(lead.nome, lead.whatsapp, lead.email);
-      loginDisponivel = !!userId;
-
-      const clienteRes = await pool.query(
-        `INSERT INTO agenda_clientes
-           (establishment_id, nome, telefone, email, cpf_cnpj, observacoes, origem, user_id,
-            endereco_cep, endereco_rua, endereco_numero, endereco_bairro, endereco_cidade, endereco_estado,
-            data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
-         VALUES ($1,$2,$3,$4,$5,$6,'landing_modulo',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-         RETURNING id`,
-        [
-          eid, lead.nome, lead.whatsapp || null, lead.email || null, lead.cpf_cnpj || null,
-          lead.empresa ? `Empresa: ${lead.empresa}` : null, userId,
-          lead.endereco_cep || null, lead.endereco_rua || null, lead.endereco_numero || null,
-          lead.endereco_bairro || null, lead.endereco_cidade || null, lead.endereco_estado || null,
-          lead.data_nascimento || null, lead.contato_emergencia_nome || null, lead.contato_emergencia_telefone || null,
-        ]
-      );
-      clienteId = clienteRes.rows[0].id;
-
-      // Veículo — específico do formulário do Rastreamento (placa/modelo/
-      // ano/cor não existem no formulário de outro módulo de serviço único).
-      // Só cria se algum dado veio preenchido (placa é opcional de propósito:
-      // às vezes o cliente ainda não tem placa/rastreador instalado).
-      if (lead.vertical_slug === 'rastreamento' && (lead.veiculo_placa || lead.veiculo_modelo || lead.veiculo_ano || lead.veiculo_cor)) {
-        const anoNum = lead.veiculo_ano ? parseInt(lead.veiculo_ano, 10) : null;
-        await pool.query(
-          `INSERT INTO agenda_frota (establishment_id, cliente_id, cliente_nome, cliente_telefone, placa, modelo, ano, cor, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ativo')`,
-          [eid, clienteId, lead.nome, lead.whatsapp || null, lead.veiculo_placa || null, lead.veiculo_modelo || null,
-           Number.isFinite(anoNum) ? anoNum : null, lead.veiculo_cor || null]
-        );
-      }
-    }
-
-    const r = await pool.query(
-      `UPDATE landing_leads SET status='convertido', cliente_id=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
-      [clienteId, req.params.id]
-    );
-    res.json({ ...r.rows[0], login_disponivel: loginDisponivel });
+    const result = await convertLandingLead(req.params.id);
+    res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    handleUpsertError(err, res);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// Leads pelo painel da própria loja — Fix de produção 16. O Carlos apontou
+// que os leads da landing do Rastreamento só apareciam no painel do
+// SuperAdmin ("Ver Leads" em Módulos & Segmentos) — pro módulo que já ganhou
+// aba própria pra editar a landing (Fix 11/12), fazia sentido ver e
+// converter os leads dali também, sem precisar entrar como SuperAdmin.
+// Mesma restrição de sempre: só módulos "serviço único", e o vertical_slug
+// vem do próprio estabelecimento (ou do impersonado, se SUPERADMIN via
+// resolveLojistaEstablishmentId) — nunca de um parâmetro livre, pra um
+// lojista não conseguir listar/converter lead de outro módulo.
+// ─────────────────────────────────────────────────────────────
+
+async function resolveLojistaVerticalSlug(req: Request): Promise<string> {
+  const eid = resolveLojistaEstablishmentId(req);
+  if (!eid) throw new LandingUpsertError(403, 'Sem estabelecimento no token.');
+  const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
+  const verticalSlug = estab.rows[0]?.vertical_slug;
+  if (!isServicoUnico(verticalSlug)) {
+    throw new LandingUpsertError(403, 'Ver/converter leads pelo painel da loja só está disponível pra módulos de serviço único.');
+  }
+  return verticalSlug;
+}
+
+// GET /lojista/landing-leads — mesma listagem de /admin/landing-leads, mas
+// sempre filtrada pelo vertical_slug da própria loja (ignora qualquer filtro
+// vindo da query — segurança, não conveniência).
+router.get('/lojista/landing-leads', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const { status } = req.query;
+    const conds = ['vertical_slug=$1'];
+    const params: any[] = [verticalSlug];
+    if (status) { params.push(status); conds.push(`status=$${params.length}`); }
+    const r = await pool.query(`SELECT * FROM landing_leads WHERE ${conds.join(' AND ')} ORDER BY created_at DESC`, params);
+    res.json(r.rows);
+  } catch (err: any) {
+    handleUpsertError(err, res);
+  }
+});
+
+// POST /lojista/landing-leads/:id/converter — mesma conversão de sempre
+// (convertLandingLead), só que confere antes que o lead pedido é mesmo do
+// módulo da própria loja (ou impersonada).
+router.post('/lojista/landing-leads/:id/converter', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
+  try {
+    const verticalSlug = await resolveLojistaVerticalSlug(req);
+    const leadCheck = await pool.query(`SELECT vertical_slug FROM landing_leads WHERE id=$1`, [req.params.id]);
+    if (!leadCheck.rows.length) return res.status(404).json({ error: 'Lead não encontrado.' });
+    if (leadCheck.rows[0].vertical_slug !== verticalSlug) {
+      return res.status(403).json({ error: 'Esse lead não é do seu módulo.' });
+    }
+    const result = await convertLandingLead(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    handleUpsertError(err, res);
   }
 });
 

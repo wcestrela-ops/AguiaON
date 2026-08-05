@@ -1590,6 +1590,9 @@
           <h2 class="text-xl font-black text-white">Landing Page</h2>
           <p class="text-slate-500 text-sm">Página de marketing do módulo de Rastreamento — edite o conteúdo, o endereço público e o termo de adesão daqui.</p>
         </div>
+        <button onclick="ljOpenLeadsModal()" class="border border-slate-700 hover:border-[var(--accent)] text-slate-300 hover:text-white px-4 py-2 rounded-xl font-black text-xs uppercase transition-all shrink-0">
+          <i class="fa fa-users mr-1.5"></i>Ver Leads
+        </button>
       </div>
 
       <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 space-y-6">
@@ -1658,6 +1661,21 @@
           <button onclick="ljSaveLanding()" class="flex-1 bg-[var(--accent)] hover:opacity-90 text-white py-3 rounded-xl font-black text-xs uppercase transition-all">
             <i class="fa fa-save mr-2"></i>Salvar
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL LEADS DA LANDING (Fix de produção 16) -->
+    <div id="lj-leads-modal" class="hidden fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="sticky top-0 bg-slate-900 border-b border-slate-800 px-8 py-5 flex justify-between items-center rounded-t-[2.5rem] z-10">
+          <h3 class="text-white font-black text-xl">Leads da Landing Page</h3>
+          <button onclick="document.getElementById('lj-leads-modal').classList.add('hidden')" class="text-slate-500 hover:text-white w-8 h-8 flex items-center justify-center">
+            <i class="fa-solid fa-times"></i>
+          </button>
+        </div>
+        <div class="p-8">
+          <div id="lj-leads-list" class="space-y-3"></div>
         </div>
       </div>
     </div>
@@ -6398,6 +6416,67 @@ async function ljSaveLanding() {
 function ljPreviewLanding() {
     if (!ljLandingVerticalSlug) return;
     window.open(`/landing.html?preview_slug=${encodeURIComponent(ljLandingVerticalSlug)}`, '_blank');
+}
+
+// Leads da landing pelo painel da loja (Fix de produção 16) — mesma listagem
+// que o SuperAdmin já tinha, só que sempre restrita ao próprio módulo (o
+// backend confere isso, aqui é só consumo).
+async function ljOpenLeadsModal() {
+    document.getElementById('lj-leads-modal').classList.remove('hidden');
+    const list = document.getElementById('lj-leads-list');
+    list.innerHTML = '<p class="text-slate-500 text-center py-8"><i class="fa fa-spinner fa-spin"></i></p>';
+    try {
+        const leads = await api('/lojista/landing-leads');
+        if (!leads.length) { list.innerHTML = '<p class="text-slate-600 text-center py-8">Nenhum lead ainda.</p>'; return; }
+
+        const statusColor = { novo: 'text-orange-400', aceito: 'text-emerald-400', convertido: 'text-indigo-400', cancelado: 'text-slate-600' };
+        list.innerHTML = leads.map(l => `
+            <div class="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-2">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-white font-bold text-sm">${l.nome}${l.empresa ? ' — ' + l.empresa : ''}</p>
+                        <p class="text-slate-500 text-xs">${l.plano_nome ? 'plano ' + l.plano_nome + ' · ' : ''}${new Date(l.created_at).toLocaleDateString('pt-BR')}</p>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-widest ${statusColor[l.status]||''}">${l.status}</span>
+                </div>
+                <div class="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                    ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
+                    ${l.email ? `<span><i class="fa fa-envelope mr-1"></i>${l.email}</span>` : ''}
+                    ${l.cpf_cnpj ? `<span><i class="fa fa-id-card mr-1"></i>${l.cpf_cnpj}</span>` : ''}
+                    ${l.data_nascimento ? `<span><i class="fa fa-cake-candles mr-1"></i>${new Date(l.data_nascimento).toLocaleDateString('pt-BR')}</span>` : ''}
+                </div>
+                ${(l.veiculo_placa || l.veiculo_modelo || l.veiculo_ano || l.veiculo_cor) ? `
+                    <p class="text-slate-400 text-[11px]"><i class="fa fa-car mr-1"></i>${[l.veiculo_placa, l.veiculo_modelo, l.veiculo_ano, l.veiculo_cor].filter(Boolean).join(' · ') || 'Sem dados do veículo'}</p>
+                ` : ''}
+                ${(l.endereco_rua || l.endereco_cidade) ? `
+                    <p class="text-slate-400 text-[11px]"><i class="fa fa-location-dot mr-1"></i>${[
+                        [l.endereco_rua, l.endereco_numero].filter(Boolean).join(', '),
+                        l.endereco_bairro, l.endereco_cidade, l.endereco_estado, l.endereco_cep,
+                    ].filter(Boolean).join(' · ')}</p>
+                ` : ''}
+                ${(l.contato_emergencia_nome || l.contato_emergencia_telefone) ? `
+                    <p class="text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
+                ` : ''}
+                ${l.status === 'aceito' ? `
+                    <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
+                    <button onclick="ljConverterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>
+                ` : ''}
+            </div>`).join('');
+    } catch (e) {
+        list.innerHTML = `<p class="text-red-400">${e.message}</p>`;
+    }
+}
+
+async function ljConverterLead(id) {
+    try {
+        const data = await api(`/lojista/landing-leads/${id}/converter`, { method: 'POST' });
+        if (data.cliente_id) {
+            alert(data.login_disponivel
+                ? '✅ Cliente criado. Ele já pode logar (usando "Esqueci minha senha" no primeiro acesso) e o veículo pode ser cadastrado na aba Clientes.'
+                : '✅ Cliente criado, mas já existia uma conta com esse WhatsApp/e-mail em outro papel — login não vinculado automaticamente.');
+        }
+        ljOpenLeadsModal();
+    } catch (e) { alert('❌ ' + e.message); }
 }
 
 // ════════ CATÁLOGO UNIVERSAL ════════

@@ -571,3 +571,23 @@ Pedido do Carlos: o header do painel da loja já tem um botão "Ver Loja" (abre 
 `public/loja.html`: novo botão `#btn-ver-landing`, ao lado do `#btn-ver-loja` no header, escondido por padrão (`class="hidden ..."`, sem `flex` estático — evita o conflito de ter `hidden` e `flex` na mesma tag ao mesmo tempo; o JS adiciona `flex items-center` explicitamente ao exibir). Só aparece pra módulos "serviço único" (`establishment.modelo_negocio === 'servico_unico'`, o mesmo campo do Fix 12) — em `init()`, faz um `GET /lojista/landing` (a mesma rota da aba, reaproveitada) e, se existir uma landing pra esse módulo: aponta o `href` pro endereço público real (`aguiaon.com/slug` ou `slug.aguiaon.com`, igual ao domínio calculado no editor) se já estiver publicada, ou pra pré-visualização (`/landing.html?preview_slug=...`, mesma que o botão "Visualizar" da aba) se ainda for rascunho — com o `title` avisando "rascunho — ainda não publicada" nesse caso. Se não existir nenhuma landing criada ainda pro módulo, o botão continua escondido.
 
 Verificação: `loja.html` reconferido via `new Function()` em todos os `<script>` (OK, comentários HTML removidos antes do parse pra evitar o falso positivo já visto no Fix 13). Conferido que `id="btn-ver-landing"` aparece uma vez no HTML e uma vez em `getElementById` no JS. Não testado contra o ambiente real — depende do próximo deploy.
+
+## Fix de produção 16 — leads da landing acessíveis pelo painel da loja (não só pelo SuperAdmin)
+
+Pedido do Carlos: os leads capturados pela landing do Rastreamento só apareciam no botão "Ver Leads" do painel do SuperAdmin (`/admin/landing-leads`) — como o módulo já ganhou aba própria no painel da loja (Fix 11/12), fazia sentido ver e converter os leads dali também, sem precisar entrar como SuperAdmin.
+
+`src/routes/landings.ts`: a lógica de conversão que estava só dentro de `POST /admin/landing-leads/:id/converter` foi extraída pra uma função `convertLandingLead(leadId)` (lança `LandingUpsertError` nos casos de erro, mesmo padrão já usado pelo upsert da landing — tratado por `handleUpsertError`), reaproveitada por duas rotas novas:
+- `GET /lojista/landing-leads` — mesma listagem do admin, mas o `vertical_slug` do filtro vem sempre do próprio estabelecimento resolvido por `resolveLojistaEstablishmentId(req)` (ou do impersonado, se SUPERADMIN) — nunca de um parâmetro livre da query, então um lojista não tem como listar lead de outro módulo. Também confere `isServicoUnico()` antes, com o mesmo 403 já usado em `/lojista/landing`.
+- `POST /lojista/landing-leads/:id/converter` — mesma checagem, mais uma conferência extra: o `vertical_slug` do lead pedido precisa bater com o da própria loja, senão 403 ("Esse lead não é do seu módulo").
+
+`public/loja.html`: botão "Ver Leads" na aba Landing Page (ao lado do título), modal `#lj-leads-modal` e funções `ljOpenLeadsModal()`/`ljConverterLead(id)` — cópia do modal/lógica que já existia em `admin.html`, só trocando os endpoints pros `/lojista/...` novos.
+
+O `GET/POST /admin/landing-leads...` do SuperAdmin continuam existindo do jeito que estavam — essa mudança soma um caminho novo, não tira o antigo.
+
+Verificação: `landings.ts` reconferido via `ts.transpileModule` (OK, 0 diagnósticos); `loja.html` reconferido via parse de `<script>` com comentários HTML removidos (OK, 0 erros). Não testado contra o ambiente real — depende do próximo deploy.
+
+### Sobre o e-mail do Termo de Adesão não estar saindo
+
+O Carlos também reportou que o botão "Continuar no WhatsApp" (Fix 10) está funcionando, mas a cópia por e-mail do Termo de Adesão não está chegando. Reconferi a função `enviarCopiaTermoPorEmail` (adicionada no Fix 10) e ela não tem bug óbvio — segue exatamente o mesmo padrão de SMTP já usado em outros lugares do sistema (`otp_service.ts`, `gymExpiryJob.ts`), lendo `smtp_host`/`smtp_port`/`smtp_user`/`smtp_pass`/`smtp_from` da tabela `global_settings`, e os ids desses campos em `admin.html` (aba "Infra Geral" → "Configurações Globais") batem certinho com o que a função lê. A função é "silenciosa": se o SMTP não estiver configurado (ou as credenciais estiverem erradas), ela não trava o fluxo de aceite — só deixa de mandar o e-mail e loga o erro no servidor, sem avisar o usuário.
+
+Suspeita mais provável: SMTP não configurado ou com credencial inválida em Configurações Globais, não um bug de código. Não consigo confirmar isso sem acesso ao banco/logs de produção — o caminho mais rápido é o Carlos usar o botão "Testar configuração" que já existe nessa mesma aba (chama `/admin/test-config`); se esse teste falhar, o problema é a config SMTP; se passar, o próximo passo seria eu olhar os logs do servidor no momento em que um lead aceita o termo, pra ver a mensagem de erro exata do nodemailer.
