@@ -141,6 +141,14 @@
       <i class="fa fa-store"></i>
       <span class="hidden sm:inline">Ver Loja</span>
     </a>
+    <!-- Só aparece pra módulos "serviço único" (Fix de produção 11/12) —
+         preenchido/mostrado em init(), via GET /lojista/landing. -->
+    <a id="btn-ver-landing" href="#" target="_blank"
+       class="hidden gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-700/40 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+       title="Ver landing page">
+      <i class="fa fa-window-restore"></i>
+      <span class="hidden sm:inline">Ver Landing Page</span>
+    </a>
     <button onclick="logout()" class="text-slate-500 hover:text-red-400 text-sm"><i class="fa fa-sign-out-alt"></i></button>
   </div>
 </header>
@@ -3624,6 +3632,27 @@ async function init() {
     if (me.slug) {
       const btnLoja = document.getElementById('btn-ver-loja');
       if (btnLoja) btnLoja.href = `${window.location.origin}/${me.slug}`;
+    }
+
+    // "Ver Landing Page" — só pra módulos "serviço único" (o Rastreamento,
+    // por ora). Aponta pro endereço público se já estiver publicada, ou pra
+    // pré-visualização (mesma que o botão "Visualizar" da aba Landing Page)
+    // se ainda não tiver domínio/publicação configurados.
+    if (me.modelo_negocio === 'servico_unico') {
+      try {
+        const landingData = await api('/lojista/landing');
+        const l = landingData.landing;
+        const btnLanding = document.getElementById('btn-ver-landing');
+        if (btnLanding && l) {
+          const publicUrl = l.published && l.domain_value
+            ? (l.domain_mode === 'subdomain' ? `https://${l.domain_value}.aguiaon.com` : `${window.location.origin}/${l.domain_value}`)
+            : `${window.location.origin}/landing.html?preview_slug=${encodeURIComponent(landingData.vertical_slug)}`;
+          btnLanding.href = publicUrl;
+          btnLanding.title = l.published ? 'Ver landing page' : 'Ver landing page (rascunho — ainda não publicada)';
+          btnLanding.classList.remove('hidden');
+          btnLanding.classList.add('flex', 'items-center');
+        }
+      } catch (e) { console.warn('[landing] não foi possível carregar pro botão do header:', e.message); }
     }
 
     // Popula formulários de Settings globais

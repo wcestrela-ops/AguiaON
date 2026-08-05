@@ -321,17 +321,34 @@ function isServicoUnico(verticalSlug: string | undefined): boolean {
   return bp?.modelo_negocio === 'servico_unico';
 }
 
-// Painel da loja (LOJISTA) editando a própria landing — Fix de produção 11.
-// Carlos: o Rastreamento não tem "Catálogo" (não é um negócio de produto),
-// então em vez de deixar essa aba genérica lá sem sentido, a loja única do
-// módulo ganha uma aba "Landing Page" no lugar, editando a própria landing
-// (vertical_slug = a da própria loja) sem passar pelo painel do SuperAdmin.
-// Restrito a módulos "serviço único" — outras verticais são multiloja, e
-// deixar qualquer lojista editar a landing (compartilhada por todas as
-// lojas daquele módulo) seria arriscado.
-router.get('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, res) => {
+// Resolve o establishment_id de quem está chamando /lojista/landing — mesmo
+// padrão do helper `estabId()` de routes/agenda/index.ts: um LOJISTA usa o
+// establishmentId do próprio token; um SUPERADMIN "visualizando como loja"
+// (painel loja.html com ?est=...) não tem establishmentId no token, então
+// manda o id explícito (query no GET, body no PUT/POST) — é assim que o
+// front (`api()` em loja.html) já se comporta pra toda rota /agenda/*, então
+// replicar aqui evita o 403 que apareceu quando o Carlos testou via
+// impersonation de SuperAdmin em vez de logar direto como lojista.
+function resolveLojistaEstablishmentId(req: Request): string {
+  const user = req.user as TokenPayload;
+  if (user.role === 'SUPERADMIN') {
+    return (req.body?.establishment_id as string) || (req.query.establishment_id as string) || '';
+  }
+  return user.establishmentId || '';
+}
+
+// Painel da loja (LOJISTA, ou SUPERADMIN visualizando como loja) editando a
+// própria landing — Fix de produção 11. Carlos: o Rastreamento não tem
+// "Catálogo" (não é um negócio de produto), então em vez de deixar essa aba
+// genérica lá sem sentido, a loja única do módulo ganha uma aba "Landing
+// Page" no lugar, editando a própria landing (vertical_slug = a da própria
+// loja) sem precisar passar pelo painel do SuperAdmin. Restrito a módulos
+// "serviço único" — outras verticais são multiloja, e deixar qualquer
+// lojista editar a landing (compartilhada por todas as lojas daquele
+// módulo) seria arriscado.
+router.get('/lojista/landing', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
   try {
-    const eid = (req.user as TokenPayload).establishmentId;
+    const eid = resolveLojistaEstablishmentId(req);
     if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
     const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
     const verticalSlug = estab.rows[0]?.vertical_slug;
@@ -348,11 +365,12 @@ router.get('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, 
 
 // PUT /lojista/landing — mesma validação/upsert do PUT /admin/landings/:vertical_slug
 // (reaproveita upsertVerticalLanding), só que o vertical_slug vem do próprio
-// estabelecimento logado, não de um parâmetro na URL — um lojista não escolhe
-// qual landing editar, só edita a da própria loja.
-router.put('/lojista/landing', requireAuth, requireRole('LOJISTA'), async (req, res) => {
+// estabelecimento logado (ou do estabelecimento impersonado, se SUPERADMIN),
+// não de um parâmetro na URL — um lojista não escolhe qual landing editar,
+// só edita a da própria loja.
+router.put('/lojista/landing', requireAuth, requireRole('LOJISTA', 'SUPERADMIN'), async (req, res) => {
   try {
-    const eid = (req.user as TokenPayload).establishmentId;
+    const eid = resolveLojistaEstablishmentId(req);
     if (!eid) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
     const estab = await pool.query(`SELECT vertical_slug FROM establishments WHERE id=$1`, [eid]);
     const verticalSlug = estab.rows[0]?.vertical_slug;
