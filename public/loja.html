@@ -107,9 +107,87 @@
     .cal-day.today { background:var(--accent); color:#fff; font-weight:700; }
     .cal-day.has-event { position:relative; }
     .cal-day.has-event::after { content:''; width:5px; height:5px; background:var(--accent); border-radius:50%; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); }
+
+    /* ─────────────────────────────────────────────────────────────
+       Fix de produção 36 — modo claro. O painel sempre foi construído
+       só pro escuro (cores fixas, sem variável de tema); em vez de
+       reescrever cada classe Tailwind usada, essa camada sobrescreve
+       (com !important, pra sempre ganhar da classe original) as cores
+       estruturais — fundo/texto/borda — quando `body` tem a classe
+       `theme-light`. Cores "semânticas" (verde/vermelho/âmbar/etc, usadas
+       em badges e status) não são tocadas — já têm contraste razoável em
+       fundo claro ou escuro. Gerado a partir de um script que varreu o
+       arquivo inteiro atrás de toda classe bg-slate-*/text-slate-*/
+       border-slate-*/text-white de fato usada, pra não sobrar nem faltar
+       nada. Persistência em localStorage — ver updateThemeIcon()/toggleTheme().
+       ───────────────────────────────────────────────────────────── */
+    body.theme-light { background:#F8FAFC !important; color:#0F172A !important; }
+    body.theme-light .card { background:#FFFFFF !important; border:1px solid #E2E8F0; }
+    body.theme-light .input { background:#FFFFFF !important; border-color:#CBD5E1 !important; color:#0F172A !important; }
+    body.theme-light select.input option { background:#FFFFFF !important; color:#0F172A !important; }
+    body.theme-light .tip-icon { background:#E2E8F0 !important; color:#475569 !important; }
+    body.theme-light .tip-box { background:#FFFFFF !important; color:#334155 !important; border-color:#E2E8F0 !important; box-shadow:0 4px 16px rgba(0,0,0,.12) !important; }
+    body.theme-light .badge-green { background:#D1FAE5 !important; color:#065F46 !important; }
+    body.theme-light .badge-yellow { background:#FEF3C7 !important; color:#92400E !important; }
+    body.theme-light .badge-red { background:#FEE2E2 !important; color:#991B1B !important; }
+    body.theme-light .badge-blue { background:#DBEAFE !important; color:#1E40AF !important; }
+    body.theme-light .badge-gray { background:#F1F5F9 !important; color:#475569 !important; }
+    body.theme-light th { background:#F8FAFC !important; color:#64748B !important; }
+    body.theme-light td { border-bottom-color:#E2E8F0 !important; }
+    body.theme-light tr:hover td { background:#F1F5F9 !important; }
+    body.theme-light .modal { background:#FFFFFF !important; }
+    body.theme-light .sidebar-link:hover, body.theme-light .sidebar-link.active { background:#F1F5F9 !important; color:#0F172A !important; }
+    body.theme-light .cal-day:hover { background:#E2E8F0 !important; }
+    body.theme-light .bg-\[\#0f172a\] { background-color:#FFFFFF !important; }
+    body.theme-light .bg-\[\#0d1424\] { background-color:#F1F5F9 !important; }
+    body.theme-light .bg-slate-700 { background-color: #E2E8F0 !important; }
+    body.theme-light .bg-slate-900\/60 { background-color: rgba(255, 255, 255, 0.60) !important; }
+    body.theme-light .bg-slate-500 { background-color: #CBD5E1 !important; }
+    body.theme-light .bg-slate-800\/80 { background-color: rgba(241, 245, 249, 0.80) !important; }
+    body.theme-light .bg-slate-900 { background-color: #FFFFFF !important; }
+    body.theme-light .bg-slate-800 { background-color: #F1F5F9 !important; }
+    body.theme-light .bg-slate-950 { background-color: #F8FAFC !important; }
+    body.theme-light .bg-slate-900\/40 { background-color: rgba(255, 255, 255, 0.40) !important; }
+    body.theme-light .bg-slate-800\/60 { background-color: rgba(241, 245, 249, 0.60) !important; }
+    body.theme-light .bg-slate-900\/50 { background-color: rgba(255, 255, 255, 0.50) !important; }
+    body.theme-light .bg-slate-500\/5 { background-color: rgba(203, 213, 225, 0.05) !important; }
+    body.theme-light .bg-slate-800\/30 { background-color: rgba(241, 245, 249, 0.30) !important; }
+    body.theme-light .bg-slate-700\/50 { background-color: rgba(226, 232, 240, 0.50) !important; }
+    body.theme-light .bg-slate-600 { background-color: #CBD5E1 !important; }
+    body.theme-light .bg-slate-800\/50 { background-color: rgba(241, 245, 249, 0.50) !important; }
+    body.theme-light .bg-slate-800\/40 { background-color: rgba(241, 245, 249, 0.40) !important; }
+    body.theme-light .bg-slate-500\/20 { background-color: rgba(203, 213, 225, 0.20) !important; }
+    body.theme-light .bg-slate-600\/30 { background-color: rgba(203, 213, 225, 0.30) !important; }
+    body.theme-light .bg-slate-800\/20 { background-color: rgba(241, 245, 249, 0.20) !important; }
+    body.theme-light .bg-slate-500\/30 { background-color: rgba(203, 213, 225, 0.30) !important; }
+    body.theme-light .bg-slate-800\/70 { background-color: rgba(241, 245, 249, 0.70) !important; }
+    body.theme-light .border-slate-800 { border-color: #F1F5F9 !important; }
+    body.theme-light .border-slate-700 { border-color: #E2E8F0 !important; }
+    body.theme-light .border-slate-800\/60 { border-color: rgba(241, 245, 249, 0.60) !important; }
+    body.theme-light .border-slate-600 { border-color: #CBD5E1 !important; }
+    body.theme-light .border-slate-700\/50 { border-color: rgba(226, 232, 240, 0.50) !important; }
+    body.theme-light .border-slate-500\/50 { border-color: rgba(203, 213, 225, 0.50) !important; }
+    body.theme-light .border-slate-500 { border-color: #CBD5E1 !important; }
+    body.theme-light .border-slate-400 { border-color: #CBD5E1 !important; }
+    body.theme-light .border-slate-800\/50 { border-color: rgba(241, 245, 249, 0.50) !important; }
+    body.theme-light .text-slate-400 { color: #475569 !important; }
+    body.theme-light .text-slate-500 { color: #64748B !important; }
+    body.theme-light .text-slate-300 { color: #334155 !important; }
+    body.theme-light .text-slate-200 { color: #1E293B !important; }
+    body.theme-light .text-slate-600 { color: #94A3B8 !important; }
+    body.theme-light .text-slate-700 { color: #CBD5E1 !important; }
+    body.theme-light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: #F1F5F9 !important; }
+    body.theme-light .text-white { color: #0F172A !important; }
+    body.theme-light .text-white\/60 { color: rgba(15, 23, 42, 0.60) !important; }
   </style>
 </head>
 <body class="h-[100dvh] overflow-hidden flex flex-col">
+<script>
+  // Fix de produção 36 — aplica o tema salvo ANTES do resto da página
+  // renderizar (script síncrono, logo na abertura do body), pra não piscar
+  // escuro-depois-claro quando o lojista já escolheu o claro antes.
+  try { if (localStorage.getItem('aguiaon_theme') === 'light') document.body.classList.add('theme-light'); } catch (e) {}
+</script>
 
 <!-- ═══════════════════════════════════════════════════════ SETUP WIZARD -->
 <div id="setup-overlay" class="fixed inset-0 bg-[#0f172a] z-[200] flex flex-col items-center justify-center p-6" style="display:none!important">
@@ -149,6 +227,10 @@
       <i class="fa fa-window-restore"></i>
       <span class="hidden sm:inline">Ver Landing Page</span>
     </a>
+    <!-- Fix de produção 36 — alternar modo claro/escuro (persistido em localStorage) -->
+    <button onclick="toggleTheme()" id="theme-toggle-btn" title="Alternar tema claro/escuro" class="text-slate-500 hover:text-white text-sm">
+      <i class="fa fa-moon" id="theme-toggle-icon"></i>
+    </button>
     <button onclick="logout()" class="text-slate-500 hover:text-red-400 text-sm"><i class="fa fa-sign-out-alt"></i></button>
   </div>
 </header>
@@ -3439,6 +3521,19 @@ function logout() {
   location.href = '/login';
 }
 
+// Fix de produção 36 — modo claro/escuro. O script síncrono logo na
+// abertura do body já aplicou a classe salva (evita flash); aqui só
+// ajusta o ícone do botão pra refletir o estado atual e cuida da troca.
+function updateThemeIcon() {
+  const icon = document.getElementById('theme-toggle-icon');
+  if (icon) icon.className = document.body.classList.contains('theme-light') ? 'fa fa-sun' : 'fa fa-moon';
+}
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('theme-light');
+  try { localStorage.setItem('aguiaon_theme', isLight ? 'light' : 'dark'); } catch (e) {}
+  updateThemeIcon();
+}
+
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
@@ -3556,6 +3651,7 @@ function setAccentColor(color) {
 
 // ════════ INIT ════════
 async function init() {
+  updateThemeIcon(); // Fix de produção 36 — reflete o tema já aplicado pelo script síncrono do <body>
   if (!token) { location.href = '/login'; return; }
 
   // Check URL status for MP connection

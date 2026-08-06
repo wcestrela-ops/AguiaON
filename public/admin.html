@@ -65,9 +65,60 @@
         #admin-sidebar.sidebar-collapsed { width: 5rem !important; }
         #admin-sidebar.sidebar-collapsed .sidebar-label { display: none !important; }
         #admin-sidebar.sidebar-collapsed .sidebar-toggle-icon { transform: rotate(180deg); }
+
+        /* ─────────────────────────────────────────────────────────────
+           Fix de produção 36 — modo claro (mesma técnica de loja.html:
+           camada de overrides com !important em cima das classes Tailwind
+           originais, ativada por body.theme-light; cores semânticas de
+           status não são tocadas). Gerado varrendo o arquivo inteiro atrás
+           de toda classe bg-slate-*/text-slate-*/border-slate-*/text-white
+           realmente usada. Ver updateThemeIcon()/toggleTheme() no script principal.
+           ───────────────────────────────────────────────────────────── */
+        body.theme-light { background:#F8FAFC !important; color:#334155 !important; }
+        body.theme-light ::-webkit-scrollbar-track { background: #F1F5F9; }
+        body.theme-light ::-webkit-scrollbar-thumb { background: #CBD5E1; }
+        body.theme-light input, body.theme-light textarea, body.theme-light select {
+            background-color: #FFFFFF !important;
+            border: 1px solid #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+        body.theme-light .bg-\[\#020617\] { background-color:#F8FAFC !important; }
+        body.theme-light .bg-\[\#0f172a\] { background-color:#FFFFFF !important; }
+        body.theme-light .bg-slate-800 { background-color: #F1F5F9 !important; }
+        body.theme-light .bg-slate-900\/40 { background-color: rgba(255, 255, 255, 0.40) !important; }
+        body.theme-light .bg-slate-900\/20 { background-color: rgba(255, 255, 255, 0.20) !important; }
+        body.theme-light .bg-slate-900 { background-color: #FFFFFF !important; }
+        body.theme-light .bg-slate-600 { background-color: #CBD5E1 !important; }
+        body.theme-light .bg-slate-950 { background-color: #F8FAFC !important; }
+        body.theme-light .bg-slate-900\/60 { background-color: rgba(255, 255, 255, 0.60) !important; }
+        body.theme-light .bg-slate-700 { background-color: #E2E8F0 !important; }
+        body.theme-light .bg-slate-900\/50 { background-color: rgba(255, 255, 255, 0.50) !important; }
+        body.theme-light .bg-slate-950\/50 { background-color: rgba(248, 250, 252, 0.50) !important; }
+        body.theme-light .bg-slate-500\/5 { background-color: rgba(203, 213, 225, 0.05) !important; }
+        body.theme-light .bg-slate-950\/30 { background-color: rgba(248, 250, 252, 0.30) !important; }
+        body.theme-light .bg-slate-800\/20 { background-color: rgba(241, 245, 249, 0.20) !important; }
+        body.theme-light .border-slate-800\/50 { border-color: rgba(241, 245, 249, 0.50) !important; }
+        body.theme-light .border-slate-700 { border-color: #E2E8F0 !important; }
+        body.theme-light .border-slate-800 { border-color: #F1F5F9 !important; }
+        body.theme-light .border-slate-500 { border-color: #CBD5E1 !important; }
+        body.theme-light .border-slate-800\/60 { border-color: rgba(241, 245, 249, 0.60) !important; }
+        body.theme-light .border-slate-900\/60 { border-color: rgba(255, 255, 255, 0.60) !important; }
+        body.theme-light .border-slate-800\/30 { border-color: rgba(241, 245, 249, 0.30) !important; }
+        body.theme-light .text-slate-300 { color: #334155 !important; }
+        body.theme-light .text-slate-400 { color: #475569 !important; }
+        body.theme-light .text-slate-500 { color: #64748B !important; }
+        body.theme-light .text-slate-600 { color: #94A3B8 !important; }
+        body.theme-light .text-slate-700 { color: #CBD5E1 !important; }
+        body.theme-light .text-slate-200 { color: #1E293B !important; }
+        body.theme-light .text-white { color: #0F172A !important; }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30 overflow-hidden">
+    <script>
+        // Fix de produção 36 — aplica o tema salvo antes do resto renderizar
+        // (evita flash de escuro-depois-claro).
+        try { if (localStorage.getItem('aguiaon_theme') === 'light') document.body.classList.add('theme-light'); } catch (e) {}
+    </script>
 
     <div class="flex h-screen">
 
@@ -81,6 +132,12 @@
             </button>
 
             <div class="mb-8 font-black text-white text-xl tracking-tighter">Águia<span class="text-indigo-500">ON</span></div>
+
+            <!-- Fix de produção 36 — alternar modo claro/escuro (persistido em localStorage) -->
+            <button onclick="toggleTheme()" title="Alternar tema claro/escuro"
+                    class="mb-6 text-slate-500 hover:text-white transition-all">
+                <i class="fa-solid fa-moon text-sm" id="theme-toggle-icon"></i>
+            </button>
 
             <nav class="flex flex-col gap-7 flex-1">
                 <button onclick="showTab('dash')" class="nav-link text-indigo-500 transition-all" title="Dashboard">
@@ -127,6 +184,14 @@
           // pra não "piscar" expandido e depois recolher.
           if (localStorage.getItem('admin_sidebar_collapsed') === '1') {
             document.getElementById('admin-sidebar')?.classList.add('sidebar-collapsed');
+          }
+          // Fix de produção 36 — sincroniza o ícone do botão de tema com a
+          // classe que o script logo na abertura do <body> já aplicou (roda
+          // inline aqui, antes de updateThemeIcon() existir lá embaixo no
+          // script principal, por isso repete a lógica em vez de chamá-la).
+          if (localStorage.getItem('aguiaon_theme') === 'light') {
+            const icon = document.getElementById('theme-toggle-icon');
+            if (icon) icon.className = 'fa-solid fa-sun text-sm';
           }
         </script>
 
@@ -1516,6 +1581,19 @@
             if (!el) return;
             const collapsed = el.classList.toggle('sidebar-collapsed');
             localStorage.setItem('admin_sidebar_collapsed', collapsed ? '1' : '0');
+        }
+
+        // Fix de produção 36 — modo claro/escuro. O <script> logo na abertura
+        // do <body> já aplicou a classe salva (evita flash); aqui só ajusta o
+        // ícone do botão e cuida da troca.
+        function updateThemeIcon() {
+            const icon = document.getElementById('theme-toggle-icon');
+            if (icon) icon.className = (document.body.classList.contains('theme-light') ? 'fa-solid fa-sun' : 'fa-solid fa-moon') + ' text-sm';
+        }
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('theme-light');
+            try { localStorage.setItem('aguiaon_theme', isLight ? 'light' : 'dark'); } catch (e) {}
+            updateThemeIcon();
         }
 
         // --- HELPER: headers padrão para todas as chamadas admin ---
