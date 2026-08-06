@@ -102,7 +102,7 @@
              sidebar-collapsed no bloco de estilos e a função toggleAdminSidebar. -->
         <aside id="admin-sidebar" class="hidden md:flex w-20 lg:w-64 border-r border-slate-200/50 dark:border-slate-800/50 flex-col items-center py-6 bg-white dark:bg-[#020617] z-50 relative transition-all duration-200">
             <button onclick="toggleAdminSidebar()" title="Recolher/expandir menu"
-                    class="hidden lg:flex absolute -right-3 top-9 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-indigo-600 hover:border-indigo-500 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white items-center justify-center text-[10px] transition-all z-10">
+                    class="hidden lg:flex absolute -right-3 top-9 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-indigo-600 hover:border-indigo-500 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white items-center justify-center text-[10px] transition-all z-10">
                 <i class="fa-solid fa-angles-left sidebar-toggle-icon transition-transform duration-200"></i>
             </button>
 
@@ -233,7 +233,7 @@
 
                 <div class="bg-white/20 dark:bg-slate-900/20 border border-slate-200/50 dark:border-slate-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
                     <div class="p-4 md:p-6 border-b border-slate-200/50 dark:border-slate-800/50 bg-white/40 dark:bg-slate-900/40 flex flex-wrap gap-3 justify-between items-center">
-                        <span class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                        <span class="text-xs font-black uppercase tracking-[0.2em] text-slate-600 dark:text-slate-400">
                             <i class="fa-solid fa-terminal mr-3 text-indigo-500"></i>Terminal de Monitoramento Global
                         </span>
                         <div class="flex items-center gap-3">
@@ -536,7 +536,7 @@
 
                         <div class="flex items-center gap-3">
                             <input type="checkbox" id="seg-ativo" checked class="w-4 h-4 accent-indigo-500" />
-                            <label for="seg-ativo" class="text-sm text-slate-400 dark:text-slate-600 dark:text-slate-400">Segmento ativo (aparece no cadastro)</label>
+                            <label for="seg-ativo" class="text-sm text-slate-600 dark:text-slate-400">Segmento ativo (aparece no cadastro)</label>
                         </div>
 
                         <div id="seg-modal-error" class="hidden text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3"></div>
@@ -575,7 +575,7 @@
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <p class="text-indigo-300 text-xs font-black uppercase tracking-widest">🌱 Lojas Demo</p>
-                            <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-xs mt-1">Cria ou reseta todas as lojas demo para o estado original. Inclui serviços, produtos e clientes de teste.</p>
+                            <p class="text-slate-600 dark:text-slate-400 text-xs mt-1">Cria ou reseta todas as lojas demo para o estado original. Inclui serviços, produtos e clientes de teste.</p>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <button id="btn-seed-clients" onclick="seedClients()"
@@ -625,7 +625,7 @@
                 <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 md:p-10 rounded-[3rem] w-full max-w-md space-y-6 shadow-2xl">
                     <h3 class="text-slate-900 dark:text-white font-black text-2xl">Aplicar Blueprint</h3>
                     <input type="hidden" id="setup-est-id" />
-                    <p id="setup-est-name" class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-sm"></p>
+                    <p id="setup-est-name" class="text-slate-600 dark:text-slate-400 text-sm"></p>
                     <div class="space-y-1">
                         <label class="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1">Segmento</label>
                         <select id="setup-vertical" class="w-full rounded-2xl p-4 text-sm outline-none cursor-pointer">
@@ -787,7 +787,7 @@
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Mercado Pago (Split & Pagamentos)</p>
                                 <button onclick="testConfig('mercadopago')" class="text-[9px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-2 py-1 rounded">Testar Conexão</button>
                             </div>
-                            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Conta <strong class="text-slate-800 dark:text-slate-300">própria da plataforma</strong> (não a de cada lojista) — usada quando a AguiaON cobra as empresas pelo uso do sistema (billing da plataforma).</p>
                                 <p>Gere em <span class="text-emerald-400 font-bold">mercadopago.com.br/developers</span> → sua aplicação → Credenciais de produção. A <strong class="text-slate-800 dark:text-slate-300">Comissão da Plataforma</strong> abaixo é o % retido automaticamente nos pagamentos dos clientes finais, quando o split estiver ativo.</p>
                             </div>
@@ -808,7 +808,7 @@
                             <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 mt-8">
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Mercado Pago — OAuth de Lojistas (PIX)</p>
                             </div>
-                            <div class="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-3 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-3 text-xs text-slate-600 dark:text-slate-400">
                                 Permite que lojistas conectem suas contas MP para receber pagamentos PIX. Obtenha em <span class="text-blue-400 font-bold">mercadopago.com.br/developers</span> → seu app → Credenciais de produção.
                             </div>
                             <input id="mp_client_id" type="text" placeholder="Client ID (ex: 123456789012345)" class="w-full rounded-xl p-4 text-sm outline-none">
@@ -822,7 +822,7 @@
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Asaas (Cobranças Automáticas)</p>
                                 <button onclick="testConfig('asaas')" class="text-[9px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-2 py-1 rounded">Testar Conexão</button>
                             </div>
-                            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Conta <strong class="text-slate-800 dark:text-slate-300">própria da plataforma</strong> no Asaas — usada como método de cobrança do billing da plataforma quando o Mercado Pago não estiver configurado (funciona como fallback entre os dois).</p>
                                 <p>Gere a API Key em <span class="text-emerald-400 font-bold">asaas.com</span> → Integrações → Chave de API. O Wallet ID fica em Configurações → Conta.</p>
                             </div>
@@ -830,7 +830,7 @@
                             <input id="asaas_wallet_id" type="text" placeholder="ex: 12345678-1234-1234-1234-123456789012" class="w-full rounded-xl p-4 text-sm outline-none">
 
                             <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest border-b border-slate-200 dark:border-slate-800 pb-2 mt-8">Bancos & PIX (Informações de Exibição)</p>
-                            <div class="bg-slate-300/5 dark:bg-slate-500/5 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-slate-300/5 dark:bg-slate-500/5 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-400">
                                 Texto livre, só para exibição — não gera cobrança nem integra com nada. Aparece como referência bancária/PIX da plataforma em telas ou comunicações que precisem mostrar seus dados de recebimento.
                             </div>
                             <textarea id="bank_details" placeholder="Ex: Banco XP • Ag 0001 • Conta 123456-7 • Chave PIX (CNPJ): 00.000.000/0001-00" class="w-full h-24 rounded-xl p-4 text-sm outline-none"></textarea>
@@ -853,7 +853,7 @@
                             <input type="hidden" id="ai_primary_provider" value="local" />
                         </div>
 
-                        <div class="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                        <div class="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-400">
                             Essas chaves alimentam a Ágata (assistente de IA) e outras automações do sistema. Preencha só os provedores que for usar — o <strong class="text-slate-800 dark:text-slate-300">Provedor Primário</strong> acima é tentado primeiro; se faltar chave ou a chamada falhar, cai automaticamente pro próximo configurado.
                         </div>
 
@@ -921,7 +921,7 @@
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Evolution API (WhatsApp)</p>
                                 <button onclick="testConfig('evolution')" class="text-[9px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-2 py-1 rounded">Testar Conexão</button>
                             </div>
-                            <div class="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Servidor <strong class="text-slate-800 dark:text-slate-300">Evolution API</strong> (auto-hospedado) que conecta o sistema ao WhatsApp — base pra automações de mensagens dos lojistas e pro OTP da plataforma (seção abaixo).</p>
                                 <p>URL é o endereço completo da sua instância Evolution (ex: <span class="text-sky-400 font-bold">https://evolution.seudominio.com</span>) e o Token é a chave global de API definida na configuração do servidor Evolution — não é o token de uma instância específica.</p>
                             </div>
@@ -937,7 +937,7 @@
                                 </p>
                                 <button onclick="testConfig('wa_otp')" class="text-[9px] font-black text-green-400 hover:text-green-300 uppercase tracking-widest bg-green-500/10 px-2 py-1 rounded">Testar Envio</button>
                             </div>
-                            <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Instância Evolution usada pela <strong class="text-slate-800 dark:text-slate-300">plataforma</strong> para enviar códigos OTP e links de recuperação de senha via WhatsApp.</p>
                                 <p>A URL e o Token são os mesmos configurados acima (Evolution API). Informe aqui apenas o <strong class="text-green-400">nome da instância</strong> conectada ao número da plataforma.</p>
                             </div>
@@ -956,7 +956,7 @@
                                 <p class="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-widest">Servidor SMTP (E-mail)</p>
                                 <button onclick="testConfig('smtp')" class="text-[9px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-widest bg-indigo-500/10 px-2 py-1 rounded">Testar Envio</button>
                             </div>
-                            <div class="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Usado pra enviar códigos OTP, recuperação de senha e avisos de cobrança por e-mail — canal de backup do WhatsApp (se um falhar, o outro ainda entrega).</p>
                                 <p>Com Gmail: use <span class="text-sky-400 font-bold">smtp.gmail.com</span>, porta 587, e gere uma <strong class="text-slate-800 dark:text-slate-300">Senha de App</strong> em myaccount.google.com/apppasswords (a senha normal da conta não funciona aqui). Outros provedores (Outlook, SendGrid, Zoho etc.) seguem o mesmo padrão: host + usuário + senha específica de SMTP.</p>
                             </div>
@@ -977,7 +977,7 @@
                                     Gerar chave no GCP →
                                 </a>
                             </div>
-                            <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-4 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-green-500/5 border border-green-500/20 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-400">
                                 Chave usada no cardápio (mapa de localização do cliente) e futuros componentes de endereço.
                                 Habilite as APIs <strong class="text-slate-800 dark:text-slate-300">Maps JavaScript API</strong> e <strong class="text-slate-800 dark:text-slate-300">Geocoding API</strong> no Google Cloud Console.
                                 Se deixar em branco, o sistema usa OpenStreetMap (Leaflet) como fallback gratuito.
@@ -1030,7 +1030,7 @@
                                 </p>
                                 <button onclick="testConfig('firebase')" class="text-[9px] font-black text-orange-400 hover:text-orange-300 uppercase tracking-widest bg-orange-500/10 px-2 py-1 rounded">Testar FCM</button>
                             </div>
-                            <div class="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <div class="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                                 <p>Habilita notificações push nativas no navegador e PWA instalado.</p>
                                 <p>Obtenha as credenciais em <span class="text-orange-400 font-bold">console.firebase.google.com</span> → Configurações do Projeto → Cloud Messaging.</p>
                             </div>
@@ -1074,7 +1074,7 @@
                             <h4 class="text-teal-400 text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3"><i class="fa-solid fa-comment-sms text-lg"></i> SMS — Rastreamento (fallback compartilhado)</h4>
                             <button onclick="openSmsProviderModal()" class="text-[9px] font-black text-teal-400 hover:text-teal-300 uppercase tracking-widest bg-teal-500/10 px-3 py-1.5 rounded"><i class="fa fa-plus mr-1"></i>Novo Gateway</button>
                         </div>
-                        <div class="bg-teal-500/5 border border-teal-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                        <div class="bg-teal-500/5 border border-teal-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
                             <p>Função extra do módulo de <strong class="text-slate-800 dark:text-slate-300">Rastreamento</strong> — reservada como canal alternativo pras empresas desse nicho. Não aparece nem é usada por outros nichos (barbearia, academia etc.). Hoje o envio é manual/sob demanda (não está plugado automaticamente em cobrança ou comandos de bloqueio ainda — isso é próximo passo natural se fizer sentido).</p>
                             <p>Gateways cadastrados aqui são <strong class="text-slate-800 dark:text-slate-300">compartilhados (SHARED)</strong> — usados por qualquer empresa de rastreamento que não tenha o próprio gateway configurado. Cada lojista de rastreamento também pode cadastrar um gateway <strong class="text-slate-800 dark:text-slate-300">próprio (OWN)</strong> em Configurações → Rastreamento; quando existe, ele é tentado primeiro, e o compartilhado daqui entra como reserva.</p>
                             <p>Prioridade menor = tentado primeiro entre os gateways do mesmo nível. Tipo "Simulado" não envia SMS de verdade — só loga no console, útil pra testar o fluxo sem gastar crédito.</p>
@@ -1145,7 +1145,7 @@
                             <div>
                                 <!-- MODO UPLOAD -->
                                 <div id="pwa-mode-upload" class="space-y-5">
-                                    <p class="text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">Faça upload de uma imagem PNG ou JPG. Ela será redimensionada para 192×192 e 512×512 automaticamente e salva no banco de dados.</p>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">Faça upload de uma imagem PNG ou JPG. Ela será redimensionada para 192×192 e 512×512 automaticamente e salva no banco de dados.</p>
 
                                     <!-- Drop zone -->
                                     <label for="pwa-icon-file"
@@ -1190,7 +1190,7 @@
 
                                 <!-- MODO GERADOR -->
                                 <div id="pwa-mode-generator" class="hidden space-y-5">
-                                    <p class="text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">Gere um ícone vetorial com texto personalizado e cores da sua marca.</p>
+                                    <p class="text-xs text-slate-600 dark:text-slate-400">Gere um ícone vetorial com texto personalizado e cores da sua marca.</p>
                                     <div class="grid grid-cols-2 gap-4">
                                         <div class="space-y-1">
                                             <label class="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest ml-1">Texto 1 (claro)</label>
@@ -1284,7 +1284,7 @@
                         <h4 class="text-slate-400 dark:text-slate-600 text-[10px] font-black uppercase tracking-[0.3em] flex justify-between items-center">
                             Favicon Global do Site <i class="fa-solid fa-star"></i>
                         </h4>
-                        <p class="text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">Ícone exibido na aba do navegador para todas as páginas do sistema (admin, loja, portal). Ideal: 32×32px PNG.</p>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Ícone exibido na aba do navegador para todas as páginas do sistema (admin, loja, portal). Ideal: 32×32px PNG.</p>
                         <div class="flex items-center gap-6">
                             <div id="admin-favicon-preview" class="w-16 h-16 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
                                 <i class="fa fa-star text-slate-300 dark:text-slate-700 text-xl"></i>
@@ -1292,7 +1292,7 @@
                             <div class="flex-1 space-y-2">
                                 <label class="flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-amber-500 rounded-xl p-4 cursor-pointer transition-colors">
                                     <i class="fa fa-upload text-slate-500 dark:text-slate-500"></i>
-                                    <span class="text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400">Selecionar Favicon (PNG/ICO, máx 64KB)</span>
+                                    <span class="text-xs text-slate-600 dark:text-slate-400">Selecionar Favicon (PNG/ICO, máx 64KB)</span>
                                     <input type="file" id="admin-favicon-file" accept="image/png,image/x-icon,image/jpeg,image/webp" class="hidden" onchange="onAdminFaviconFile(event)">
                                 </label>
                                 <button onclick="saveAdminFavicon()" id="btn-save-favicon"
@@ -1368,7 +1368,7 @@
                         </div>
                         <div class="flex items-center gap-3 px-2">
                             <input id="ann-active" type="checkbox" checked class="w-4 h-4 accent-indigo-500 cursor-pointer">
-                            <label for="ann-active" class="text-sm text-slate-400 dark:text-slate-600 dark:text-slate-400 cursor-pointer">Anúncio ativo (visível no portal)</label>
+                            <label for="ann-active" class="text-sm text-slate-600 dark:text-slate-400 cursor-pointer">Anúncio ativo (visível no portal)</label>
                         </div>
                     </div>
 
@@ -1392,9 +1392,9 @@
                 <div class="flex flex-wrap gap-3 items-center">
                     <div class="flex gap-1 bg-white/60 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-1">
                         <button onclick="setUserRoleFilter('ALL')"        id="uf-ALL"        class="user-role-btn active-role px-4 py-2 rounded-xl text-xs font-black uppercase transition-all">Todos</button>
-                        <button onclick="setUserRoleFilter('REGISTERED')" id="uf-REGISTERED" class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-400 dark:text-slate-600 dark:text-slate-400">Clientes</button>
-                        <button onclick="setUserRoleFilter('ENTREGADOR')" id="uf-ENTREGADOR" class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-400 dark:text-slate-600 dark:text-slate-400">Entregadores</button>
-                        <button onclick="setUserRoleFilter('LOJISTA')"    id="uf-LOJISTA"    class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-400 dark:text-slate-600 dark:text-slate-400">Lojistas</button>
+                        <button onclick="setUserRoleFilter('REGISTERED')" id="uf-REGISTERED" class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-600 dark:text-slate-400">Clientes</button>
+                        <button onclick="setUserRoleFilter('ENTREGADOR')" id="uf-ENTREGADOR" class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-600 dark:text-slate-400">Entregadores</button>
+                        <button onclick="setUserRoleFilter('LOJISTA')"    id="uf-LOJISTA"    class="user-role-btn px-4 py-2 rounded-xl text-xs font-black uppercase transition-all text-slate-600 dark:text-slate-400">Lojistas</button>
                     </div>
                     <input type="text" id="users-search" placeholder="Buscar por nome, e-mail ou WhatsApp..."
                            oninput="loadUsers()" class="rounded-xl px-4 py-2 text-sm flex-1 min-w-[200px]" />
@@ -1427,7 +1427,7 @@
             <div id="app-viewport" class="hidden fixed inset-0 z-[100] bg-white dark:bg-[#020617] flex flex-col animate-fadeIn">
                 <nav class="p-5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-[#020617]">
                     <div class="flex items-center gap-6">
-                        <button onclick="closeApp()" class="w-12 h-12 flex items-center justify-center rounded-full hover:bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-all">
+                        <button onclick="closeApp()" class="w-12 h-12 flex items-center justify-center rounded-full hover:bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-all">
                             <i class="fa-solid fa-arrow-left text-xl"></i>
                         </button>
                         <span id="current-app-name" class="font-black text-slate-900 dark:text-white text-sm uppercase tracking-[0.4em]">Carregando App...</span>
@@ -1518,14 +1518,21 @@
             document.getElementById(id).classList.add('active');
 
             // Sidebar desktop
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.replace('text-indigo-500', 'text-slate-500 dark:text-slate-500'));
+            // Fix de produção 39 — classList.add/remove/replace/contains só
+            // aceita UM token por vez (sem espaço); a migração pro dark:
+            // (Fix 38) tinha corrompido essas strings pra "text-slate-500
+            // dark:text-slate-500", o que lança InvalidCharacterError e
+            // aborta showTab() antes de chegar nas chamadas que carregam os
+            // dados (loadLojistas/loadModules/etc) — por isso as telas
+            // pareciam "vazias". Voltou a usar token único.
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.replace('text-indigo-500', 'text-slate-500'));
             const btn = document.querySelector(`.nav-link[onclick*="'${id}'"]`);
-            if (btn) btn.classList.replace('text-slate-500 dark:text-slate-500', 'text-indigo-500');
+            if (btn) btn.classList.replace('text-slate-500', 'text-indigo-500');
 
             // Bottom nav mobile
-            document.querySelectorAll('.admin-bn').forEach(b => { b.classList.remove('text-indigo-500'); b.classList.add('text-slate-500 dark:text-slate-500'); });
+            document.querySelectorAll('.admin-bn').forEach(b => { b.classList.remove('text-indigo-500'); b.classList.add('text-slate-500'); });
             const bnBtn = document.querySelector(`.admin-bn[data-tab="${id}"]`);
-            if (bnBtn) { bnBtn.classList.remove('text-slate-500 dark:text-slate-500'); bnBtn.classList.add('text-indigo-500'); }
+            if (bnBtn) { bnBtn.classList.remove('text-slate-500'); bnBtn.classList.add('text-indigo-500'); }
 
             // Scroll para o topo no mobile ao trocar aba
             document.querySelector('main').scrollTop = 0;
@@ -1800,7 +1807,7 @@
                     <div class="flex gap-4">
                         <span class="text-slate-300 dark:text-slate-700 whitespace-nowrap">${new Date(a.created_at).toLocaleDateString()}</span>
                         <span class="text-indigo-600 font-bold uppercase tracking-tighter">${a.action}</span>
-                        <span class="text-slate-400 dark:text-slate-600 dark:text-slate-400">Target: ${a.target || 'N/A'}</span>
+                        <span class="text-slate-600 dark:text-slate-400">Target: ${a.target || 'N/A'}</span>
                     </div>
                 `).join('') || 'Trilha limpa.';
 
@@ -2273,7 +2280,7 @@
         function appendSimBubble(role, text) {
             const box = document.getElementById('agata-sim-messages');
             // Remove placeholder inicial
-            const ph = box.querySelector('.italic.text-slate-400 dark:text-slate-600');
+            const ph = box.querySelector('.italic.text-slate-400');
             if (ph) ph.remove();
 
             const isUser = role === 'user';
@@ -2302,7 +2309,7 @@
             const typingEl = document.createElement('div');
             typingEl.id = typingId;
             typingEl.className = 'flex justify-start';
-            typingEl.innerHTML = '<div class="bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 dark:text-slate-400 text-xs px-4 py-2 rounded-2xl rounded-bl-none italic">Ágatha está digitando...</div>';
+            typingEl.innerHTML = '<div class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs px-4 py-2 rounded-2xl rounded-bl-none italic">Ágatha está digitando...</div>';
             document.getElementById('agata-sim-messages').appendChild(typingEl);
             document.getElementById('agata-sim-messages').scrollTop = 9999;
 
@@ -2803,11 +2810,11 @@
                             <div class="bg-white/40 dark:bg-slate-900/40 border ${seg.ativo ? 'border-slate-200 dark:border-slate-800' : 'border-slate-200/30 dark:border-slate-800/30 opacity-50'} rounded-xl p-4 space-y-2 relative group">
                                 <div class="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onclick="editSegment(${JSON.stringify(seg).replace(/"/g,'&quot;')})"
-                                        class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all text-[10px]">
+                                        class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all text-[10px]">
                                         <i class="fa-solid fa-pen"></i>
                                     </button>
                                     <button onclick="toggleSegmentActive('${seg.id}', ${!seg.ativo})"
-                                        class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-${seg.ativo?'orange':'emerald'}-600 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all text-[10px]">
+                                        class="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-${seg.ativo?'orange':'emerald'}-600 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all text-[10px]">
                                         <i class="fa-solid fa-${seg.ativo?'eye-slash':'eye'}"></i>
                                     </button>
                                 </div>
@@ -2819,7 +2826,7 @@
                                     </div>
                                 </div>
                                 <div class="flex flex-wrap gap-1">
-                                    ${(seg.features||[]).slice(0,5).map(f => `<span class="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 dark:text-slate-400 rounded-full font-bold">${f}</span>`).join('')}
+                                    ${(seg.features||[]).slice(0,5).map(f => `<span class="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-full font-bold">${f}</span>`).join('')}
                                     ${(seg.features||[]).length > 5 ? `<span class="text-[9px] px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-500 rounded-full">+${seg.features.length-5}</span>` : ''}
                                 </div>
                                 <div class="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-500 border-t border-slate-200 dark:border-slate-800 pt-2 mt-1">
@@ -2991,7 +2998,7 @@
                         <input value="${escAttr(p.descricao)}" placeholder="Descrição curta" oninput="updateBlockItem(${i},${j},'descricao',this.value)" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white" />
                         <textarea placeholder="Recursos inclusos (um por linha)" oninput="updateBlockItemList(${i},${j},'recursos',this.value)" rows="3" class="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white">${escAttr((p.recursos||[]).join('\n'))}</textarea>
                         <div class="flex items-center gap-4">
-                            <label class="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-600 dark:text-slate-400">
+                            <label class="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                                 <input type="checkbox" ${p.destaque?'checked':''} onchange="updateBlockItemBool(${i},${j},'destaque',this.checked)" class="accent-indigo-500" /> Mais popular
                             </label>
                             <input value="${escAttr(p.cta_label||'Contratar')}" placeholder="Texto do botão" oninput="updateBlockItem(${i},${j},'cta_label',this.value)" class="flex-1 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white" />
@@ -3041,23 +3048,23 @@
                             </div>
                             <span class="text-[10px] font-bold uppercase tracking-widest ${leadsStatusColor[l.status]||''}">${l.status}</span>
                         </div>
-                        <div class="text-xs text-slate-400 dark:text-slate-600 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
+                        <div class="text-xs text-slate-600 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
                             ${l.whatsapp ? `<span><i class="fa fa-phone mr-1"></i>${l.whatsapp}</span>` : ''}
                             ${l.email ? `<span><i class="fa fa-envelope mr-1"></i>${l.email}</span>` : ''}
                             ${l.cpf_cnpj ? `<span><i class="fa fa-id-card mr-1"></i>${l.cpf_cnpj}</span>` : ''}
                             ${l.data_nascimento ? `<span><i class="fa fa-cake-candles mr-1"></i>${new Date(l.data_nascimento).toLocaleDateString('pt-BR')}</span>` : ''}
                         </div>
                         ${(l.veiculo_placa || l.veiculo_modelo || l.veiculo_ano || l.veiculo_cor) ? `
-                            <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-car mr-1"></i>${[l.veiculo_placa, l.veiculo_modelo, l.veiculo_ano, l.veiculo_cor].filter(Boolean).join(' · ') || 'Sem dados do veículo'}</p>
+                            <p class="text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-car mr-1"></i>${[l.veiculo_placa, l.veiculo_modelo, l.veiculo_ano, l.veiculo_cor].filter(Boolean).join(' · ') || 'Sem dados do veículo'}</p>
                         ` : ''}
                         ${(l.endereco_rua || l.endereco_cidade) ? `
-                            <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-location-dot mr-1"></i>${[
+                            <p class="text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-location-dot mr-1"></i>${[
                                 [l.endereco_rua, l.endereco_numero].filter(Boolean).join(', '),
                                 l.endereco_bairro, l.endereco_cidade, l.endereco_estado, l.endereco_cep,
                             ].filter(Boolean).join(' · ')}</p>
                         ` : ''}
                         ${(l.contato_emergencia_nome || l.contato_emergencia_telefone) ? `
-                            <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
+                            <p class="text-slate-600 dark:text-slate-400 text-[11px]"><i class="fa fa-triangle-exclamation mr-1"></i>Emergência: ${[l.contato_emergencia_nome, l.contato_emergencia_telefone].filter(Boolean).join(' · ')}</p>
                         ` : ''}
                         ${l.aceite_em ? `
                             <p class="text-emerald-400 text-[11px]"><i class="fa fa-check-circle mr-1"></i>Termo de adesão aceito por ${l.aceite_nome} em ${new Date(l.aceite_em).toLocaleString('pt-BR')}</p>
@@ -3071,7 +3078,7 @@
                                 ${l.status === 'aceito' ? `<button onclick="converterLead('${l.id}')" class="text-indigo-400 text-xs font-bold"><i class="fa fa-check mr-1"></i>Marcar como convertido</button>` : ''}
                                 ${l.arquivado
                                     ? `<button onclick="desarquivarLead('${l.id}')" class="text-cyan-400 text-xs font-bold ml-auto"><i class="fa fa-box-open mr-1"></i>Desarquivar</button>`
-                                    : `<button onclick="arquivarLead('${l.id}')" class="text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-slate-200 text-xs font-bold ml-auto"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
+                                    : `<button onclick="arquivarLead('${l.id}')" class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-slate-200 text-xs font-bold ml-auto"><i class="fa fa-box-archive mr-1"></i>Arquivar</button>`}
                             </div>
                         ` : `
                             <div class="flex justify-end gap-4">
@@ -3348,7 +3355,7 @@
 
             const selectedFeatures = seg?.features || [];
             document.getElementById('features-checkboxes').innerHTML = ALL_FEATURES.map(f => `
-                <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white">
+                <label class="flex items-center gap-2 cursor-pointer text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white">
                     <input type="checkbox" value="${f}" class="feat-check accent-indigo-500 w-3.5 h-3.5"
                            ${selectedFeatures.includes(f) ? 'checked' : ''} />
                     ${f}
@@ -3467,15 +3474,15 @@
                         <!-- Ações: editar / excluir / ativar -->
                         <div class="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onclick="event.stopPropagation(); openEditModal(${JSON.stringify(m).replace(/"/g, '"')})"
-                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
+                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-600 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
                                 <i class="fa-solid fa-pen text-[10px]"></i>
                             </button>
                             <button onclick="event.stopPropagation(); toggleModuleActive('${m.id}', ${!m.is_active})"
-                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-${m.is_active?'orange':'emerald'}-600 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
+                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-${m.is_active?'orange':'emerald'}-600 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
                                 <i class="fa-solid fa-${m.is_active?'eye-slash':'eye'} text-[10px]"></i>
                             </button>
                             <button onclick="event.stopPropagation(); deleteModule('${m.id}', '${m.name}')"
-                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-red-600 text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
+                                    class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-red-600 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white flex items-center justify-center transition-all">
                                 <i class="fa-solid fa-trash text-[10px]"></i>
                             </button>
                         </div>
@@ -3642,7 +3649,7 @@
                             ${a.link_url ? `<p class="text-indigo-400 text-[10px] truncate"><i class="fa-solid fa-link mr-1"></i>${esc(a.link_url)}</p>` : ''}
                             ${a.ends_at ? `<p class="text-slate-400 dark:text-slate-600 text-[10px]"><i class="fa-solid fa-clock mr-1"></i>Expira: ${new Date(a.ends_at).toLocaleDateString('pt-BR')}</p>` : ''}
                             <div class="flex gap-3 mt-auto pt-4 border-t border-slate-200/50 dark:border-slate-800/50">
-                                <button onclick="editAnnouncement(${JSON.stringify(a).replace(/"/g, '&quot;')})" class="flex-1 text-xs font-black text-slate-400 dark:text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white uppercase tracking-widest transition-all">
+                                <button onclick="editAnnouncement(${JSON.stringify(a).replace(/"/g, '&quot;')})" class="flex-1 text-xs font-black text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white uppercase tracking-widest transition-all">
                                     <i class="fa-solid fa-pen mr-1"></i> Editar
                                 </button>
                                 <button onclick="deleteAnnouncement('${a.id}')" class="flex-1 text-xs font-black text-red-500/50 hover:text-red-400 uppercase tracking-widest transition-all">
@@ -3766,7 +3773,7 @@
                 <p id="suspend-est-name" class="text-red-400 text-sm font-semibold"></p>
             </div>
         </div>
-        <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
             O lojista <strong class="text-slate-900 dark:text-white">continua com acesso</strong> ao painel, mas os clientes não conseguem agendar nem visualizar a vitrine pública.
         </p>
         <div>
@@ -3777,7 +3784,7 @@
         <input type="hidden" id="suspend-est-id" />
         <div class="flex gap-3 pt-1">
             <button onclick="document.getElementById('suspend-modal').classList.add('hidden')"
-                    class="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all">
+                    class="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all">
                 Cancelar
             </button>
             <button onclick="confirmSuspend()"
@@ -3800,7 +3807,7 @@
                 <p id="activate-est-name" class="text-emerald-400 text-sm font-semibold"></p>
             </div>
         </div>
-        <p class="text-slate-400 dark:text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+        <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
             A loja voltará a ser visível para clientes. Defina até quando o acesso está liberado — após essa data, a loja aparecerá como <span class="text-yellow-400 font-bold">expirada</span>.
         </p>
         <div>
@@ -3812,7 +3819,7 @@
         <input type="hidden" id="activate-est-id" />
         <div class="flex gap-3 pt-1">
             <button onclick="document.getElementById('activate-modal').classList.add('hidden')"
-                    class="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all">
+                    class="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all">
                 Cancelar
             </button>
             <button onclick="confirmActivate()"
