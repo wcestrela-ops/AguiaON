@@ -121,8 +121,8 @@
        border-slate-*/text-white de fato usada, pra não sobrar nem faltar
        nada. Persistência em localStorage — ver updateThemeIcon()/toggleTheme().
        ───────────────────────────────────────────────────────────── */
-    body.theme-light { background:#F8FAFC !important; color:#0F172A !important; }
-    body.theme-light .card { background:#FFFFFF !important; border:1px solid #E2E8F0; }
+    body.theme-light { background:#EEF2F6 !important; color:#0F172A !important; }
+    body.theme-light .card { background:#FFFFFF !important; border:1px solid #E2E8F0; box-shadow:0 1px 3px rgba(15,23,42,.06); }
     body.theme-light .input { background:#FFFFFF !important; border-color:#CBD5E1 !important; color:#0F172A !important; }
     body.theme-light select.input option { background:#FFFFFF !important; color:#0F172A !important; }
     body.theme-light .tip-icon { background:#E2E8F0 !important; color:#475569 !important; }
@@ -132,21 +132,39 @@
     body.theme-light .badge-red { background:#FEE2E2 !important; color:#991B1B !important; }
     body.theme-light .badge-blue { background:#DBEAFE !important; color:#1E40AF !important; }
     body.theme-light .badge-gray { background:#F1F5F9 !important; color:#475569 !important; }
-    body.theme-light th { background:#F8FAFC !important; color:#64748B !important; }
+    body.theme-light th { background:#EEF2F6 !important; color:#64748B !important; }
     body.theme-light td { border-bottom-color:#E2E8F0 !important; }
     body.theme-light tr:hover td { background:#F1F5F9 !important; }
     body.theme-light .modal { background:#FFFFFF !important; }
-    body.theme-light .sidebar-link:hover, body.theme-light .sidebar-link.active { background:#F1F5F9 !important; color:#0F172A !important; }
     body.theme-light .cal-day:hover { background:#E2E8F0 !important; }
+    /* Fix de produção 37 — o Carlos reportou que o modo claro ficou ruim:
+       vários títulos de aba ("Dashboard", "Minha Loja", "CRM" etc — todo
+       <h2>/<h3> sem classe de cor própria, pelo menos 17 títulos de aba no
+       total) e os itens do menu lateral (sem classe de cor própria também,
+       só o item ativo tinha `.sidebar-link.active { color:var(--accent) }`)
+       dependiam 100% de herdar a cor do body — e a regra de body acima,
+       gorda em !important, também estava brigando com esse `--accent` do
+       item ativo e sempre ganhando (deixava o item ativo cinza escuro em
+       vez da cor de destaque). Em vez de continuar confiando em herança,
+       essas regras miram direto nos elementos — `:not([class*="text-"])`
+       garante que só afeta título/heading que NÃO tem nenhuma classe de cor
+       própria (não atropela quem já usa text-indigo-400 etc de propósito). */
+    body.theme-light h1:not([class*="text-"]),
+    body.theme-light h2:not([class*="text-"]),
+    body.theme-light h3:not([class*="text-"]),
+    body.theme-light h4:not([class*="text-"]) { color:#0F172A !important; }
+    body.theme-light .sidebar-link { color:#334155 !important; }
+    body.theme-light .sidebar-link:hover { color:#0F172A !important; background:#F1F5F9 !important; }
+    body.theme-light .sidebar-link.active { color:var(--accent) !important; background:#F1F5F9 !important; }
     body.theme-light .bg-\[\#0f172a\] { background-color:#FFFFFF !important; }
-    body.theme-light .bg-\[\#0d1424\] { background-color:#F1F5F9 !important; }
+    body.theme-light .bg-\[\#0d1424\] { background-color:#FFFFFF !important; }
     body.theme-light .bg-slate-700 { background-color: #E2E8F0 !important; }
     body.theme-light .bg-slate-900\/60 { background-color: rgba(255, 255, 255, 0.60) !important; }
     body.theme-light .bg-slate-500 { background-color: #CBD5E1 !important; }
     body.theme-light .bg-slate-800\/80 { background-color: rgba(241, 245, 249, 0.80) !important; }
     body.theme-light .bg-slate-900 { background-color: #FFFFFF !important; }
     body.theme-light .bg-slate-800 { background-color: #F1F5F9 !important; }
-    body.theme-light .bg-slate-950 { background-color: #F8FAFC !important; }
+    body.theme-light .bg-slate-950 { background-color: #EEF2F6 !important; }
     body.theme-light .bg-slate-900\/40 { background-color: rgba(255, 255, 255, 0.40) !important; }
     body.theme-light .bg-slate-800\/60 { background-color: rgba(241, 245, 249, 0.60) !important; }
     body.theme-light .bg-slate-900\/50 { background-color: rgba(255, 255, 255, 0.50) !important; }

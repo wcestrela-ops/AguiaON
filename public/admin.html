@@ -111,6 +111,15 @@
         body.theme-light .text-slate-700 { color: #CBD5E1 !important; }
         body.theme-light .text-slate-200 { color: #1E293B !important; }
         body.theme-light .text-white { color: #0F172A !important; }
+        /* Fix de produção 37 — mesma rede de segurança de loja.html: título
+           sem NENHUMA classe de cor (raro aqui, a maioria já usa text-white/
+           text-slate-*, mas cobre qualquer caso que passou batido) herda a
+           cor certa em vez de depender só de herança. :not([class*="text-"])
+           não atropela quem já tem cor própria (ex: text-emerald-400). */
+        body.theme-light h1:not([class*="text-"]),
+        body.theme-light h2:not([class*="text-"]),
+        body.theme-light h3:not([class*="text-"]):not([style]),
+        body.theme-light h4:not([class*="text-"]) { color:#0F172A !important; }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-300 font-sans selection:bg-indigo-500/30 overflow-hidden">
