@@ -88,6 +88,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_whatsapp ON users(whatsapp);
 CREATE INDEX IF NOT EXISTS idx_users_establishment ON users(establishment_id);
+-- Fix de produção 40 — login e várias buscas de cliente/lead filtram por
+-- lower(email), que o índice único simples em email() não cobre. Sem esse
+-- índice de expressão, essas buscas viram varredura completa da tabela.
+CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email));
 
 
 -- =============================================

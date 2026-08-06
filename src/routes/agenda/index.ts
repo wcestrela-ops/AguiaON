@@ -345,6 +345,14 @@ export async function ensureTables() {
   // existe — reaproveita o sistema de auth em vez de criar um paralelo.
   await pool.query(`ALTER TABLE agenda_clientes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_user ON agenda_clientes(user_id)`);
+  // Fix de produção 40 — findOrCreateClienteUser() (mais abaixo neste arquivo)
+  // busca em `users` por `lower(email)=$2`. O índice único que já existe em
+  // `users(email)` não serve pra essa busca (é sobre a coluna crua, não sobre
+  // lower(email)) — sem um índice de expressão dedicado, toda chamada faz uma
+  // varredura completa da tabela `users`, que só piora conforme a base de
+  // usuários cresce. Isso roda a cada cliente novo/editado com telefone ou
+  // e-mail (POST/PUT /agenda/clientes) — mais uma causa da lentidão reportada.
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email))`);
   // Recorrência no nível do CLIENTE (independente de veículo) — valor fixo
   // cobrado todo mês no dia configurado, separado da recorrência por veículo
   // (agenda_frota.plano_id) que já existia desde a Fase 7.
@@ -434,6 +442,15 @@ export async function ensureTables() {
     )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_notas_fiscais_estab ON agenda_notas_fiscais(establishment_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_notas_fiscais_payment ON agenda_notas_fiscais(asaas_payment_id) WHERE asaas_payment_id IS NOT NULL`);
+  // Fix de produção 40 — cliente_id e agenda_frota_id têm FK com ON DELETE
+  // SET NULL mas nunca ganharam índice próprio. Sem índice, todo DELETE de
+  // agenda_clientes (ou de agenda_frota) obriga o Postgres a varrer a tabela
+  // agenda_notas_fiscais INTEIRA pra achar as linhas que referenciam o
+  // registro apagado (é assim que o banco enforce a FK) — e essa varredura
+  // fica mais lenta à medida que a tabela cresce, o que bate exatamente com
+  // o que o Carlos reportou ("apagar cliente demora mais do que antes").
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notas_fiscais_cliente ON agenda_notas_fiscais(cliente_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notas_fiscais_frota ON agenda_notas_fiscais(agenda_frota_id)`);
 
   // Colunas extras em establishments
   await pool.query(`ALTER TABLE establishments ADD COLUMN IF NOT EXISTS vertical_slug TEXT NOT NULL DEFAULT 'generico'`);

@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_whatsapp ON users(whatsapp);
 CREATE INDEX IF NOT EXISTS idx_users_establishment ON users(establishment_id);
+-- Fix de produção 40 — ver nota equivalente em schema.sql.
+CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email));
 
 
 -- =============================================
