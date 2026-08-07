@@ -237,9 +237,18 @@ export function extractDeviceSimNumber(device: any): string | null {
   return raw ? String(raw).replace(/\D/g, '') || null : null;
 }
 
-/** ID numérico do usuário/cliente GPSWOX dono do dispositivo (device_data.user_id) — necessário pra criar dispositivo novo via edit_device. */
+// Fix de produção 53 — o campo real, confirmado contra a resposta de exemplo
+// da doc oficial (get_devices_latest), é `device_data.pivot.user_id` — um
+// nível mais fundo do que o Fix 46 tinha assumido (`device_data.user_id`
+// direto, que nunca existiu de verdade nessa resposta). Essa função nunca
+// encontrava nada — sempre devolvia null — desde que foi escrita; por isso o
+// "dono detectado" no envio de veículos (Fix 42/48) e a sincronização de
+// clientes (Fix 52) nunca tinham dado certo de verdade. Mantém o fallback
+// pro campo direto por segurança, caso alguma versão/endpoint diferente do
+// GPSWOX devolva achatado.
+/** ID numérico do cliente GPSWOX dono do dispositivo (o "principal" — ver listClientsForDevice() pra pegar TODOS que têm acesso). */
 export function extractDeviceGpswoxUserId(device: any): string | null {
-  const raw = device?.device_data?.user_id ?? null;
+  const raw = device?.device_data?.pivot?.user_id ?? device?.device_data?.user_id ?? null;
   return raw != null ? String(raw) : null;
 }
 
@@ -320,12 +329,14 @@ export interface GpswoxClientSummary {
 // alto (200) pra reduzir o número de páginas na prática, mas ainda percorre
 // `last_page` de verdade em vez de assumir que cabe numa página só — contas
 // GPSWOX grandes podem ter mais de 200 clientes.
-export async function listClients(estId: string): Promise<GpswoxClientSummary[]> {
+export async function listClients(estId: string, params: { searchDevice?: string } = {}): Promise<GpswoxClientSummary[]> {
   const all: GpswoxClientSummary[] = [];
   let page = 1;
   let lastPage = 1;
   do {
-    const data = await request(estId, 'admin/clients', { query: { limit: 200, page } });
+    const query: Record<string, any> = { limit: 200, page };
+    if (params.searchDevice) query.search_device = params.searchDevice;
+    const data = await request(estId, 'admin/clients', { query });
     const list = Array.isArray(data?.data) ? data.data : [];
     for (const c of list) {
       if (c?.id == null) continue;
@@ -335,6 +346,18 @@ export async function listClients(estId: string): Promise<GpswoxClientSummary[]>
     page++;
   } while (page <= lastPage && page <= 50); // teto de segurança (50 páginas = até 10 mil clientes)
   return all;
+}
+
+// Fix de produção 53 — o Carlos confirmou o cenário: um veículo pode ter até
+// 4-5 e-mails com acesso no GPSWOX (normalmente só um paga, mas vários usam).
+// A listagem de dispositivos (get_devices/get_devices_latest) só devolve UM
+// `pivot.user_id` por dispositivo — não dá pra saber por ela quantos clientes
+// têm acesso de verdade. Mas `GET /api/admin/clients` aceita `search_device`
+// (IMEI) como filtro — confirmado contra a doc oficial — e devolve TODOS os
+// clientes que têm aquele dispositivo entre os seus. É isso que permite
+// enxergar a lista completa, não só o "dono principal".
+export async function listClientsForDevice(estId: string, imei: string): Promise<GpswoxClientSummary[]> {
+  return listClients(estId, { searchDevice: imei });
 }
 
 export async function getDeviceLocation(estId: string, deviceId: string): Promise<DeviceLocation> {

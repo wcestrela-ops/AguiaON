@@ -1091,3 +1091,30 @@ Confirmei contra a documentação oficial: `GET /api/admin/clients` retorna a li
 - `loja.html` (`renderGpswoxSyncResult`): 4º bloco visual no modal "Sincronizar com GPS", no mesmo padrão dos outros 3 (vincular/importar/enviar) — tabela com o cliente (e-mail/telefone) e a ação ("vincular existente" ou "criar novo"). A mensagem de sucesso pós-aplicação (`aplicarSyncGpswox`) agora também mostra a contagem de clientes sincronizados.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação). `loja.html` é HTML/JS solto (sem cobertura do `tsc`) — sintaxe da função verificada isoladamente com `node -e`.
+
+## Fix de produção 53 — bug no campo do dono do dispositivo (nunca funcionou desde o Fix 46) + suporte a múltiplos clientes por veículo
+
+Depois do Fix 52, o Carlos fez uma pergunta afiada: a sincronização detecta só a conta do administrador, ou também os outros clientes que têm acesso ao mesmo veículo rastreado? No GPSWOX, um veículo pode ter até 4-5 "e-mails de acesso" — normalmente um só paga, mas vários enxergam o rastreamento. A pergunta expôs duas coisas ao mesmo tempo: um bug real e uma lacuna de funcionalidade real. Carlos confirmou: conserta os dois — corrige o bug e adiciona suporte a múltiplos clientes — mantendo a ideia de que ainda existe um cliente principal/pagante por veículo (`agenda_frota.cliente_id`), mesmo com várias pessoas tendo acesso.
+
+**Causa raiz do bug**: `extractDeviceGpswoxUserId()` lia `device?.device_data?.user_id`. Conferindo de novo contra a documentação oficial (exemplo de resposta do `get_devices_latest`), o campo de verdade fica um nível mais fundo: `device_data.pivot.user_id`. Esse campo nunca existiu no formato que a função lia — ou seja, desde que foi escrita no Fix 46, `extractDeviceGpswoxUserId()` sempre devolveu `null`. Isso vinha quebrando silenciosamente a detecção de dono em tudo que dependia dela: o "palpite" de dono ao criar dispositivo novo (Fix 42/48) e a sincronização de clientes por dono de dispositivo (Fix 52) — os dois rodavam sem erro, só nunca achavam ninguém.
+
+```ts
+// antes (Fix 46) — sempre null, porque esse campo não existe nesse nível
+const raw = device?.device_data?.user_id ?? null;
+
+// depois (Fix 53) — campo real confirmado na doc oficial, com fallback defensivo
+const raw = device?.device_data?.pivot?.user_id ?? device?.device_data?.user_id ?? null;
+```
+
+**A lacuna de funcionalidade**: mesmo corrigido, esse campo (de `get_devices`/`get_devices_latest`) só traz UM dono por dispositivo — não existe "lista de todo mundo com acesso" nesse endpoint. Mas a documentação oficial confirma que `GET /api/admin/clients` aceita um filtro `search_device=<imei>`, que devolve TODOS os clientes GPSWOX que têm aquele dispositivo entre os seus — é esse filtro que permite enxergar a lista completa, não só o "dono principal".
+
+**Implementação**:
+- `gpswoxClient.ts`: `extractDeviceGpswoxUserId()` corrigida (acima). `listClients()` ganhou um parâmetro opcional `searchDevice`, que vira `search_device` na query; nova função `listClientsForDevice(estId, imei)` — wrapper direto pra esse filtro.
+- Nova tabela `agenda_frota_acessos` (N-pra-N): `id`, `agenda_frota_id` (FK→`agenda_frota`), `cliente_id` (FK→`agenda_clientes`), `establishment_id`, `gpswox_client_id`, `created_at`, `UNIQUE(agenda_frota_id, cliente_id)`, com índices por veículo e por establishment. `agenda_frota.cliente_id` continua sendo o cliente principal/pagante (papel que já existia) — a tabela nova guarda todos os que têm acesso, incluindo o principal.
+- `POST /agenda/frota-gpswox-sync`: o loop por dispositivo agora chama `listClientsForDevice(eid, imei)` uma vez por dispositivo (best-effort, try/catch — se falhar ou não vier nada, cai de volta pro antigo `pivot.user_id` de um dono só). O primeiro da lista continua sendo tratado como "dono principal" (mesmo papel de antes, agora alimentando `resolverClienteGpswox()` de novo). Nova função `registrarAcessosDoVeiculo(veiculoId, clientesDoDispositivo)`: pra cada cliente que o GPSWOX reporta com acesso ao dispositivo, resolve/cria o cliente local (reaproveitando o dedup por e-mail/telefone do `resolverClienteGpswox()` do Fix 52) e grava (`upsert`) em `agenda_frota_acessos`. Best-effort, sem gravação em `dry_run` e sem gravação enquanto o veículo ainda não tem id (só a prévia de clientes é resolvida nesses casos). Aplicada tanto no ramo de veículo importado como novo quanto no ramo de veículo já existente (bate por IMEI).
+- Novo endpoint `GET /agenda/frota/:id/acessos` — lista as linhas de `agenda_frota_acessos` do veículo, com `JOIN` em `agenda_clientes` pra trazer nome/e-mail/telefone de cada um.
+- Resposta do `POST /agenda/frota-gpswox-sync` ganhou `acessos_registrados` (array) e `total_acessos_registrados` (contagem), no mesmo padrão de preview dos outros blocos.
+
+**Fora do escopo deste fix (fica pra depois)**: escrever de volta pro GPSWOX quando o AguiaON tiver mais de um cliente pra um veículo (mão AguiaON → GPSWOX). O campo `user_id` do `edit_device` SUBSTITUI a lista inteira de donos no GPSWOX, e não existe um jeito confiável de ler a lista atual completa antes de decidir o que mandar — mandar só o dono principal correria o risco de revogar sem querer o acesso de quem já tinha lá. Por isso este fix é só leitura/importação (GPSWOX → AguiaON) quanto ao relacionamento de múltiplos clientes; nada aqui envia essa lista de volta.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).
