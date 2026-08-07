@@ -4280,7 +4280,11 @@ function renderNicheConfig(slug, businessConfig) {
             <input type="password" id="gpswox-api-hash" class="input" placeholder="Deixe em branco para manter o atual" />
             <span class="help-text">Por segurança, o token salvo nunca é exibido de volta — preencha apenas para definir ou trocar.</span>
           </div>
-          <button onclick="salvarGpswoxConfig()" class="btn-primary text-sm"><i class="fa fa-save mr-1"></i> Salvar credenciais GPSWOX</button>
+          <div class="flex gap-2">
+            <button onclick="salvarGpswoxConfig()" class="btn-primary text-sm"><i class="fa fa-save mr-1"></i> Salvar credenciais GPSWOX</button>
+            <button onclick="testarGpswoxIntegracao()" class="btn-outline text-sm"><i class="fa fa-satellite-dish mr-1"></i> Testar integração</button>
+          </div>
+          <div id="gpswox-teste-resultado"></div>
 
           <div class="pt-3 mt-1 border-t border-slate-200 dark:border-slate-800">
             <p class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">📍 Cercas eletrônicas</p>
@@ -7298,6 +7302,37 @@ async function salvarGpswoxConfig() {
     alert('Configuração GPSWOX salva com sucesso!');
     loadFrotaGpswoxStatus();
   } catch (e) { alert('Erro ao salvar: ' + e.message); }
+}
+
+// Fix de produção 47 — botão "Testar integração" pedido pelo Carlos: chama
+// get_devices de verdade e mostra o resultado direto na tela (quantos
+// dispositivos, nome/IMEI/status de cada um, e o objeto cru do primeiro),
+// sem precisar abrir o log do EasyPanel pra conferir se a integração
+// GPSWOX está lendo os dispositivos certos.
+async function testarGpswoxIntegracao() {
+  const box = document.getElementById('gpswox-teste-resultado');
+  box.innerHTML = '<p class="text-sm text-slate-600 dark:text-slate-400 mt-2">Consultando GPSWOX...</p>';
+  try {
+    const r = await api('/agenda/frota-gpswox-testar');
+    const linhas = (r.dispositivos || []).map(d => `
+      <tr>
+        <td>${d.nome || '—'}</td>
+        <td class="font-mono text-xs">${d.imei || '<span class="text-amber-500">não encontrado</span>'}</td>
+        <td class="text-xs">${d.online ?? '—'}</td>
+        <td class="font-mono text-xs">${d.gpswox_user_id ?? '<span class="text-amber-500">não encontrado</span>'}</td>
+      </tr>`).join('');
+    box.innerHTML = `
+      <div class="mt-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+        <p class="text-sm text-emerald-500 font-semibold mb-2"><i class="fa fa-check mr-1"></i>Conexão OK — ${r.total_dispositivos} dispositivo(s) encontrado(s) no GPSWOX.</p>
+        ${linhas ? `<table class="w-full text-xs mb-2"><thead><tr><th class="text-left">Nome</th><th class="text-left">IMEI</th><th class="text-left">Status</th><th class="text-left">GPSWOX user_id</th></tr></thead><tbody>${linhas}</tbody></table>` : ''}
+        <details class="text-xs mt-1">
+          <summary class="cursor-pointer text-slate-500 dark:text-slate-500">Ver JSON cru do primeiro dispositivo (avançado)</summary>
+          <pre class="mt-2 p-2 bg-white dark:bg-slate-950 rounded overflow-x-auto whitespace-pre-wrap break-all">${esc(JSON.stringify(r.primeiro_dispositivo_cru, null, 2))}</pre>
+        </details>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<p class="text-sm text-red-400 mt-2"><i class="fa fa-times mr-1"></i>${e.message}</p>`;
+  }
 }
 
 // ── Nota Fiscal (Asaas) — Configurações → Rastreamento ──

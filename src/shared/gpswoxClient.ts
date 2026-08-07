@@ -174,14 +174,38 @@ function extractGpswoxArray(data: any, keys: string[] = ['items', 'devices', 'da
   return data && typeof data === 'object' ? Object.values(data) : [];
 }
 
+// Fix de produção 47 — o log de produção finalmente mostrou a resposta real
+// de get_devices (POST já estava certo desde o Fix 46): não é uma lista de
+// dispositivos nem o envelope de paginação que eu tinha suposto no Fix 44 —
+// é uma lista de GRUPOS: `[{ id: 0, title: "Ungrouped", items: [
+// ...dispositivos de verdade... ] }]`. A extração de antes via que a
+// resposta já era um array e devolvia ela mesma sem entrar nos grupos — ou
+// seja, cada "dispositivo" processado era na verdade um GRUPO inteiro (essa
+// conta só tem 1 grupo, "Ungrouped", com os 5 dispositivos reais dentro do
+// `items` dele — por isso `devices_recebidos` sempre dava 1). Agora achata
+// os `items` de cada grupo antes de processar.
+function extractGpswoxDeviceList(data: any): any[] {
+  if (Array.isArray(data) && data.length && data.every((g: any) => g && typeof g === 'object' && Array.isArray(g.items))) {
+    return data.flatMap((g: any) => g.items);
+  }
+  return extractGpswoxArray(data, ['items', 'devices', 'data']);
+}
+
 export async function listDevices(estId: string): Promise<any[]> {
   // Fix de produção 46 — confirmado pelo handoff do ag-on-track: get_devices
   // é POST (com corpo vazio "{}"), não GET. `request()` sem `method`
-  // explícito defaultava pra GET — essa é a causa mais provável de
-  // `devices_recebidos=1` mesmo com 5 dispositivos reais na conta.
+  // explícito defaultava pra GET.
   const data = await request(estId, 'get_devices', { method: 'POST', body: {} });
-  console.log(`[gpswoxClient.listDevices] resposta crua do GPSWOX: ${JSON.stringify(data).slice(0, 1000)}`);
-  return extractGpswoxArray(data, ['items', 'devices', 'data']);
+  console.log(`[gpswoxClient.listDevices] resposta crua do GPSWOX: ${JSON.stringify(data).slice(0, 6000)}`);
+  const devices = extractGpswoxDeviceList(data);
+  // Log extra (Fix 47) — mostra as chaves de nível superior do primeiro
+  // dispositivo (e de device_data, se existir), pra confirmar rapidinho
+  // onde o imei/user_id realmente estão nessa resposta sem precisar ler o
+  // JSON gigante acima.
+  if (devices[0]) {
+    console.log(`[gpswoxClient.listDevices] devices_extraidos=${devices.length} chaves_do_primeiro=${Object.keys(devices[0]).join(',')} chaves_device_data=${devices[0].device_data ? Object.keys(devices[0].device_data).join(',') : '(sem device_data)'}`);
+  }
+  return devices;
 }
 
 // Fix de produção 46 — o handoff do ag-on-track documenta a estrutura real

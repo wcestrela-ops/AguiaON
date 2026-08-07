@@ -1005,6 +1005,42 @@ router.put('/frota-gpswox-config', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /agenda/frota-gpswox-testar — Fix de produção 47. O Carlos pediu um
+// botão de "Testar integração" nas Configurações pra não precisar mais
+// caçar log no EasyPanel toda vez que algo no GPSWOX não bate. Chama
+// get_devices de verdade e devolve um resumo pronto pra tela: quantos
+// dispositivos vieram, o nome/IMEI/status de cada um (usando os mesmos
+// extratores da sincronização, então se algo aqui não bate certo o
+// "Sincronizar com GPS" também não vai bater), e o objeto CRU do primeiro
+// dispositivo — pra qualquer campo novo que a API mande no futuro dar pra
+// ver direto na tela, sem precisar mexer no código de novo.
+router.get('/frota-gpswox-testar', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const cfg = await getGpswoxConfig(eid);
+    if (!isGpswoxConfigured(cfg)) {
+      return res.status(422).json({ ok: false, error: 'GPSWOX ainda não configurado — preencha URL e Token acima e salve antes de testar.' });
+    }
+    const devices = await listGpswoxDevices(eid);
+    res.json({
+      ok: true,
+      total_dispositivos: devices.length,
+      dispositivos: devices.map((d: any) => ({
+        id: d.id,
+        nome: d.name || d.title || null,
+        online: d.online ?? null,
+        imei: extractDeviceImei(d),
+        sim: extractDeviceSimNumber(d),
+        gpswox_user_id: extractDeviceGpswoxUserId(d),
+        chaves_disponiveis: Object.keys(d || {}),
+      })),
+      primeiro_dispositivo_cru: devices[0] || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Fix de produção 46 — extractDeviceImei/extractDeviceSimNumber saíram
 // daqui: agora vivem em shared/gpswoxClient.ts (junto com
 // extractDeviceGpswoxUserId), corrigidas pra ler de dentro de
