@@ -14,6 +14,7 @@ import {
   isGpswoxConfigured,
   listDevices as listGpswoxDevices,
   createDevice as createGpswoxDevice,
+  createClient as createGpswoxClient,
   getDeviceLocation,
   sendCommand as sendGpswoxCommand,
   getHistory,
@@ -285,6 +286,10 @@ export async function ensureTables() {
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_clientes_estab ON agenda_clientes(establishment_id)`);
+  // Fix de produção 50 — cliente cadastrado aqui agora tenta criar o
+  // "client" correspondente no GPSWOX (best-effort); guarda o id retornado
+  // pra não tentar criar de novo em edições futuras.
+  await pool.query(`ALTER TABLE agenda_clientes ADD COLUMN IF NOT EXISTS gpswox_client_id TEXT`);
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_asaas_id
       ON agenda_clientes(establishment_id, asaas_customer_id) WHERE asaas_customer_id IS NOT NULL
@@ -922,18 +927,56 @@ async function resolveClienteDados(eid: string, cliente_id: string | null | unde
   return { nome: nome || c.rows[0].nome, telefone: telefone || c.rows[0].telefone };
 }
 
+// Fix de produção 50 — antes disso, o único jeito de um veículo virar
+// dispositivo no GPSWOX era clicar manualmente em "Sincronizar com GPS"
+// depois de cadastrar. O Carlos pediu pra isso acontecer sozinho: se o
+// veículo já tem IMEI preenchido na hora de salvar (criar ou editar), tenta
+// criar no GPSWOX na hora, best-effort (não bloqueia o salvamento local se o
+// GPSWOX falhar ou não estiver configurado — "Sincronizar com GPS" continua
+// funcionando como rede de segurança pra quem prefere preencher o IMEI
+// depois). Reaproveita o mesmo `createGpswoxDevice` do fluxo manual.
+async function tentarCriarDispositivoGpswox(eid: string, params: { imei: string; placa: string | null; clienteId: string | null | undefined; nomeFallback: string }): Promise<string | null> {
+  try {
+    let gpswoxUserId: string | undefined;
+    if (params.clienteId) {
+      const cli = await pool.query(`SELECT gpswox_client_id FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [params.clienteId, eid]);
+      gpswoxUserId = cli.rows[0]?.gpswox_client_id || undefined;
+    }
+    const criado = await createGpswoxDevice(eid, {
+      name: params.placa || params.nomeFallback,
+      imei: params.imei,
+      plateNumber: params.placa || undefined,
+      userId: gpswoxUserId,
+    });
+    console.log(`[frota] dispositivo criado no GPSWOX ao salvar veiculo — imei=${params.imei} device_id=${criado.id}`);
+    return criado.id;
+  } catch (e: any) {
+    console.warn(`[frota] não foi possível criar no GPSWOX ao salvar veículo (${e.message}) — segue só local, "Sincronizar com GPS" pega depois.`);
+    return null;
+  }
+}
+
 router.post('/frota', async (req, res) => {
   try {
     const eid = estabId(req);
     const { cliente_nome, cliente_telefone, cliente_id, placa, modelo, ano, cor, imei_rastreador, tracker_phone, data_instalacao, plano_id, status, observacoes } = req.body;
     const dados = await resolveClienteDados(eid, cliente_id, cliente_nome, cliente_telefone);
+
+    let gpswoxDeviceId: string | null = null;
+    if (imei_rastreador) {
+      gpswoxDeviceId = await tentarCriarDispositivoGpswox(eid, {
+        imei: imei_rastreador, placa: placa || null, clienteId: cliente_id, nomeFallback: dados.nome || placa || 'Veículo',
+      });
+    }
+
     const r = await pool.query(
-      `INSERT INTO agenda_frota (establishment_id,cliente_nome,cliente_telefone,cliente_id,placa,modelo,ano,cor,imei_rastreador,tracker_phone,data_instalacao,plano_id,status,observacoes)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      `INSERT INTO agenda_frota (establishment_id,cliente_nome,cliente_telefone,cliente_id,placa,modelo,ano,cor,imei_rastreador,tracker_phone,data_instalacao,plano_id,status,observacoes,gpswox_device_id,tracker_synced_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [eid, dados.nome, dados.telefone, cliente_id||null, placa||null, modelo||null, ano||null, cor||null,
-       imei_rastreador||null, tracker_phone?.replace(/\D/g,'') || null, data_instalacao||null, plano_id||null, status||'ativo', observacoes||null]
+       imei_rastreador||null, tracker_phone?.replace(/\D/g,'') || null, data_instalacao||null, plano_id||null, status||'ativo', observacoes||null,
+       gpswoxDeviceId, gpswoxDeviceId ? new Date() : null]
     );
-    res.status(201).json({ success: true, veiculo: r.rows[0] });
+    res.status(201).json({ success: true, veiculo: r.rows[0], gpswox_sincronizado: !!gpswoxDeviceId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -942,16 +985,30 @@ router.put('/frota/:id', async (req, res) => {
     const eid = estabId(req);
     const { cliente_nome, cliente_telefone, cliente_id, placa, modelo, ano, cor, imei_rastreador, tracker_phone, data_instalacao, plano_id, status, observacoes } = req.body;
     const dados = await resolveClienteDados(eid, cliente_id, cliente_nome, cliente_telefone);
+
+    // Só tenta criar no GPSWOX se ainda não tinha device vinculado e agora
+    // tem IMEI — evita recriar (ou duplicar) dispositivo em toda edição.
+    const atual = await pool.query(`SELECT gpswox_device_id FROM agenda_frota WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    let gpswoxDeviceId: string | null = atual.rows[0]?.gpswox_device_id || null;
+    if (!gpswoxDeviceId && imei_rastreador) {
+      gpswoxDeviceId = await tentarCriarDispositivoGpswox(eid, {
+        imei: imei_rastreador, placa: placa || null, clienteId: cliente_id, nomeFallback: dados.nome || placa || 'Veículo',
+      });
+    }
+
     const r = await pool.query(
       `UPDATE agenda_frota SET cliente_nome=$1,cliente_telefone=$2,cliente_id=$3,placa=$4,modelo=$5,ano=$6,cor=$7,
-       imei_rastreador=$8,tracker_phone=$9,data_instalacao=$10,plano_id=$11,status=$12,observacoes=$13,updated_at=NOW()
-       WHERE id=$14 AND establishment_id=$15 RETURNING *`,
+       imei_rastreador=$8,tracker_phone=$9,data_instalacao=$10,plano_id=$11,status=$12,observacoes=$13,
+       gpswox_device_id=COALESCE($14,gpswox_device_id),
+       tracker_synced_at=CASE WHEN $14 IS NOT NULL THEN NOW() ELSE tracker_synced_at END,
+       updated_at=NOW()
+       WHERE id=$15 AND establishment_id=$16 RETURNING *`,
       [dados.nome, dados.telefone, cliente_id||null, placa||null, modelo||null, ano||null, cor||null,
        imei_rastreador||null, tracker_phone?.replace(/\D/g,'') || null, data_instalacao||null, plano_id||null, status||'ativo', observacoes||null,
-       req.params.id, eid]
+       gpswoxDeviceId, req.params.id, eid]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Não encontrado' });
-    res.json({ success: true, veiculo: r.rows[0] });
+    res.json({ success: true, veiculo: r.rows[0], gpswox_sincronizado: !!gpswoxDeviceId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1749,17 +1806,32 @@ router.post('/clientes', async (req, res) => {
       console.warn(`[clientes] não foi possível criar no Asaas (${asaasErr.message}) — seguindo só local.`);
     }
 
+    // Fix de produção 50 — mesmo tratamento best-effort do Asaas acima, mas
+    // pro GPSWOX: o Carlos pediu que o cliente cadastrado aqui já vire um
+    // "client" no GPSWOX também, não só o veículo. Precisa de e-mail (é o
+    // único identificador aceito pelo POST /api/admin/client); sem e-mail,
+    // fica só local mesmo (dá pra criar depois, editando o cliente).
+    let gpswoxClientId: string | null = null;
+    if (email) {
+      try {
+        const createdGpswox = await createGpswoxClient(eid, { email, phoneNumber: telefone });
+        gpswoxClientId = createdGpswox?.id || null;
+      } catch (gpswoxErr: any) {
+        console.warn(`[clientes] não foi possível criar no GPSWOX (${gpswoxErr.message}) — seguindo só local.`);
+      }
+    }
+
     const userId = await findOrCreateClienteUser(nome.trim(), telefone, email);
 
     const r = await pool.query(
       `INSERT INTO agenda_clientes
          (establishment_id, nome, telefone, email, cpf_cnpj, asaas_customer_id, observacoes, origem, user_id,
-          data_nascimento, contato_emergencia_nome, contato_emergencia_telefone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11) RETURNING *`,
+          data_nascimento, contato_emergencia_nome, contato_emergencia_telefone, gpswox_client_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11,$12) RETURNING *`,
       [eid, nome.trim(), telefone || null, email || null, cpf_cnpj || null, asaasCustomerId, observacoes || null, userId,
-       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null]
+       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null, gpswoxClientId]
     );
-    res.status(201).json({ ...r.rows[0], asaas_sincronizado: !!asaasCustomerId, login_disponivel: !!userId });
+    res.status(201).json({ ...r.rows[0], asaas_sincronizado: !!asaasCustomerId, login_disponivel: !!userId, gpswox_sincronizado: !!gpswoxClientId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1769,7 +1841,7 @@ router.put('/clientes/:id', async (req, res) => {
     const eid = estabId(req);
     const { nome, telefone, email, cpf_cnpj, observacoes, data_nascimento, contato_emergencia_nome, contato_emergencia_telefone } = req.body;
 
-    const atual = await pool.query(`SELECT nome, user_id FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    const atual = await pool.query(`SELECT nome, user_id, gpswox_client_id FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
     if (!atual.rows.length) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
     // Se ainda não tinha login vinculado e agora tem telefone/e-mail, tenta vincular.
@@ -1778,12 +1850,25 @@ router.put('/clientes/:id', async (req, res) => {
       userId = await findOrCreateClienteUser(nome || atual.rows[0].nome, telefone, email);
     }
 
+    // Fix de produção 50 — mesma lógica do POST: se o cliente ainda não tinha
+    // sido criado no GPSWOX (ex: foi cadastrado sem e-mail) e agora um e-mail
+    // foi preenchido na edição, tenta criar agora.
+    let gpswoxClientId = atual.rows[0].gpswox_client_id;
+    if (!gpswoxClientId && email) {
+      try {
+        const createdGpswox = await createGpswoxClient(eid, { email, phoneNumber: telefone });
+        gpswoxClientId = createdGpswox?.id || null;
+      } catch (gpswoxErr: any) {
+        console.warn(`[clientes] não foi possível criar no GPSWOX (${gpswoxErr.message}) — seguindo só local.`);
+      }
+    }
+
     const r = await pool.query(
       `UPDATE agenda_clientes SET nome=COALESCE($1,nome), telefone=$2, email=$3, cpf_cnpj=$4, observacoes=$5, user_id=$6,
-         data_nascimento=$7, contato_emergencia_nome=$8, contato_emergencia_telefone=$9, updated_at=NOW()
-       WHERE id=$10 AND establishment_id=$11 RETURNING *`,
+         data_nascimento=$7, contato_emergencia_nome=$8, contato_emergencia_telefone=$9, gpswox_client_id=$10, updated_at=NOW()
+       WHERE id=$11 AND establishment_id=$12 RETURNING *`,
       [nome || null, telefone || null, email || null, cpf_cnpj || null, observacoes || null, userId,
-       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null, req.params.id, eid]
+       data_nascimento || null, contato_emergencia_nome || null, contato_emergencia_telefone || null, gpswoxClientId, req.params.id, eid]
     );
     res.json(r.rows[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

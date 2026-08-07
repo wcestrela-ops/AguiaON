@@ -1050,3 +1050,17 @@ Consequência prática: `POST /agenda/frota-gpswox-sync` NUNCA rodava em modo "a
 **Correção**: `const dryRun = req.body?.dry_run !== false;` — só entra em modo preview se `dry_run` não for exatamente `false`. Testado mentalmente contra os 3 casos que importam: não enviado → `true` (preview, padrão seguro); `dry_run:true` → `true` (preview); `dry_run:false` → `false` (aplica).
 
 **Verificação**: `npx tsc --noEmit -p .` limpo (0 erros em `agenda/index.ts`, mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação). Fix mínimo (1 linha de lógica) e cirúrgico — não mexe em nada mais da rota.
+
+## Fix de produção 50 — Cadastrar veículo/cliente aqui nunca criava nada no GPSWOX automaticamente
+
+Depois do Fix 49 resolver "sincronizar não aplica", o Carlos testou de novo e reportou um problema diferente: "quando adiciona aqui no nosso sistema, não vai pra GPSWOX" — mas "a sincronização dos veículos que já estão na gestão [GPSWOX] funciona normalmente". Ele também pediu que o mesmo valesse pra usuários/clientes, não só veículos.
+
+Revisando `POST/PUT /agenda/frota` (usado pelo formulário "Cadastrar veículo" do `loja.html`) e `POST/PUT /agenda/clientes`: os dois só fazem `INSERT`/`UPDATE` no banco local — **nenhum dos dois nunca chamou o GPSWOX**, nem quando o veículo já é cadastrado com IMEI preenchido. O único caminho que criava dispositivo no GPSWOX era o botão manual "Sincronizar com GPS" (`POST /agenda/frota-gpswox-sync`, Fixes 42-49), que só resolve veículos que já têm IMEI **e** ainda dependem de alguém lembrar de clicar. Não existia processo nenhum, manual ou automático, pra criar `client` no GPSWOX a partir de um cliente cadastrado na AguiaON.
+
+**Correção**:
+- `gpswoxClient.ts`: nova função `createClient()` — `POST /api/admin/client`, confirmada contra a documentação oficial (mesma varredura da Tarefa #45/`docs/GPSWOX_API.md`). Só `email` é aceito como identificador (não existe campo de nome nesse endpoint); `password_generate: true` deixa o GPSWOX gerar a senha; `account_created: false` e `email_verification: false` evitam mandar e-mail de boas-vindas de uma conta que o cliente final não usa diretamente ainda; `group_id: 2` = "User".
+- `agenda_clientes` ganhou a coluna `gpswox_client_id`. `POST /agenda/clientes` e `PUT /agenda/clientes/:id` agora tentam criar o client no GPSWOX (best-effort, igual já acontecia com o Asaas) sempre que há e-mail e ainda não existe `gpswox_client_id`.
+- `POST /agenda/frota` e `PUT /agenda/frota/:id` agora tentam criar o dispositivo no GPSWOX (`createGpswoxDevice`, mesma função do fluxo manual) sempre que o veículo é salvo com IMEI e ainda não tem `gpswox_device_id` — usando o `gpswox_client_id` do cliente vinculado (`cliente_id`) como dono do dispositivo, quando existe.
+- Em ambos os casos, falha do GPSWOX é só um aviso no log (`console.warn`) — o cadastro local nunca é bloqueado por causa do GPSWOX, e "Sincronizar com GPS" continua funcionando como rede de segurança pra quem preenche o IMEI depois ou pra quando a API do GPSWOX está fora do ar na hora de salvar.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).

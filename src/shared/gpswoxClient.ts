@@ -261,6 +261,34 @@ export async function createDevice(estId: string, params: { name: string; imei: 
   return { id: id != null ? String(id) : null, raw };
 }
 
+// Fix de produção 50 — cria o "client" (usuário final) no GPSWOX
+// automaticamente quando um cliente é cadastrado na AguiaON, do mesmo jeito
+// que já acontece com o Asaas (best-effort, não bloqueia o cadastro local se
+// falhar). Confirmado contra a documentação oficial (POST /api/admin/client):
+// só `email` é aceito como identificador — não existe campo de nome nesse
+// endpoint. `password_generate: true` deixa o GPSWOX gerar a senha sozinho
+// (a AguiaON não expõe login GPSWOX pro cliente final ainda, então não tem
+// senha nossa pra reaproveitar). `account_created: false` e
+// `email_verification: false` evitam mandar e-mail de boas-vindas do GPSWOX
+// pro cliente (ele não sabe que essa conta existe) e evitam travar a criação
+// esperando confirmação. `group_id: 2` = "User" (grupo de usuário final, não
+// administrador — ver tabela de group_id na doc oficial: 1-Admin, 2-User,
+// 3-Manager, 4-Demo, 5-Operator, 6-Supervisor).
+export async function createClient(estId: string, params: { email: string; phoneNumber?: string }): Promise<{ id: string | null; raw: any }> {
+  const body: Record<string, any> = {
+    email: params.email,
+    active: true,
+    group_id: 2,
+    password_generate: true,
+    account_created: false,
+    email_verification: false,
+  };
+  if (params.phoneNumber) body.phone_number = params.phoneNumber;
+  const raw = await request(estId, 'admin/client', { method: 'POST', body });
+  const id = raw?.item?.id ?? raw?.id ?? raw?.data?.id ?? null;
+  return { id: id != null ? String(id) : null, raw };
+}
+
 export async function getDeviceLocation(estId: string, deviceId: string): Promise<DeviceLocation> {
   const devices = await listDevices(estId);
   const device = devices.find((d: any) => String(d.id) === String(deviceId));
