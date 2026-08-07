@@ -133,10 +133,35 @@ async function request(estId: string, path: string, options: { method?: string; 
   return data;
 }
 
+// Fix de produção 44 — a API do GPSWOX pagina as respostas de lista: o
+// formato real (confirmado pelo log de produção do Fix 43) não é um array
+// direto em `data.items`, e sim um envelope de paginação, algo como
+// `{ items: { data: [...5 dispositivos...], total: 5, current_page: 1, ... } }`.
+// A extração antiga (`data?.items || data?.devices || data`) pegava esse
+// ENVELOPE inteiro; como não é array, caía em `Object.values(envelope)`, que
+// devolve `[ [...5 dispositivos...], 5, 1, ... ]` — ou seja, o array de
+// verdade vira um ÚNICO item dentro do resultado (junto com os números da
+// paginação soltos), por isso `listDevices()` reportava "1 dispositivo" com
+// 5 cadastrados de verdade no GPSWOX. Essa função agora desce um nível a
+// mais nos formatos mais comuns antes de desistir e usar Object.values.
+function extractGpswoxArray(data: any, keys: string[] = ['items', 'devices', 'data']): any[] {
+  if (Array.isArray(data)) return data;
+  for (const key of keys) {
+    const v = data?.[key];
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') {
+      if (Array.isArray(v.data)) return v.data;
+      if (Array.isArray(v.items)) return v.items;
+    }
+  }
+  // Último recurso (formato desconhecido) — mantém o comportamento antigo
+  // como fallback, mas só chega aqui se nada acima bateu.
+  return data && typeof data === 'object' ? Object.values(data) : [];
+}
+
 export async function listDevices(estId: string): Promise<any[]> {
   const data = await request(estId, 'get_devices');
-  const items = data?.items || data?.devices || data || [];
-  return Array.isArray(items) ? items : Object.values(items);
+  return extractGpswoxArray(data, ['items', 'devices', 'data']);
 }
 
 // Fix de produção 42 — cria um dispositivo do lado do GPSWOX a partir de um
@@ -218,8 +243,7 @@ export interface HistoryPoint {
 /** Histórico de trajeto do dispositivo entre duas datas (formato ISO ou 'YYYY-MM-DD HH:mm:ss', conforme a API GPSWOX exigir). */
 export async function getHistory(estId: string, deviceId: string, from: string, to: string): Promise<HistoryPoint[]> {
   const data = await request(estId, 'get_history', { query: { device_id: deviceId, from, to } });
-  const items = data?.items || data?.messages || data?.data || data || [];
-  const list = Array.isArray(items) ? items : Object.values(items);
+  const list = extractGpswoxArray(data, ['items', 'messages', 'data']);
 
   return list.map((p: any) => {
     const lat = parseFloat(p.lat ?? p.latitude);
@@ -267,8 +291,7 @@ export interface Geofence {
 
 export async function listGeofences(estId: string): Promise<Geofence[]> {
   const data = await request(estId, 'get_geofences');
-  const items = data?.items || data?.data || data || [];
-  const list = Array.isArray(items) ? items : Object.values(items);
+  const list = extractGpswoxArray(data, ['items', 'data']);
   return list.map((g: any) => ({ id: g.id, nome: g.name || g.title || `Cerca ${g.id}`, raw: g }));
 }
 
