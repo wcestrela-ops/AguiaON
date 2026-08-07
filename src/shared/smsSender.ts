@@ -12,7 +12,7 @@
  *  - fake          → simulado, sempre "sent" (dev/staging)
  *  - android       → celular físico com chip, agente HTTP próprio (formato genérico, não confirmado contra nenhum app real)
  *  - http_gateway   → URL genérica com %NUMBER%/%MESSAGE% (padrão GPSWOX/PHP)
- *  - smsmarket     → API HTTP com api_key + sender_id
+ *  - smsmarket     → smsmarket.com.br, Basic Auth (usuário+senha), URL fixa — Fix de produção 57
  *  - traccar_sms   → app "Traccar SMS Gateway" (celular físico com chip) — Fix de produção 56
  */
 
@@ -68,12 +68,23 @@ export const PROVIDER_TYPES: Record<SmsProviderType, { label: string; descriptio
       { key: 'http_method', label: 'Método HTTP', type: 'text', placeholder: 'GET' },
     ],
   },
+  // Fix de produção 57 — a implementação anterior nunca tinha sido conferida
+  // contra a doc oficial (smsmarket.docs.apiary.io) e estava errada em quase
+  // tudo (URL configurável pelo usuário, auth Bearer com uma "api_key" só,
+  // corpo JSON com campos `to`/`text`). A API real: URL FIXA
+  // (https://api.smsmarket.com.br/webservice-rest/send-single, não vem de
+  // config nenhuma), autenticação é HTTP Basic com USUÁRIO + SENHA da conta
+  // (não uma api_key única), corpo é `application/x-www-form-urlencoded`
+  // com `type`/`country_code`/`number`/`content`. Reaproveita os campos
+  // `sender_id`/`api_key` já existentes no schema (usuário/senha) em vez de
+  // criar campos novos — mesmo padrão que o `http_gateway` já usa pra
+  // usuário+senha.
   smsmarket: {
-    label: 'SMSMarket / API HTTP com chave',
+    label: 'SMSMarket (smsmarket.com.br)',
+    description: 'Usuário e senha da sua conta SMSMarket — a URL da API é fixa, não precisa preencher.',
     fields: [
-      { key: 'base_url', label: 'URL da API', type: 'url', required: true },
-      { key: 'api_key', label: 'API Key', type: 'password', secret: true, required: true },
-      { key: 'sender_id', label: 'Remetente / ID', type: 'text', required: true },
+      { key: 'sender_id', label: 'Usuário (login SMSMarket)', type: 'text', required: true },
+      { key: 'api_key', label: 'Senha (login SMSMarket)', type: 'password', secret: true, required: true },
     ],
   },
   // Fix de produção 56 — app "Traccar SMS Gateway" (Android, grátis, do mesmo
@@ -232,15 +243,36 @@ async function dispatchByProvider(row: SmsProviderRow, phone: string, message: s
       return { ok: true, external_id: null };
     }
 
+    // Fix de produção 57 — reescrito do zero contra a doc oficial
+    // (smsmarket.docs.apiary.io). `phone` já chega só em dígitos (via
+    // normalizePhone); a API quer DDI (`country_code`) e número LOCAL
+    // (`number`) separados, então tira o "55" da frente se já vier
+    // embutido (convenção usada no resto do projeto pro WhatsApp).
+    // `type=0` = SMS não interativo (só notificação, sem esperar resposta —
+    // é sempre esse o uso aqui: lembrete de cobrança, comando de
+    // bloqueio/desbloqueio via SMS etc.). A API responde HTTP 200 mesmo em
+    // erro lógico (saldo insuficiente, credencial inválida...) — o sucesso
+    // de verdade só está no campo `success` do JSON, não no status HTTP.
     case 'smsmarket': {
-      const res = await fetch(`${cfg.base_url}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.api_key}` },
-        body: JSON.stringify({ sender: cfg.sender_id, to: phone, text: message }),
+      const digits = phone.replace(/\D/g, '');
+      const localNumber = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+      const auth = Buffer.from(`${cfg.sender_id}:${cfg.api_key}`).toString('base64');
+      const params = new URLSearchParams({
+        type: '0',
+        country_code: '55',
+        number: localNumber,
+        content: message,
       });
-      if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
-      const body: any = await res.json().catch(() => ({}));
-      return { ok: true, external_id: body.id || body.external_id || null };
+      const res = await fetch('https://api.smsmarket.com.br/webservice-rest/send-single', {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+      });
+      const body: any = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        return { ok: false, error: body?.responseDescription || `HTTP ${res.status}` };
+      }
+      return { ok: true, external_id: body.id || null };
     }
 
     // Fix de produção 56 — confirmado contra a doc oficial
@@ -431,12 +463,31 @@ export async function testProviderConnection(id: string) {
       await pool.query(`UPDATE sms_providers SET status='connected', updated_at=NOW() WHERE id=$1`, [id]);
       return { ok: true, response_time_ms: Date.now() - start };
     }
-    // Teste leve: valida que a config essencial existe (teste real de envio é custoso/gera SMS de verdade)
     const cfg = decryptConfig(row.config);
     const schema = PROVIDER_TYPES[row.provider as SmsProviderType];
     const missing = (schema?.fields || []).filter(f => f.required && !cfg[f.key]);
     if (missing.length > 0) throw new Error(`Campos obrigatórios ausentes: ${missing.map(f => f.label).join(', ')}`);
 
+    // Fix de produção 57 — SMSMarket tem um endpoint `GET /balance` que só
+    // confere as credenciais (Basic user:senha) sem gastar crédito nem
+    // mandar SMS de verdade — dá pra testar a conexão de verdade em vez de
+    // só validar se os campos foram preenchidos, como os outros provedores
+    // (que não têm um jeito barato de testar sem gerar SMS de verdade).
+    if (row.provider === 'smsmarket') {
+      const auth = Buffer.from(`${cfg.sender_id}:${cfg.api_key}`).toString('base64');
+      const res = await fetch('https://api.smsmarket.com.br/webservice-rest/balance', {
+        headers: { Authorization: `Basic ${auth}` },
+      });
+      const body: any = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.responseDescription || `HTTP ${res.status}`);
+      }
+      await pool.query(`UPDATE sms_providers SET status='connected', updated_at=NOW() WHERE id=$1`, [id]);
+      return { ok: true, response_time_ms: Date.now() - start };
+    }
+
+    // Teste leve pros demais provedores: só valida que a config essencial
+    // existe (teste real de envio é custoso/gera SMS de verdade).
     await pool.query(`UPDATE sms_providers SET status='connected', updated_at=NOW() WHERE id=$1`, [id]);
     return { ok: true, response_time_ms: Date.now() - start };
   } catch (err: any) {

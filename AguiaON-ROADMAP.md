@@ -1265,3 +1265,53 @@ case 'traccar_sms': {
 **Zero mudança de frontend**: tanto o `admin.html` (gateway de plataforma, SUPERADMIN) quanto o `loja.html` (gateway próprio do lojista, OWN) renderizam o dropdown de tipo de provedor e o formulário de configuração **inteiramente** a partir de `GET /admin/sms/providers/schema` (que só devolve `PROVIDER_TYPES` como JSON) — não existe HTML/JS específico de provedor hardcoded em nenhum dos dois (confirmado por busca textual: nenhum nome de provedor existente, tipo `smsmarket` ou `http_gateway`, aparece em `public/*.html`). Consequência direta dessa arquitetura já existente: bastou o catálogo novo no backend pra a opção "Traccar SMS Gateway" aparecer pronta pra uso nos dois painéis, sem tocar em uma linha de frontend.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 57 — integração SMSMarket nunca tinha sido validada contra a API real (e falhava silenciosamente)
+
+Logo depois do Fix 56, o Carlos perguntou sobre outro provedor de SMS que já existia no catálogo: "nossa integração com o https://www.smsmarket.com.br/pt/ esta funcionando e so colocar as credenciais?". Em vez de assumir que sim, fui ler a documentação oficial da SMSMarket (smsmarket.docs.apiary.io, ao vivo via Claude in Chrome) e comparei campo a campo com o `case 'smsmarket':` existente em `src/shared/smsSender.ts`. Resposta: não, a implementação nunca tinha sido conferida contra a API real e estava errada em quase toda dimensão possível.
+
+**1. URL não deveria ser configurável**: o código pedia pro usuário preencher um campo "URL da API" e apendava `/send` nela. A URL da SMSMarket é fixa e documentada — `https://api.smsmarket.com.br/webservice-rest/send-single` — não varia por conta. Deixar o usuário digitar só criava risco de erro de digitação, e o path `/send` nem existe (o certo é `/send-single`).
+
+**2. Autenticação errada**: o código mandava `Authorization: Bearer <api_key>`, uma única chave. A API real usa HTTP Basic Auth com **usuário + senha** da conta (`Authorization: Basic base64(usuario:senha)`) — dois segredos, não um token opaco.
+
+**3. Content-Type e corpo errados**: o código mandava `application/json` com `{sender, to, text}`. O endpoint de envio único real espera `application/x-www-form-urlencoded` com os campos `type` (tipo de mensagem — `0` = "SMS não interativo", o tipo certo pra tudo que o AguiaON manda: lembrete de cobrança, comando de fallback por SMS pro rastreador etc.), `country_code` (default `55`), `number` (número LOCAL do destinatário, SEM o DDI, campo separado) e `content` (o texto). Nenhum dos campos `sender`/`to`/`text` existe na API de verdade.
+
+**4. Detecção de sucesso errada — o bug mais perigoso**: o código tratava qualquer HTTP 200 como sucesso e só tentava ler `body.id`. Mas a doc da SMSMarket confirma que a API responde HTTP 200 mesmo em falha lógica (saldo insuficiente, credencial inválida etc.) — o sinal de sucesso de verdade está no campo `success: true/false` do JSON, junto com `responseCode`/`responseDescription`. Ou seja, o código antigo reportaria "enviado com sucesso" pra mensagens que na real falharam (ex.: saldo zerado) — um bug sério de confiabilidade pra qualquer coisa que depende do SMS chegar de fato (código OTP, comando de bloqueio/desbloqueio de veículo, lembrete de cobrança).
+
+```ts
+// antes — URL configurável + /send, Bearer com api_key só, JSON, só checa res.ok
+const res = await fetch(`${cfg.base_url}/send`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.api_key}` },
+  body: JSON.stringify({ sender: cfg.sender_id, to: phone, text: message }),
+});
+if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
+const body: any = await res.json().catch(() => ({}));
+return { ok: true, external_id: body.id || body.external_id || null };
+
+// depois — URL fixa /send-single, Basic user:senha, form-urlencoded, checa body.success
+const digits = phone.replace(/\D/g, '');
+const localNumber = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+const auth = Buffer.from(`${cfg.sender_id}:${cfg.api_key}`).toString('base64');
+const params = new URLSearchParams({ type: '0', country_code: '55', number: localNumber, content: message });
+const res = await fetch('https://api.smsmarket.com.br/webservice-rest/send-single', {
+  method: 'POST',
+  headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: params.toString(),
+});
+const body: any = await res.json().catch(() => null);
+if (!res.ok || !body?.success) {
+  return { ok: false, error: body?.responseDescription || `HTTP ${res.status}` };
+}
+return { ok: true, external_id: body.id || null };
+```
+
+**Implementação** (`src/shared/smsSender.ts`):
+- `PROVIDER_TYPES.smsmarket`: removido o campo `base_url` (a URL agora é fixa no código, não configurável) e os campos `sender_id`/`api_key` existentes foram relabelados pra "Usuário (login SMSMarket)" / "Senha (login SMSMarket)" — reaproveitando as mesmas chaves em vez de criar campos novos, tanto pra herdar de graça a criptografia que `SECRET_FIELDS` já dá pro `api_key`, quanto por ser o mesmo padrão que o `http_gateway` já usa pra reaproveitar `sender_id`+`api_key` como usuário+senha.
+- `case 'smsmarket':` em `dispatchByProvider()` reescrito conforme acima: tira o prefixo "55" do `phone` (que já chega só em dígitos) quando presente, já que a API quer DDI e número local em campos separados — mesma convenção de outros pontos do projeto (ex.: WhatsApp) que guardam telefone com DDI embutido.
+- `testProviderConnection()`: antes, testar conexão de qualquer provedor não-`fake` só conferia se os campos obrigatórios estavam preenchidos — nunca validava credencial de verdade contra a API real (razoável como padrão, já que a maioria dos provedores não tem jeito barato de testar sem mandar SMS de verdade). Pra `smsmarket` especificamente, adicionei um teste real usando o endpoint `GET /balance` da SMSMarket (também confirmado contra a doc) — autentica mas não gasta crédito nem manda SMS, então clicar em "Testar" agora valida usuário/senha de verdade, não só se os campos não estão vazios.
+- Comentário no topo do arquivo (lista de provedores) atualizado pra refletir Basic Auth + URL fixa.
+
+**Atenção — mudança que quebra config salva anteriormente**: isso muda o formato de configuração do provedor `smsmarket` (removeu `base_url`, e o significado de `sender_id`/`api_key` mudou de "remetente/chave de API" pra "usuário/senha"). Se o Carlos já tinha salvo um gateway `smsmarket` em algum lugar antes desse fix — nível plataforma (SUPERADMIN, `admin.html`) ou nível lojista (`loja.html`) — esses valores salvos ficaram semanticamente errados e precisam ser reinseridos com usuário+senha reais da SMSMarket depois que isso for pro ar. Não há visibilidade daqui se ele já tinha uma config salva — **confirmar com ele antes/depois do deploy**.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo em `smsSender.ts` (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).
