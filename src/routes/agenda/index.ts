@@ -1035,10 +1035,18 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       : true; // padrão seguro: pré-visualiza antes de aplicar
 
     const devices = await listGpswoxDevices(eid);
+    // Fix de produção 43 — log server-side: o Carlos reportou que a
+    // sincronização dizia "importado"/"enviado" mas nada aparecia nem aqui
+    // nem no GPSWOX depois. Sem acesso a logs de produção daqui, é impossível
+    // confirmar de fora se o problema é o establishment_id usado, a resposta
+    // do GPSWOX, ou outra coisa — esses logs aparecem no EasyPanel (aba Logs
+    // do serviço) e são o que precisamos ler pra achar a causa real.
+    console.log(`[frota-gpswox-sync] eid=${eid} dry_run=${dryRun} devices_recebidos=${devices.length}`);
     const veiculos = (await pool.query(
       `SELECT id, placa, cliente_nome, imei_rastreador, gpswox_device_id FROM agenda_frota WHERE establishment_id=$1`,
       [eid]
     )).rows;
+    console.log(`[frota-gpswox-sync] veiculos_locais=${veiculos.length} (ids: ${veiculos.map((v: any) => v.id).join(', ') || 'nenhum'})`);
 
     const porImei = new Map<string, any>();
     for (const v of veiculos) {
@@ -1071,6 +1079,7 @@ router.post('/frota-gpswox-sync', async (req, res) => {
             [eid, nome || null, imei, deviceId, device.device_model || device.model || device.protocol || null, simNumber,
              'Importado automaticamente do GPSWOX pela Sincronização com GPS — confira placa/cliente.']
           );
+          console.log(`[frota-gpswox-sync] IMPORTADO veiculo_id=${novo.rows[0].id} placa=${novo.rows[0].placa} eid=${eid} imei=${imei}`);
           importados.push({ veiculo_id: novo.rows[0].id, placa: novo.rows[0].placa, device_id: deviceId, imei, nome });
         } else {
           importados.push({ placa: nome, device_id: deviceId, imei, nome });
@@ -1108,14 +1117,26 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (!dryRun) {
         try {
           const criado = await createGpswoxDevice(eid, { name: v.placa || v.cliente_nome || `Veículo ${v.id}`, imei, plate: v.placa });
+          // Fix de produção 43 — loga a resposta CRUA do GPSWOX pro add_device.
+          // O Carlos reportou que isso "dizia que enviou" mas o dispositivo
+          // não aparecia no painel GPSWOX depois — sem ver o que a API
+          // realmente devolveu (só um id, que pode ser um ack genérico sem
+          // criar nada de verdade, ou pode precisar de um user_id que a gente
+          // não está mandando) não dá pra saber a causa de fora.
+          console.log(`[frota-gpswox-sync] ENVIAR veiculo_id=${v.id} placa=${v.placa} imei=${imei} resposta_gpswox=${JSON.stringify(criado.raw).slice(0, 500)}`);
           if (criado.id) {
             await pool.query(
               `UPDATE agenda_frota SET gpswox_device_id=$1, tracker_synced_at=NOW(), updated_at=NOW() WHERE id=$2`,
               [criado.id, v.id]
             );
           }
-          enviados.push({ veiculo_id: v.id, placa: v.placa, imei, device_id: criado.id, erro: criado.id ? null : 'GPSWOX não retornou o id do dispositivo criado — confira manualmente no painel GPSWOX.' });
+          enviados.push({
+            veiculo_id: v.id, placa: v.placa, imei, device_id: criado.id,
+            erro: criado.id ? null : 'GPSWOX não retornou o id do dispositivo criado — confira manualmente no painel GPSWOX.',
+            resposta_gpswox: criado.raw,
+          });
         } catch (e: any) {
+          console.log(`[frota-gpswox-sync] ENVIAR FALHOU veiculo_id=${v.id} placa=${v.placa} imei=${imei} erro=${e.message}`);
           enviados.push({ veiculo_id: v.id, placa: v.placa, imei, device_id: null, erro: e.message });
         }
       } else {
@@ -1125,6 +1146,7 @@ router.post('/frota-gpswox-sync', async (req, res) => {
 
     res.json({
       dry_run: dryRun,
+      establishment_id_usado: eid,
       total_dispositivos: devices.length,
       vinculados: matched.length,
       sem_correspondencia: unmatched.length,

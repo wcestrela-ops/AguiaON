@@ -7505,6 +7505,11 @@ async function aplicarSyncGpswox() {
   box.innerHTML = '<p class="text-sm text-slate-600 dark:text-slate-400">Aplicando...</p>';
   try {
     const r = await api('/agenda/frota-gpswox-sync', { method: 'POST', body: { dry_run: false } });
+    // Fix de produção 43 — imprime a resposta completa no console (inclusive
+    // a resposta crua do GPSWOX pra cada "enviado" e o establishment_id
+    // usado) pra dar pra investigar quando o resultado não bater com o que
+    // realmente aparece no GPSWOX/na lista de veículos.
+    console.log('[Sincronizar com GPS] resposta completa:', r);
     const falhasEnvio = (r.enviados || []).filter(e => e.erro);
     box.innerHTML = `
       <p class="text-sm text-green-400 mb-1"><i class="fa fa-check mr-1"></i>${r.vinculados} vinculado(s) · ${r.total_importados} importado(s) do GPSWOX · ${r.total_enviados - falhasEnvio.length} enviado(s) para o GPSWOX.</p>
