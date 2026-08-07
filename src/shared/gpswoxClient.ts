@@ -161,6 +161,15 @@ function extractGpswoxArray(data: any, keys: string[] = ['items', 'devices', 'da
 
 export async function listDevices(estId: string): Promise<any[]> {
   const data = await request(estId, 'get_devices');
+  // Fix de produção 45 — o Fix 44 (tentativa de decifrar o formato paginado)
+  // não mudou o resultado: continuou devices_recebidos=1 mesmo o painel do
+  // GPSWOX mostrando 5. Ou o formato real da resposta é outro (nem plano nem
+  // a paginação que eu supus), ou a API genuinamente só devolve 1 dispositivo
+  // pra esse api_hash (ex: o hash usado pode pertencer a uma conta diferente
+  // da que aparece no painel admin, com escopo de só 1 aparelho). Sem ver a
+  // resposta crua não dá pra saber qual — loga aqui (truncado a 1000
+  // caracteres) pra aparecer no log do EasyPanel na próxima tentativa.
+  console.log(`[gpswoxClient.listDevices] resposta crua do GPSWOX: ${JSON.stringify(data).slice(0, 1000)}`);
   return extractGpswoxArray(data, ['items', 'devices', 'data']);
 }
 
