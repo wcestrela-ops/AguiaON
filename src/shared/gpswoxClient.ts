@@ -126,7 +126,7 @@ export function isGpswoxConfigured(cfg: GpswoxConfig): boolean {
 // defaultava pra GET quando nenhum `method` era passado, que é exatamente o
 // caso de `listDevices()` antes deste fix — bem provável causa raiz de
 // `devices_recebidos=1` do Fix 45).
-async function request(estId: string, path: string, options: { method?: string; query?: Record<string, any>; body?: any } = {}): Promise<any> {
+async function request(estId: string, path: string, options: { method?: string; query?: Record<string, any>; body?: any; multipart?: boolean } = {}): Promise<any> {
   const cfg = await getGpswoxConfig(estId);
   if (!isGpswoxConfigured(cfg)) {
     throw new Error('GPSWOX não configurado para esta empresa. Configure em Integrações → GPSWOX.');
@@ -141,10 +141,33 @@ async function request(estId: string, path: string, options: { method?: string; 
     }
   }
 
+  // Fix de produção 54 — a doc oficial confirma que send_gprs_command (e
+  // provavelmente send_sms_command) exige `multipart/form-data`, não JSON —
+  // diferente da maioria dos outros endpoints POST daqui, que aceitam JSON
+  // numa boa. Campos array (ex.: `device_id`) viram `campo[]` repetido, como
+  // um form HTML de verdade manda.
+  let fetchBody: any;
+  const headers: Record<string, string> = {};
+  if (options.multipart && options.body != null) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(options.body)) {
+      if (value == null) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) form.append(`${key}[]`, String(item));
+      } else {
+        form.append(key, String(value));
+      }
+    }
+    fetchBody = form;
+  } else if (options.body != null) {
+    headers['Content-Type'] = 'application/json';
+    fetchBody = JSON.stringify(options.body);
+  }
+
   const response = await fetch(url, {
     method: options.method || 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers,
+    body: fetchBody,
   });
 
   const data: any = await response.json().catch(() => null);
@@ -401,8 +424,22 @@ export interface CommandResult {
 // Fix de produção 46 — endpoint corrigido pra `send_gprs_command`, conforme
 // o handoff do ag-on-track (era `send_command`, um palpite do Águia Auto
 // que não bate com o que está documentado pra essa conta).
+//
+// Fix de produção 54 — dois bugs reais aqui, achados contra a doc oficial
+// (o Carlos reportou que o comando "mostra sucesso, mas o carro não reage"):
+//   1. `device_id` é `array[integer]` na doc, e a gente mandava um inteiro
+//      solto. Em Laravel isso normalmente vira um `foreach` que não itera
+//      nada — o comando é gravado no histórico (por isso "sucesso"), mas
+//      nenhum dispositivo real recebe nada.
+//   2. O corpo tem que ser `multipart/form-data` (a doc é explícita nisso
+//      pra esse endpoint específico), não JSON — corrigido via
+//      `request(..., { multipart: true })`.
 export async function sendCommand(estId: string, deviceId: string, type: string): Promise<CommandResult> {
-  const raw = await request(estId, 'send_gprs_command', { method: 'POST', body: { device_id: deviceId, type } });
+  const raw = await request(estId, 'send_gprs_command', {
+    method: 'POST',
+    multipart: true,
+    body: { device_id: [Number(deviceId)], type },
+  });
   return { success: true, raw };
 }
 
@@ -412,6 +449,84 @@ export async function blockDevice(estId: string, deviceId: string): Promise<Comm
 
 export async function unblockDevice(estId: string, deviceId: string): Promise<CommandResult> {
   return sendCommand(estId, deviceId, 'engine_resume');
+}
+
+export interface DeviceCommandOption {
+  id: string;
+  title: string;
+}
+
+export interface DeviceCommandAttribute {
+  name: string;
+  htmlName: string;
+  title: string;
+  type: string;
+  options: DeviceCommandOption[];
+  default: string | number | null;
+  description: string;
+  validation: string;
+  required: boolean;
+}
+
+export interface DeviceCommandDef {
+  type: string;
+  title: string;
+  connection: string;
+  attributes: DeviceCommandAttribute[];
+  raw: any;
+}
+
+// Fix de produção 54 — a doc oficial de `send_gprs_command` só dá um
+// EXEMPLO de `type` ("engineStop"); não é um enum fixo — cada modelo/
+// protocolo de rastreador expõe o próprio catálogo de comandos suportados
+// via `get_device_commands`. Hardcodar um `type` genérico pra todos os
+// dispositivos (era `engine_stop`/`engine_resume`/`position_single` — nem
+// no formato certo) é a explicação mais provável pro "mostra sucesso mas o
+// carro não reage": a API aceita e grava o comando (por isso "sucesso"),
+// mas o firmware do rastreador não reconhece um `type` que não é dele.
+export async function getDeviceCommands(estId: string, deviceId: string, connection?: 'sms' | 'gprs'): Promise<DeviceCommandDef[]> {
+  const data = await request(estId, 'get_device_commands', { query: { device_id: deviceId, connection } });
+  const list = Array.isArray(data) ? data : extractGpswoxArray(data);
+  return list.map((c: any) => ({
+    type: c.type,
+    title: c.title || c.type,
+    connection: c.connection || 'gprs',
+    attributes: Array.isArray(c.attributes) ? c.attributes.map((a: any) => ({
+      name: a.name,
+      htmlName: a.html_name,
+      title: a.title,
+      type: a.type,
+      options: Array.isArray(a.options) ? a.options : [],
+      default: a.default ?? null,
+      description: a.description,
+      validation: a.validation,
+      required: !!a.required,
+    })) : [],
+    raw: c,
+  }));
+}
+
+/**
+ * Busca o catálogo REAL de comandos do dispositivo e tenta achar o `type`
+ * certo por palavra-chave (case-insensitive, procura em `type` e `title`).
+ * Best-effort: se a busca falhar ou não achar nada, cai pro `fallbackType`
+ * (o palpite genérico antigo) em vez de travar o envio inteiro — melhor
+ * tentar com um `type` possivelmente errado do que não tentar nada.
+ */
+export async function resolveCommandType(
+  estId: string, deviceId: string, keywords: string[], fallbackType: string
+): Promise<{ type: string; fromCatalog: boolean }> {
+  try {
+    const catalog = await getDeviceCommands(estId, deviceId, 'gprs');
+    const match = catalog.find((c) => {
+      const haystack = `${c.type} ${c.title}`.toLowerCase();
+      return keywords.some((k) => haystack.includes(k.toLowerCase()));
+    });
+    if (match) return { type: match.type, fromCatalog: true };
+  } catch (e: any) {
+    console.warn(`[gpswoxClient.resolveCommandType] não foi possível buscar catálogo de comandos (device_id=${deviceId}): ${e.message}`);
+  }
+  return { type: fallbackType, fromCatalog: false };
 }
 
 export interface HistoryPoint {

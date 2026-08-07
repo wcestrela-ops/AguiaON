@@ -1118,3 +1118,44 @@ const raw = device?.device_data?.pivot?.user_id ?? device?.device_data?.user_id 
 **Fora do escopo deste fix (fica pra depois)**: escrever de volta pro GPSWOX quando o AguiaON tiver mais de um cliente pra um veículo (mão AguiaON → GPSWOX). O campo `user_id` do `edit_device` SUBSTITUI a lista inteira de donos no GPSWOX, e não existe um jeito confiável de ler a lista atual completa antes de decidir o que mandar — mandar só o dono principal correria o risco de revogar sem querer o acesso de quem já tinha lá. Por isso este fix é só leitura/importação (GPSWOX → AguiaON) quanto ao relacionamento de múltiplos clientes; nada aqui envia essa lista de volta.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 54 — Comandos de bloquear/desbloquear "davam sucesso" mas o carro não reagia
+
+O Carlos trouxe um problema diferente dos anteriores: "vamos ajeitar a questão dos comandos, que a gente envia por dentro do nosso sistema, para gps vox, os comandos não estão indo". Pedi pra ele detalhar o sintoma exato e ele confirmou: "mostra sucesso, mas o carro não trava/destrava" — ou seja, o `loja.html` mostrava o alerta "✅ Comando enviado com sucesso" pros botões bloquear/desbloquear, mas o veículo simplesmente não respondia.
+
+Fui direto na documentação oficial do GPSWOX (gpswox.stoplight.io, usando o Claude in Chrome pra ler a página de verdade em vez de confiar em memória/notas de sessões anteriores) pros endpoints `send_gprs_command` e `get_device_commands`, e achei dois bugs reais em `sendCommand()` — o que explica exatamente esse sintoma: a API GPSWOX aceita e grava o comando (por isso `{status:1, message:"Command sent"}` e "sucesso" no app), mas ele nunca chega no rastreador físico.
+
+**Causa raiz (dois bugs)**:
+
+```ts
+// antes — device_id como inteiro solto, corpo em JSON
+export async function sendCommand(estId: string, deviceId: string, type: string): Promise<CommandResult> {
+  const raw = await request(estId, 'send_gprs_command', { method: 'POST', body: { device_id: deviceId, type } });
+  return { success: true, raw };
+}
+
+// depois — device_id como array (doc: array[integer]), multipart/form-data (doc: obrigatório)
+export async function sendCommand(estId: string, deviceId: string, type: string): Promise<CommandResult> {
+  const raw = await request(estId, 'send_gprs_command', {
+    method: 'POST',
+    multipart: true,
+    body: { device_id: [Number(deviceId)], type },
+  });
+  return { success: true, raw };
+}
+```
+
+1. `device_id` é documentado como `array[integer]`, e o código mandava um inteiro solto. Num backend Laravel típico isso normalmente vira um `foreach` que não itera nada — a API ainda cria/loga o comando (por isso "sucesso"), mas nenhum dispositivo real recebe o comando.
+2. O endpoint é documentado como exigindo `multipart/form-data`, não JSON — o código sempre mandou `JSON.stringify` com `Content-Type: application/json`.
+
+Além disso, a doc de `send_gprs_command` só dá **um exemplo** de `type` ("engineStop"); não é um enum fixo global. O código hardcodava `engine_stop`/`engine_resume`/`position_single` (nem na convenção certa de maiúsculas/minúsculas) como se fosse um valor universal — mas cada modelo/protocolo de rastreador expõe o próprio catálogo de comandos suportados, via `GET /api/get_device_commands`. Mandar um `type` que não está no catálogo daquele dispositivo específico é aceito e gravado pela API (de novo, "sucesso" falso), mas o firmware do rastreador simplesmente ignora.
+
+**Implementação**:
+- `gpswoxClient.ts`: `request()` ganhou a flag `options.multipart` — quando ligada, monta um `FormData` nativo em vez de `JSON.stringify` (valores array viram `campo[]` repetido, do jeito que um form HTML de verdade manda) e não seta `Content-Type` manualmente (deixa o `fetch` calcular o boundary do multipart sozinho).
+- `sendCommand()` corrigida conforme acima (array + multipart).
+- Nova função `getDeviceCommands(estId, deviceId, connection?)` — `GET /api/get_device_commands`, devolve o catálogo real de comandos daquele dispositivo (`type`, `title`, `connection`, `attributes[]`).
+- Nova função `resolveCommandType(estId, deviceId, keywords, fallbackType)` — busca o catálogo real do dispositivo e tenta achar o `type` certo por palavra-chave (case-insensitive, substring em `type`/`title`); se a busca falhar ou não achar nada, cai pro `fallbackType` (o palpite genérico antigo) em vez de travar o envio inteiro.
+- `agenda/index.ts`: `FROTA_COMMAND_MAP` ganhou um campo `keywords: string[]` por ação (bloquear/desbloquear/atualizar), e os `gpswoxType` de reserva viraram camelCase (`engineStop`/`engineResume`/`positionSingle`), pra bater com o único exemplo concreto que a doc oficial dá, caso a busca no catálogo falhe.
+- `POST /agenda/frota/:id/comando` agora chama `resolveGpswoxCommandType()` antes de enviar o comando, loga o `type` resolvido e se veio do catálogo real ou do palpite de reserva, e devolve `gpswox_command_type`/`tipo_via_catalogo` na resposta JSON — pra dar transparência/depuração caso algum modelo específico ainda não reaja.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).

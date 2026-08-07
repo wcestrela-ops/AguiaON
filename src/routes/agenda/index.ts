@@ -20,6 +20,7 @@ import {
   listClientsForDevice as listGpswoxClientsForDevice,
   getDeviceLocation,
   sendCommand as sendGpswoxCommand,
+  resolveCommandType as resolveGpswoxCommandType,
   getHistory,
   createSharing,
   listGeofences,
@@ -1671,12 +1672,14 @@ async function getVeiculoComDevice(eid: string, id: string) {
   return r.rows[0];
 }
 
-// Mapa de comandos: tipo GPSWOX (4G) + código SMS de fallback direto pro chip
-// do rastreador — portado de vehicle-commands.js do Águia Auto.
-const FROTA_COMMAND_MAP: Record<string, { gpswoxType: string; smsCode: string; label: string }> = {
-  bloquear:    { gpswoxType: 'engine_stop',    smsCode: 'RELAY,1#', label: 'Bloquear motor' },
-  desbloquear: { gpswoxType: 'engine_resume',  smsCode: 'RELAY,0#', label: 'Desbloquear motor' },
-  atualizar:   { gpswoxType: 'position_single', smsCode: 'WHERE#',  label: 'Atualizar localização' },
+// Mapa de comandos: tipo GPSWOX (4G, usado só como PALPITE de reserva —
+// ver Fix de produção 54) + palavras-chave pra achar o comando de verdade
+// no catálogo do dispositivo + código SMS de fallback direto pro chip do
+// rastreador — portado de vehicle-commands.js do Águia Auto.
+const FROTA_COMMAND_MAP: Record<string, { gpswoxType: string; keywords: string[]; smsCode: string; label: string }> = {
+  bloquear:    { gpswoxType: 'engineStop',     keywords: ['enginestop', 'engine_stop', 'stop', 'bloque', 'block'],        smsCode: 'RELAY,1#', label: 'Bloquear motor' },
+  desbloquear: { gpswoxType: 'engineResume',   keywords: ['engineresume', 'engine_resume', 'resume', 'desbloque', 'unblock'], smsCode: 'RELAY,0#', label: 'Desbloquear motor' },
+  atualizar:   { gpswoxType: 'positionSingle', keywords: ['position', 'locate', 'localiz', 'update'],                      smsCode: 'WHERE#',  label: 'Atualizar localização' },
 };
 
 // POST /agenda/frota/:id/comando — body: { action: 'bloquear' | 'desbloquear' | 'atualizar' }
@@ -1700,9 +1703,24 @@ router.post('/frota/:id/comando', async (req, res) => {
     let failover = false;
     let status = 'sent';
     let errorMessage: string | null = null;
+    let resolvedType = command.gpswoxType;
+    let fromCatalog = false;
 
     try {
-      await sendGpswoxCommand(eid, veh.gpswox_device_id, command.gpswoxType);
+      // Fix de produção 54 — antes disso a gente mandava um `type` genérico
+      // fixo (`engine_stop` etc.), que a API aceitava e gravava no
+      // histórico (por isso sempre "sucesso"), mas o protocolo do
+      // rastreador não reconhecia — nada chegava no veículo de verdade.
+      // Agora busca o catálogo REAL de comandos desse dispositivo
+      // (get_device_commands) e casa por palavra-chave; só cai pro palpite
+      // fixo se o catálogo não estiver disponível.
+      const resolved = await resolveGpswoxCommandType(
+        eid, veh.gpswox_device_id, command.keywords, command.gpswoxType
+      );
+      resolvedType = resolved.type;
+      fromCatalog = resolved.fromCatalog;
+      console.log(`[frota-comando] veiculo_id=${veh.id} action=${action} type_resolvido=${resolvedType} via_catalogo=${fromCatalog}`);
+      await sendGpswoxCommand(eid, veh.gpswox_device_id, resolvedType);
     } catch (gpsErr: any) {
       if (!isGpsFailoverEligible(gpsErr)) {
         status = 'failed';
@@ -1730,7 +1748,14 @@ router.post('/frota/:id/comando', async (req, res) => {
     );
 
     if (status === 'failed') return res.status(502).json({ error: errorMessage || 'Falha ao enviar comando.' });
-    res.json({ success: true, action, status, channel, failover, label: command.label });
+    res.json({
+      success: true, action, status, channel, failover, label: command.label,
+      // Fix de produção 54 — transparência: qual `type` foi realmente
+      // mandado pro GPSWOX e se veio do catálogo real do dispositivo ou do
+      // palpite de reserva (útil pra depurar se um modelo específico ainda
+      // não reagir).
+      gpswox_command_type: resolvedType, tipo_via_catalogo: fromCatalog,
+    });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
