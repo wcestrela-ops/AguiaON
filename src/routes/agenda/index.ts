@@ -14,6 +14,7 @@ import {
   isGpswoxConfigured,
   listDevices as listGpswoxDevices,
   createDevice as createGpswoxDevice,
+  editDevice as editGpswoxDevice,
   createClient as createGpswoxClient,
   getDeviceLocation,
   sendCommand as sendGpswoxCommand,
@@ -956,6 +957,27 @@ async function tentarCriarDispositivoGpswox(eid: string, params: { imei: string;
   }
 }
 
+// Fix de produção 51 — vincular/desvincular cliente de um veículo que já
+// tem dispositivo no GPSWOX atualizava só o cadastro local; o dono do
+// dispositivo lá continuava desatualizado. Best-effort (não bloqueia a
+// operação local se o GPSWOX falhar): busca o gpswox_client_id do cliente
+// (quando `clienteId` é null, passa `userId: null` pra `editDevice`, que
+// limpa o dono lá também).
+async function tentarAtualizarDonoGpswox(eid: string, gpswoxDeviceId: string | null | undefined, clienteId: string | null | undefined) {
+  if (!gpswoxDeviceId) return; // veículo sem dispositivo no GPSWOX — nada a atualizar
+  try {
+    let gpswoxUserId: string | null = null;
+    if (clienteId) {
+      const cli = await pool.query(`SELECT gpswox_client_id FROM agenda_clientes WHERE id=$1 AND establishment_id=$2`, [clienteId, eid]);
+      gpswoxUserId = cli.rows[0]?.gpswox_client_id || null;
+    }
+    await editGpswoxDevice(eid, gpswoxDeviceId, { userId: gpswoxUserId });
+    console.log(`[frota] dono do dispositivo GPSWOX atualizado — device_id=${gpswoxDeviceId} novo_dono_gpswox=${gpswoxUserId || '(nenhum)'}`);
+  } catch (e: any) {
+    console.warn(`[frota] não foi possível atualizar o dono do dispositivo no GPSWOX (${e.message}) — vínculo local aplicado normalmente.`);
+  }
+}
+
 router.post('/frota', async (req, res) => {
   try {
     const eid = estabId(req);
@@ -988,8 +1010,10 @@ router.put('/frota/:id', async (req, res) => {
 
     // Só tenta criar no GPSWOX se ainda não tinha device vinculado e agora
     // tem IMEI — evita recriar (ou duplicar) dispositivo em toda edição.
-    const atual = await pool.query(`SELECT gpswox_device_id FROM agenda_frota WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    const atual = await pool.query(`SELECT gpswox_device_id, cliente_id FROM agenda_frota WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
     let gpswoxDeviceId: string | null = atual.rows[0]?.gpswox_device_id || null;
+    const deviceJaExistia = !!gpswoxDeviceId;
+    const clienteIdAntes = atual.rows[0]?.cliente_id || null;
     if (!gpswoxDeviceId && imei_rastreador) {
       gpswoxDeviceId = await tentarCriarDispositivoGpswox(eid, {
         imei: imei_rastreador, placa: placa || null, clienteId: cliente_id, nomeFallback: dados.nome || placa || 'Veículo',
@@ -1008,6 +1032,16 @@ router.put('/frota/:id', async (req, res) => {
        gpswoxDeviceId, req.params.id, eid]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Não encontrado' });
+
+    // Fix de produção 51 — se o dispositivo já existia (não foi criado agora
+    // por causa do IMEI novo, esse caso já nasce com o dono certo) e o
+    // cliente vinculado mudou nessa edição, atualiza o dono lá no GPSWOX
+    // também. Cobre quem troca o cliente pela tela de edição do veículo em
+    // vez do botão dedicado de "vincular".
+    if (deviceJaExistia && String(clienteIdAntes || '') !== String(cliente_id || '')) {
+      await tentarAtualizarDonoGpswox(eid, gpswoxDeviceId, cliente_id || null);
+    }
+
     res.json({ success: true, veiculo: r.rows[0], gpswox_sincronizado: !!gpswoxDeviceId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -1034,6 +1068,8 @@ router.post('/frota/:id/desvincular-cliente', async (req, res) => {
       [req.params.id, eid]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Veículo não encontrado.' });
+    // Fix de produção 51 — limpa o dono lá no GPSWOX também, se o veículo já tiver dispositivo.
+    await tentarAtualizarDonoGpswox(eid, r.rows[0].gpswox_device_id, null);
     res.json({ success: true, veiculo: r.rows[0] });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -2080,6 +2116,8 @@ router.post('/clientes/:id/veiculos/:veiculoId/vincular', async (req, res) => {
       [req.params.id, cliente.rows[0].nome, cliente.rows[0].telefone, req.params.veiculoId, eid]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Veículo não encontrado.' });
+    // Fix de produção 51 — atualiza o dono do dispositivo lá no GPSWOX também, se já existir.
+    await tentarAtualizarDonoGpswox(eid, r.rows[0].gpswox_device_id, req.params.id);
     res.json({ success: true, veiculo: r.rows[0] });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

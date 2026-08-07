@@ -1064,3 +1064,14 @@ Revisando `POST/PUT /agenda/frota` (usado pelo formulário "Cadastrar veículo" 
 - Em ambos os casos, falha do GPSWOX é só um aviso no log (`console.warn`) — o cadastro local nunca é bloqueado por causa do GPSWOX, e "Sincronizar com GPS" continua funcionando como rede de segurança pra quem preenche o IMEI depois ou pra quando a API do GPSWOX está fora do ar na hora de salvar.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 51 — Vincular/desvincular cliente de um veículo com dispositivo no GPSWOX não atualizava o dono lá
+
+Depois do Fix 50, o Carlos perguntou especificamente: se eu vincular um veículo já existente (com dispositivo no GPSWOX) a um cliente, isso reflete lá também? Resposta honesta: não — `POST /agenda/clientes/:id/veiculos/:veiculoId/vincular` e `POST /agenda/frota/:id/desvincular-cliente` só mexiam na coluna `cliente_id` local; nunca chamavam o GPSWOX pra atualizar o `user_id` (dono) do dispositivo.
+
+**Correção**:
+- `gpswoxClient.ts`: nova função `editDevice()` — `POST /api/edit_device`, confirmada contra a doc oficial ("no update no field is strictly required"), então dá pra mandar só `user_id` sem tocar em mais nada do dispositivo. `userId: null` limpa o dono (array vazio).
+- Novo helper `tentarAtualizarDonoGpswox()` em `agenda/index.ts` — busca o `gpswox_client_id` do cliente (ou `null` pra desvincular) e chama `editDevice`, best-effort (não bloqueia a operação local se o GPSWOX falhar).
+- Aplicado nas 3 rotas que podem mudar o dono de um veículo já sincronizado: `vincular` (busca o `gpswox_client_id` do novo cliente), `desvincular-cliente` (limpa o dono), e `PUT /agenda/frota/:id` (cobre quem troca o cliente pela tela de edição geral em vez do botão dedicado — só dispara se o dispositivo já existia antes dessa edição e o `cliente_id` realmente mudou, pra não chamar o GPSWOX duas vezes quando o dispositivo acabou de ser criado na mesma requisição).
+
+**Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).

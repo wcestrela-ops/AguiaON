@@ -261,6 +261,22 @@ export async function createDevice(estId: string, params: { name: string; imei: 
   return { id: id != null ? String(id) : null, raw };
 }
 
+// Fix de produção 51 — o Carlos percebeu que vincular/desvincular um cliente
+// de um veículo que JÁ tem dispositivo no GPSWOX só atualizava o cadastro
+// local; o dono do dispositivo lá continuava o de antes (ou nenhum). Esta
+// função edita só o(s) campo(s) passado(s) — confirmado contra a doc oficial
+// (POST /api/edit_device): "no update no field is strictly required", então
+// dá pra mandar só `user_id` sem mexer em mais nada do dispositivo.
+// `userId: null` limpa o dono (array vazio) — usado no desvincular.
+export async function editDevice(estId: string, deviceId: string, params: { userId?: string | null; name?: string; plateNumber?: string }): Promise<{ raw: any }> {
+  const body: Record<string, any> = {};
+  if (params.userId !== undefined) body.user_id = params.userId ? [Number(params.userId)] : [];
+  if (params.name) body.name = params.name;
+  if (params.plateNumber) body.plate_number = params.plateNumber;
+  const raw = await request(estId, 'edit_device', { method: 'POST', query: { device_id: deviceId }, body });
+  return { raw };
+}
+
 // Fix de produção 50 — cria o "client" (usuário final) no GPSWOX
 // automaticamente quando um cliente é cadastrado na AguiaON, do mesmo jeito
 // que já acontece com o Asaas (best-effort, não bloqueia o cadastro local se
