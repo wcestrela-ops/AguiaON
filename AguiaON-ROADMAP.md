@@ -974,3 +974,30 @@ Em vez de arriscar mais um terceiro palpite sobre o formato sem evidência, adic
 Pesquisei a documentação pública do GPSWOX atrás do parâmetro que poderia estar faltando (tipo um `user_id` pra listar o rastreadores de um usuário gerenciado específico, já que o painel `/admin/users/objects` que o Carlos usa é uma visão de admin/revenda) mas não achei a referência exata da API publicada — a documentação oficial (`gpswox.api-docs.io`) não ficou acessível pela busca. Fica como hipótese pendente de confirmar com a resposta crua.
 
 **Pendente**: Carlos testar de novo e mandar a linha `resposta crua do GPSWOX` do log do EasyPanel.
+
+## Fix de produção 46 — Documentação real da conta apareceu (handoff do ag-on-track) — reescrita completa do cliente GPSWOX
+
+O Carlos subiu `HANDOFF_RASTREAMENTO_COMPLETO.md`, o handoff de um projeto irmão (`ag-on-track`) que integra com a MESMA conta GPSWOX (`painel.aguiarastreamento.com`) em produção — a primeira referência de verdade que tive pra essa API nessa conta específica, em vez de código legado ou busca na web. Comparando com o que o `gpswoxClient.ts` fazia, achei várias divergências que explicam os sintomas dos Fixes 41 a 45 de uma vez:
+
+1. **`get_devices` é POST, não GET.** `request()` defaultava pra GET quando nenhum `method` era passado — exatamente o caso de `listDevices()`. Essa é a causa mais provável de `devices_recebidos=1` (Fixes 43/45): pedindo do jeito errado, o GPSWOX provavelmente devolvia uma resposta diferente/reduzida da que devolve pra POST.
+2. **O IMEI e o SIM não ficam soltos no objeto do dispositivo — ficam dentro de `device.device_data`.** A estrutura real (documentada com exemplo no handoff): `{ id, name, lat, lng, device_data: { imei, sim_number, plate_number, user_id, ... } }`. `extractDeviceImei()`/`extractDeviceSimNumber()` liam `device.imei`/`device.sim_number` direto — sempre `undefined`. **Essa é a causa raiz do "0 corresponde por IMEI" desde o início desta investigação** (antes até do Fix 41) — não importava o que estivesse cadastrado nos dois lados, a comparação nunca tinha chance de bater.
+3. **Criar dispositivo é `edit_device` com `action: 'create'`, não `add_device`.** O endpoint `add_device` (Fix 42) veio do gateway do Águia Auto — aparentemente uma referência de versão/conta diferente da API, que não bate com o que essa conta aceita.
+4. **Criar dispositivo exige `user_id`** (o ID do cliente GPSWOX dono do aparelho) — sem isso o dispositivo não fica associado a ninguém, o que também ajuda a explicar por que o "enviado" (Fix 42) não aparecia em lugar nenhum mesmo com resposta de sucesso.
+5. **Bloquear/desbloquear é `send_gprs_command`, não `send_command`.**
+6. **Toda chamada leva `lang=en` na query**, além do `user_api_hash` (já estava certo).
+7. `get_geofences`/`add_geofence` **não aparecem em nenhum lugar do handoff** — o projeto irmão nunca usou geofencing nessa conta via API. Fica reforçada a suspeita de que esses dois endpoints não são o motivo real do 500 em `/agenda/frota-cercas` — mais provável que essa conta/plano GPSWOX simplesmente não tenha esse recurso habilitado via API.
+
+**Correções aplicadas** (`shared/gpswoxClient.ts`):
+- `request()` agora sempre inclui `lang=en`.
+- `listDevices()` chama `get_devices` via POST com corpo `{}`.
+- `getHistory()` chama `get_history` via POST com corpo (era GET com query string).
+- `sendCommand()` chama `send_gprs_command` (era `send_command`).
+- `createDevice()` chama `edit_device` com `{action:'create', name, imei, user_id}` (era `add_device` com `{name, imei, plate}`) — assinatura da função mudou de `plate` opcional pra `userId` obrigatório.
+- Novas funções exportadas `extractDeviceImei`/`extractDeviceSimNumber`/`extractDeviceGpswoxUserId`, lendo de `device.device_data.*` com fallback pro campo direto — antes viviam duplicadas (e erradas) dentro de `routes/agenda/index.ts`; agora só existe uma versão, correta, exportada daqui.
+
+**Correções em `routes/agenda/index.ts`** (rota `/frota-gpswox-sync`):
+- Importa as 3 funções de extração corrigidas de `gpswoxClient.ts` em vez de ter cópias locais.
+- Antes de rodar a mão "enviar pro GPSWOX", detecta o `user_id` do GPSWOX olhando os dispositivos já existentes na conta (assume que todos pertencem ao mesmo usuário — cenário confirmado nos logs do Fix 43, conta única) e usa esse mesmo `user_id` pros dispositivos novos. Se a conta não tiver nenhum dispositivo existente, cada tentativa de "enviar" volta com um erro explicando que não dá pra descobrir o `user_id` automaticamente, em vez de fingir sucesso.
+- Log do `user_id` detectado (`gpswoxUserId_detectado=...`) segue o mesmo padrão de diagnóstico dos Fixes 43/45.
+
+Verificação: os dois arquivos reconferidos com contagem de parênteses/chaves/crases balanceada; conferido que não sobrou nenhuma referência às funções antigas duplicadas em `agenda/index.ts` (só a versão importada de `gpswoxClient.ts` é usada). Essa é a correção com mais evidência concreta até agora (baseada em documentação real da MESMA conta, não em código de outro projeto nem em suposição) — alta confiança que resolve tanto o "0 corresponde por IMEI" original quanto o "diz que sincronizou mas não aparece nada" dos Fixes 41-45. Ainda assim, como não dá pra testar contra a conta ao vivo daqui, o log de resposta crua do Fix 45 continua no código — se algum detalhe (ex: o nome exato do campo de paginação em `get_devices`) ainda estiver errado, vai aparecer nesse log na próxima tentativa.

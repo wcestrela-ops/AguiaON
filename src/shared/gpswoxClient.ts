@@ -3,10 +3,15 @@
  *
  * Primeira fatia da vertical de rastreamento veicular: cada empresa
  * (establishment) traz a própria conta GPSWOX (decisão: federado, não
- * compartilhado). Portado como referência a partir do gateway da Águia
- * (services/gpswox-gateway/src/clients/gpswox-api.js) — a lógica de chamada
- * à API oficial do GPSWOX é reaproveitada; o resto (multi-provider Traccar,
- * comandos, cercas, histórico, compartilhamento) fica para uma fatia futura.
+ * compartilhado).
+ *
+ * Fix de produção 46 — referência principal atualizada: o Carlos trouxe o
+ * handoff do ag-on-track (HANDOFF_RASTREAMENTO_COMPLETO.md), que documenta
+ * a API dessa MESMA conta GPSWOX (painel.aguiarastreamento.com) já validada
+ * em produção — mais confiável que o palpite anterior baseado só no gateway
+ * do Águia Auto (services/gpswox-gateway/src/clients/gpswox-api.js), que
+ * usava nomes de endpoint (`add_device`, `send_command`) e método (GET pra
+ * listas) diferentes do que essa conta realmente aceita.
  */
 
 import pool from './db';
@@ -102,6 +107,15 @@ export function isGpswoxConfigured(cfg: GpswoxConfig): boolean {
 }
 
 // ─── Chamada à API oficial do GPSWOX ────────────────────────────
+// Fix de produção 46 — o Carlos trouxe o handoff de um projeto irmão
+// (ag-on-track) que documenta a API dessa MESMA conta GPSWOX
+// (painel.aguiarastreamento.com) já validada em produção. Duas diferenças
+// confirmadas em relação ao que a gente tinha: (1) todas as chamadas
+// documentadas incluem `lang=en` na query, junto com `user_api_hash`; (2)
+// `get_devices`/`get_history` são POST, não GET (o `request()` aqui
+// defaultava pra GET quando nenhum `method` era passado, que é exatamente o
+// caso de `listDevices()` antes deste fix — bem provável causa raiz de
+// `devices_recebidos=1` do Fix 45).
 async function request(estId: string, path: string, options: { method?: string; query?: Record<string, any>; body?: any } = {}): Promise<any> {
   const cfg = await getGpswoxConfig(estId);
   if (!isGpswoxConfigured(cfg)) {
@@ -110,6 +124,7 @@ async function request(estId: string, path: string, options: { method?: string; 
 
   const url = new URL(`${cfg.url}/api/${path}`);
   url.searchParams.set('user_api_hash', cfg.api_hash);
+  url.searchParams.set('lang', 'en');
   if (options.query) {
     for (const [key, value] of Object.entries(options.query)) {
       if (value != null) url.searchParams.set(key, String(value));
@@ -160,31 +175,54 @@ function extractGpswoxArray(data: any, keys: string[] = ['items', 'devices', 'da
 }
 
 export async function listDevices(estId: string): Promise<any[]> {
-  const data = await request(estId, 'get_devices');
-  // Fix de produção 45 — o Fix 44 (tentativa de decifrar o formato paginado)
-  // não mudou o resultado: continuou devices_recebidos=1 mesmo o painel do
-  // GPSWOX mostrando 5. Ou o formato real da resposta é outro (nem plano nem
-  // a paginação que eu supus), ou a API genuinamente só devolve 1 dispositivo
-  // pra esse api_hash (ex: o hash usado pode pertencer a uma conta diferente
-  // da que aparece no painel admin, com escopo de só 1 aparelho). Sem ver a
-  // resposta crua não dá pra saber qual — loga aqui (truncado a 1000
-  // caracteres) pra aparecer no log do EasyPanel na próxima tentativa.
+  // Fix de produção 46 — confirmado pelo handoff do ag-on-track: get_devices
+  // é POST (com corpo vazio "{}"), não GET. `request()` sem `method`
+  // explícito defaultava pra GET — essa é a causa mais provável de
+  // `devices_recebidos=1` mesmo com 5 dispositivos reais na conta.
+  const data = await request(estId, 'get_devices', { method: 'POST', body: {} });
   console.log(`[gpswoxClient.listDevices] resposta crua do GPSWOX: ${JSON.stringify(data).slice(0, 1000)}`);
   return extractGpswoxArray(data, ['items', 'devices', 'data']);
 }
 
-// Fix de produção 42 — cria um dispositivo do lado do GPSWOX a partir de um
-// veículo cadastrado aqui (mão contrária do "puxar" feito em listDevices).
-// Payload ('add_device' com name/imei/plate) portado do gateway do Águia
-// Auto (services/gpswox-gateway/src/clients/gpswox-api.js +
-// services/api/src/services/installer-service.js) — diferente do restante
-// deste arquivo (geofences/sharing, ainda não confirmados ao vivo), essa
-// chamada É a mesma usada em produção pelo sistema antigo pra criar veículo
-// direto na plataforma GPSWOX, então o formato do payload já está validado.
-export async function createDevice(estId: string, params: { name: string; imei: string; plate?: string | null }): Promise<{ id: string | null; raw: any }> {
-  const raw = await request(estId, 'add_device', {
+// Fix de produção 46 — o handoff do ag-on-track documenta a estrutura real
+// de cada item de get_devices: os campos que a gente lia direto no objeto
+// (`imei`, `sim_number`) na verdade ficam ANINHADOS dentro de um sub-objeto
+// `device_data`. Ex: `{ id, name, lat, lng, device_data: { imei,
+// sim_number, plate_number, user_id, ... } }`. Ler `device.imei` sempre
+// batia em `undefined` — por isso "0 corresponde por IMEI" mesmo com os
+// IMEIs certos cadastrados dos dois lados. Mantém fallback pro campo
+// direto, caso alguma versão da API devolva plano mesmo.
+export function extractDeviceImei(device: any): string | null {
+  const raw = device?.device_data?.imei ?? device?.imei ?? device?.uniqueId ?? device?.unique_id ?? null;
+  return raw ? String(raw).trim() : null;
+}
+
+export function extractDeviceSimNumber(device: any): string | null {
+  const raw = device?.device_data?.sim_number ?? device?.sim_number ?? device?.sim ?? device?.phone ?? device?.sim_phone ?? device?.msisdn ?? device?.tracker_phone ?? null;
+  return raw ? String(raw).replace(/\D/g, '') || null : null;
+}
+
+/** ID numérico do usuário/cliente GPSWOX dono do dispositivo (device_data.user_id) — necessário pra criar dispositivo novo via edit_device. */
+export function extractDeviceGpswoxUserId(device: any): string | null {
+  const raw = device?.device_data?.user_id ?? null;
+  return raw != null ? String(raw) : null;
+}
+
+// Fix de produção 46 — corrigido a partir do handoff do ag-on-track, que
+// documenta essa MESMA conta GPSWOX em produção: o endpoint certo pra criar
+// dispositivo é `edit_device` com `action: 'create'` — não `add_device`
+// (esse era um palpite do Fix 42, portado do gateway do Águia Auto, que
+// aparentemente é de uma versão/conta diferente da API). Também exige
+// `user_id`: o ID numérico do CLIENTE dentro do GPSWOX dono do dispositivo
+// — sem isso o dispositivo não fica associado a ninguém. Por isso essa
+// função agora recebe `userId` como parâmetro obrigatório; quem chama
+// (routes/agenda/index.ts) precisa descobrir esse `user_id` antes (ver
+// `extractDeviceGpswoxUserId`, lido de algum dispositivo já existente da
+// mesma conta).
+export async function createDevice(estId: string, params: { name: string; imei: string; userId: string }): Promise<{ id: string | null; raw: any }> {
+  const raw = await request(estId, 'edit_device', {
     method: 'POST',
-    body: { name: params.name, imei: params.imei, plate: params.plate || undefined },
+    body: { action: 'create', name: params.name, imei: params.imei, user_id: Number(params.userId) },
   });
   const id = raw?.item?.id ?? raw?.id ?? raw?.data?.id ?? null;
   return { id: id != null ? String(id) : null, raw };
@@ -214,12 +252,12 @@ export async function getDeviceLocation(estId: string, deviceId: string): Promis
 }
 
 // ─── Fase 8 — comandos, histórico, compartilhamento, cercas ────
-// Portado de services/gpswox-gateway/src/clients/gpswox-api.js (Águia Auto).
-// Mesmo helper request() acima — a API oficial do GPSWOX é idêntica nos dois
-// projetos. Payloads de sharing/geofence seguem o formato documentado da API
-// GPSWOX; como este ambiente não tem acesso a uma conta GPSWOX real pra
-// testar ao vivo, vale validar a resposta exata (nomes de campo) com uma
-// conta de teste antes de confiar 100% em produção.
+// Fix de produção 46 — comandos/histórico/sharing agora seguem o handoff do
+// ag-on-track (documentação real dessa mesma conta GPSWOX, confirmada em
+// produção num projeto irmão). `get_geofences`/`add_geofence` NÃO aparecem
+// nesse handoff — o projeto irmão nunca usou geofencing via API dessa conta
+// — então continuam sem confirmação (é o candidato mais provável a explicar
+// o 500 em /agenda/frota-cercas que segue em aberto).
 
 export interface CommandResult {
   success: boolean;
@@ -227,8 +265,11 @@ export interface CommandResult {
 }
 
 /** Envia um comando genérico ao dispositivo (mesmo endpoint usado por bloquear/desbloquear). */
+// Fix de produção 46 — endpoint corrigido pra `send_gprs_command`, conforme
+// o handoff do ag-on-track (era `send_command`, um palpite do Águia Auto
+// que não bate com o que está documentado pra essa conta).
 export async function sendCommand(estId: string, deviceId: string, type: string): Promise<CommandResult> {
-  const raw = await request(estId, 'send_command', { method: 'POST', body: { device_id: deviceId, type } });
+  const raw = await request(estId, 'send_gprs_command', { method: 'POST', body: { device_id: deviceId, type } });
   return { success: true, raw };
 }
 
@@ -250,8 +291,10 @@ export interface HistoryPoint {
 }
 
 /** Histórico de trajeto do dispositivo entre duas datas (formato ISO ou 'YYYY-MM-DD HH:mm:ss', conforme a API GPSWOX exigir). */
+// Fix de produção 46 — get_history também é POST (mesmo padrão de
+// get_devices), não GET com query string.
 export async function getHistory(estId: string, deviceId: string, from: string, to: string): Promise<HistoryPoint[]> {
-  const data = await request(estId, 'get_history', { query: { device_id: deviceId, from, to } });
+  const data = await request(estId, 'get_history', { method: 'POST', body: { device_id: deviceId, from, to } });
   const list = extractGpswoxArray(data, ['items', 'messages', 'data']);
 
   return list.map((p: any) => {

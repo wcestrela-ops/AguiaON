@@ -22,6 +22,9 @@ import {
   addGeofence,
   deleteGeofence,
   isGpsFailoverEligible,
+  extractDeviceImei,
+  extractDeviceSimNumber,
+  extractDeviceGpswoxUserId,
 } from '../../shared/gpswoxClient';
 // generateFrotaPix: só era usado por POST /frota/:id/cobrar, desativada no
 // Fix de produção 32 (cobrança por veículo foi removida) — import mantido
@@ -1002,19 +1005,11 @@ router.put('/frota-gpswox-config', async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Extrai o IMEI de um dispositivo retornado pela API do GPSWOX
-// (mesmos campos alternativos usados no gateway do Águia Auto)
-function extractDeviceImei(device: any): string | null {
-  const raw = device.imei || device.uniqueId || device.unique_id || null;
-  return raw ? String(raw).trim() : null;
-}
-
-// Extrai o número do chip SIM (usado no fallback SMS dos comandos) — mesmos
-// campos alternativos de extractSimNumber() do gpswox-sync-service.js do Águia Auto.
-function extractDeviceSimNumber(device: any): string | null {
-  const raw = device.sim_number || device.sim || device.phone || device.sim_phone || device.msisdn || device.tracker_phone || null;
-  return raw ? String(raw).replace(/\D/g, '') || null : null;
-}
+// Fix de produção 46 — extractDeviceImei/extractDeviceSimNumber saíram
+// daqui: agora vivem em shared/gpswoxClient.ts (junto com
+// extractDeviceGpswoxUserId), corrigidas pra ler de dentro de
+// `device.device_data` conforme o handoff do ag-on-track — importadas logo
+// abaixo, junto com os outros helpers do GPSWOX.
 
 // POST /agenda/frota-gpswox-sync — casa dispositivos GPSWOX com veículos pelo IMEI
 // Body: { dry_run?: boolean }. Sem dry_run (ou dry_run=false), aplica as vinculações.
@@ -1053,6 +1048,20 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (v.imei_rastreador) porImei.set(String(v.imei_rastreador).trim(), v);
     }
     const deviceImeisVistos = new Set<string>();
+
+    // Fix de produção 46 — criar dispositivo novo no GPSWOX (mão "enviar")
+    // exige um user_id (o cliente dono, dentro do GPSWOX — ver handoff do
+    // ag-on-track). A gente não guarda esse id por veículo/cliente hoje;
+    // como os dispositivos existentes desta conta pertencem todos ao mesmo
+    // usuário GPSWOX (confirmado no log do Fix 43 — mesma conta única), usa
+    // o user_id de qualquer dispositivo já cadastrado como referência pros
+    // novos. Sem nenhum dispositivo existente, não tem como descobrir.
+    let gpswoxUserId: string | null = null;
+    for (const d of devices) {
+      const uid = extractDeviceGpswoxUserId(d);
+      if (uid) { gpswoxUserId = uid; break; }
+    }
+    console.log(`[frota-gpswox-sync] gpswoxUserId_detectado=${gpswoxUserId}`);
 
     const matched: any[] = [];
     const unmatched: any[] = [];
@@ -1115,15 +1124,19 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (!imei || v.gpswox_device_id || deviceImeisVistos.has(imei)) continue;
 
       if (!dryRun) {
+        if (!gpswoxUserId) {
+          enviados.push({
+            veiculo_id: v.id, placa: v.placa, imei, device_id: null,
+            erro: 'Não foi possível determinar o usuário do GPSWOX (nenhum dispositivo existente nessa conta pra usar de referência) — crie ao menos 1 dispositivo manualmente pelo painel GPSWOX primeiro, depois tente sincronizar de novo.',
+          });
+          continue;
+        }
         try {
-          const criado = await createGpswoxDevice(eid, { name: v.placa || v.cliente_nome || `Veículo ${v.id}`, imei, plate: v.placa });
-          // Fix de produção 43 — loga a resposta CRUA do GPSWOX pro add_device.
-          // O Carlos reportou que isso "dizia que enviou" mas o dispositivo
-          // não aparecia no painel GPSWOX depois — sem ver o que a API
-          // realmente devolveu (só um id, que pode ser um ack genérico sem
-          // criar nada de verdade, ou pode precisar de um user_id que a gente
-          // não está mandando) não dá pra saber a causa de fora.
-          console.log(`[frota-gpswox-sync] ENVIAR veiculo_id=${v.id} placa=${v.placa} imei=${imei} resposta_gpswox=${JSON.stringify(criado.raw).slice(0, 500)}`);
+          const criado = await createGpswoxDevice(eid, { name: v.placa || v.cliente_nome || `Veículo ${v.id}`, imei, userId: gpswoxUserId });
+          // Fix de produção 46 — loga a resposta CRUA do GPSWOX pro
+          // edit_device (endpoint/payload corrigidos neste mesmo fix, a
+          // partir do handoff do ag-on-track).
+          console.log(`[frota-gpswox-sync] ENVIAR veiculo_id=${v.id} placa=${v.placa} imei=${imei} user_id=${gpswoxUserId} resposta_gpswox=${JSON.stringify(criado.raw).slice(0, 500)}`);
           if (criado.id) {
             await pool.query(
               `UPDATE agenda_frota SET gpswox_device_id=$1, tracker_synced_at=NOW(), updated_at=NOW() WHERE id=$2`,
