@@ -1030,3 +1030,23 @@ De quebra, a documentação oficial também confirmou/corrigiu outros pontos men
 Na rota `/agenda/frota-gpswox-sync`, a lógica de "enviar" (criar veículo local como dispositivo novo no GPSWOX) não bloqueia mais o envio inteiro quando não acha um `gpswoxUserId` de referência — segue enviando sem esse campo (agora opcional), só usa quando encontra um pra manter o mesmo dono dos dispositivos existentes.
 
 **Verificação**: dessa vez foi possível rodar `npm install` (~1min, completou sem timeout) e `npx tsc --noEmit -p .` de ponta a ponta pela primeira vez nesta sequência de fixes — 0 erros nos arquivos alterados (`gpswoxClient.ts`, `agenda/index.ts`); os únicos erros do compilador são pré-existentes em `socketio.ts`, sem relação com este fix. Essa é uma checagem de tipos real (não a aproximação manual de parênteses/`new Function()` usada nos fixes anteriores por falta de `tsc` disponível).
+
+## Fix de produção 49 — Achada a causa raiz de verdade: "Aplicar sincronização" nunca aplicava nada, era um bug de lógica no `dry_run`
+
+Mesmo depois do Fix 48, o Carlos continuou reportando "diz que sincronizou (3 importado(s)) mas os veículos não aparecem na Frota, nem depois de F5". Pedi pra ele confirmar via `frotaCache.length` no console (confirmou: só os veículos antigos, nada novo) e depois os logs do EasyPanel de um clique real em "Aplicar sincronização" — e **nenhum log com `dry_run=false` apareceu em nenhuma tentativa**, mesmo depois de repetir a operação e rolar até o fim do log. Isso foi a pista decisiva: se o clique real nunca gera um log `dry_run=false`, o problema não está na extração de dispositivos (já corrigida nos Fixes 44-48) — está em como a rota decide se é preview ou aplicação de verdade.
+
+Achei o bug em `POST /agenda/frota-gpswox-sync`:
+
+```js
+const dryRun = req.body?.dry_run !== false && req.body?.dry_run !== undefined
+  ? Boolean(req.body.dry_run)
+  : true;
+```
+
+Quando o frontend manda `{ dry_run: false }` (o clique real em "Aplicar sincronização"), `req.body.dry_run !== false` já dá **false** — porque `dry_run` REALMENTE é `false`. Como é um `&&`, a condição inteira vira `false`, cai no ramo `: true` do ternário — **`dryRun` acaba sendo `true` de qualquer jeito**, não importa o que o frontend mande. A única forma de `dryRun` virar `false` com essa lógica seria impossível de alcançar na prática.
+
+Consequência prática: `POST /agenda/frota-gpswox-sync` NUNCA rodava em modo "aplicar" — sempre caía no modo preview, que só faz `SELECT`, nunca `INSERT`/`UPDATE`. Só que os contadores (`vinculados`, `total_importados`, `total_enviados`) são calculados do mesmo jeito nos dois modos (só o bloco de escrita é que fica dentro do `if (!dryRun)`) — por isso o modal sempre mostrava "✓ 2 vinculado(s) · 3 importado(s) do GPSWOX..." com a cara de sucesso, mesmo sem escrever uma linha sequer no banco. Essa é a causa raiz real de todo o "diz que sincronizou mas não aparece" reportado desde o Fix 43 — nunca foi sobre como a resposta do GPSWOX era interpretada (isso sim tinha bugs reais, corrigidos nos Fixes 44-48, e continuam válidos/necessários), mas a aplicação de verdade nunca tinha chance de rodar.
+
+**Correção**: `const dryRun = req.body?.dry_run !== false;` — só entra em modo preview se `dry_run` não for exatamente `false`. Testado mentalmente contra os 3 casos que importam: não enviado → `true` (preview, padrão seguro); `dry_run:true` → `true` (preview); `dry_run:false` → `false` (aplica).
+
+**Verificação**: `npx tsc --noEmit -p .` limpo (0 erros em `agenda/index.ts`, mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação). Fix mínimo (1 linha de lógica) e cirúrgico — não mexe em nada mais da rota.

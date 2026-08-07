@@ -1061,9 +1061,22 @@ router.get('/frota-gpswox-testar', async (req, res) => {
 router.post('/frota-gpswox-sync', async (req, res) => {
   try {
     const eid = estabId(req);
-    const dryRun = req.body?.dry_run !== false && req.body?.dry_run !== undefined
-      ? Boolean(req.body.dry_run)
-      : true; // padrão seguro: pré-visualiza antes de aplicar
+    // Fix de produção 49 — a expressão antiga (`dry_run !== false && dry_run
+    // !== undefined ? Boolean(dry_run) : true`) tinha um bug de lógica: quando
+    // o frontend mandava `dry_run: false` (clique real em "Aplicar
+    // sincronização"), `dry_run !== false` já dava FALSE (porque dry_run
+    // REALMENTE é false) — o `&&` inteiro virava false, caindo sempre no
+    // ramo `: true` do ternário. Ou seja, `dryRun` era SEMPRE true,
+    // independente do que o frontend mandasse — a sincronização nunca
+    // aplicava de verdade, só mostrava a pré-visualização com uma mensagem
+    // de sucesso (os contadores são calculados igual nos dois casos, só o
+    // INSERT/UPDATE real que ficava de fora). Essa é a causa raiz de
+    // "diz que sincronizou mas não aparece" que persistia mesmo depois de
+    // corrigir a extração de dispositivos do GPSWOX (Fix 44-48) — o problema
+    // nunca foi a extração, era essa checagem nunca deixar aplicar de
+    // verdade. Corrigido pra uma condição direta: só é preview se dry_run
+    // não for EXATAMENTE `false`.
+    const dryRun = req.body?.dry_run !== false; // dry_run:false explícito → aplica; qualquer outra coisa → pré-visualiza (padrão seguro)
 
     const devices = await listGpswoxDevices(eid);
     // Fix de produção 43 — log server-side: o Carlos reportou que a
