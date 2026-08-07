@@ -139,6 +139,23 @@ export async function listDevices(estId: string): Promise<any[]> {
   return Array.isArray(items) ? items : Object.values(items);
 }
 
+// Fix de produção 42 — cria um dispositivo do lado do GPSWOX a partir de um
+// veículo cadastrado aqui (mão contrária do "puxar" feito em listDevices).
+// Payload ('add_device' com name/imei/plate) portado do gateway do Águia
+// Auto (services/gpswox-gateway/src/clients/gpswox-api.js +
+// services/api/src/services/installer-service.js) — diferente do restante
+// deste arquivo (geofences/sharing, ainda não confirmados ao vivo), essa
+// chamada É a mesma usada em produção pelo sistema antigo pra criar veículo
+// direto na plataforma GPSWOX, então o formato do payload já está validado.
+export async function createDevice(estId: string, params: { name: string; imei: string; plate?: string | null }): Promise<{ id: string | null; raw: any }> {
+  const raw = await request(estId, 'add_device', {
+    method: 'POST',
+    body: { name: params.name, imei: params.imei, plate: params.plate || undefined },
+  });
+  const id = raw?.item?.id ?? raw?.id ?? raw?.data?.id ?? null;
+  return { id: id != null ? String(id) : null, raw };
+}
+
 export async function getDeviceLocation(estId: string, deviceId: string): Promise<DeviceLocation> {
   const devices = await listDevices(estId);
   const device = devices.find((d: any) => String(d.id) === String(deviceId));

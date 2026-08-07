@@ -3163,7 +3163,7 @@
       <h3 class="font-bold"><i class="fa fa-satellite-dish mr-1"></i> Sincronizar com GPS</h3>
       <button onclick="closeModal('modal-gpswox-sync')" class="text-slate-600 dark:text-slate-400"><i class="fa fa-times"></i></button>
     </div>
-    <p class="text-xs text-slate-500 dark:text-slate-500 mb-3">Compara os dispositivos cadastrados no GPSWOX com o IMEI dos veículos desta loja e vincula automaticamente os que baterem.</p>
+    <p class="text-xs text-slate-500 dark:text-slate-500 mb-3">Compara os dispositivos cadastrados no GPSWOX com o IMEI dos veículos desta loja: vincula os que baterem, traz pra cá como veículo novo os dispositivos do GPSWOX sem correspondência, e cria no GPSWOX os veículos daqui que já têm IMEI mas nunca foram registrados lá.</p>
     <div id="gpswox-sync-result"></div>
     <div class="flex gap-2 mt-5">
       <button onclick="closeModal('modal-gpswox-sync')" class="btn-outline flex-1">Fechar</button>
@@ -7053,50 +7053,19 @@ async function saveCatalogItem() {
     } catch (e) { alert('Erro: ' + e.message); }
 }
 
-// ════════ VENDAS (removido) ════════
-function setVendasFilter() {
-  const today = new Date().toISOString().split('T')[0];
-  const first = today.slice(0, 8) + '01';
-  if (document.getElementById('vendas-data-ini')) {
-    document.getElementById('vendas-data-ini').value = first;
-    document.getElementById('vendas-data-fim').value = today;
-  }
-}
-
-async function loadVendas() {
-  const ini = document.getElementById('vendas-data-ini').value;
-  const fim = document.getElementById('vendas-data-fim').value;
-  let q = [];
-  if (ini) q.push(`data_ini=${ini}`);
-  if (fim) q.push(`data_fim=${fim}`);
-  try {
-    const rows = await api('/agenda/vendas?' + q.join('&'));
-    const total = rows.reduce((acc, v) => acc + (+v.total || 0), 0);
-    const pagas = rows.filter(v => v.status === 'pago').reduce((acc, v) => acc + (+v.total || 0), 0);
-
-    document.getElementById('vendas-resumo').innerHTML = [
-      { label: 'Total Período', value: fmtMoney(total), color: '#6366f1' },
-      { label: 'Recebido',      value: fmtMoney(pagas), color: '#10b981' },
-      { label: 'Vendas',        value: rows.length + ' registros', color: '#f97316' },
-    ].map(s => `
-      <div class="card p-3">
-        <div class="text-lg font-bold" style="color:${s.color}">${s.value}</div>
-        <div class="text-xs text-slate-600 dark:text-slate-400">${s.label}</div>
-      </div>`).join('');
-
-    document.getElementById('tabela-vendas').innerHTML = rows.map(v => `
-      <tr>
-        <td>${fmtDate(v.created_at)}</td>
-        <td>${v.cliente_nome || '—'}</td>
-        <td class="font-semibold">${fmtMoney(v.total)}</td>
-        <td>${v.metodo_pagamento || '—'}</td>
-        <td><span class="badge badge-${statusColor(v.status)}">${v.status}</span></td>
-        <td class="text-xs text-slate-600 dark:text-slate-400">${(v.itens || []).length} item(s)</td>
-      </tr>`).join('') || '<tr><td colspan="6" class="text-center text-slate-500 dark:text-slate-500 py-6">Nenhuma venda</td></tr>';
-  } catch (e) {
-    document.getElementById('tabela-vendas').innerHTML = `<tr><td colspan="6" class="text-red-400 p-3">${e.message}</td></tr>`;
-  }
-}
+// Fix de produção 41 — havia DUAS declarações de loadVendas() neste arquivo:
+// a de cima (ver "VENDAS" perto da linha 6049), que bate com o HTML real de
+// #tab-vendas (tabela simples, sem filtro de data), e uma segunda aqui que
+// tinha ficado órfã de uma versão antiga com filtro de período — a própria
+// tag "(removido)" já dizia que devia ter saído. Como JavaScript deixa
+// redeclarar uma function livremente, a segunda (essa que foi removida)
+// vencia e virava a que rodava de verdade — e como ela lia
+// #vendas-data-ini/#vendas-data-fim/#vendas-resumo, que não existem mais no
+// HTML, toda vez que alguém abria a aba "Vendas" (inclusive no menu inferior
+// da vertical Frota) o clique quebrava com "Cannot read properties of null
+// (reading 'value')" antes mesmo de chegar a pedir os dados ao servidor.
+// Removida a duplicata — agora só existe a versão de cima, que é a que
+// realmente casa com o HTML da aba.
 
 // ════════ FROTA ════════
 async function loadFrota() {
@@ -7483,12 +7452,51 @@ function renderGpswoxSyncResult(r) {
       <td class="font-mono text-xs">${m.imei || '—'}</td>
       <td>${m.acao === 'já vinculado' ? '<span class="text-slate-500 dark:text-slate-500">já vinculado</span>' : '<span class="text-green-400">vincular</span>'}</td>
     </tr>`).join('');
+  // Fix de produção 41 — antes só mostrava a CONTAGEM de dispositivos sem
+  // correspondência, sem dizer qual era o nome/IMEI que o GPSWOX informou.
+  // Sem isso, não dava pra saber se faltava preencher o campo IMEI do
+  // veículo ou se o IMEI cadastrado só estava com formatação diferente do
+  // que o GPSWOX retorna — agora lista cada dispositivo não vinculado com o
+  // nome e o IMEI (ou "sem IMEI" se o GPSWOX não informou nenhum) pra dar pra
+  // comparar direto com o que está no cadastro do veículo.
+  const linhasSemMatch = r.unmatched.map(u => `
+    <tr>
+      <td>${u.nome || '—'}</td>
+      <td class="font-mono text-xs">${u.imei || '<span class="text-amber-500">sem IMEI informado pelo GPSWOX</span>'}</td>
+    </tr>`).join('');
+  // Fix de produção 42 — sincronização passou a ter 3 blocos: vincular (já
+  // existia), importar pro AguiaON os dispositivos do GPSWOX sem veículo
+  // correspondente, e enviar pro GPSWOX os veículos cadastrados aqui que já
+  // têm IMEI mas nunca foram criados lá. Mostra os 3 na pré-visualização.
+  const linhasImportar = (r.importados || []).map(i => `
+    <tr>
+      <td>${i.nome || '—'}</td>
+      <td class="font-mono text-xs">${i.imei || '—'}</td>
+    </tr>`).join('');
+  const linhasEnviar = (r.enviados || []).map(e => `
+    <tr>
+      <td>${e.placa || '—'}</td>
+      <td class="font-mono text-xs">${e.imei || '—'}</td>
+      <td>${e.erro ? `<span class="text-red-400">${e.erro}</span>` : (e.device_id ? `<span class="text-green-400">criado (id ${e.device_id})</span>` : '<span class="text-slate-500 dark:text-slate-500">a enviar</span>')}</td>
+    </tr>`).join('');
+  const totalAcoes = (r.vinculados || 0) + (r.total_importados || 0) + (r.total_enviados || 0);
   box.innerHTML = `
     <p class="text-sm text-slate-800 dark:text-slate-300 mb-2">${r.total_dispositivos} dispositivo(s) no GPSWOX · ${r.vinculados} corresponde(m) a veículos cadastrados (por IMEI) · ${r.sem_correspondencia} sem correspondência.</p>
     ${linhas ? `<table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Placa</th><th class="text-left">Cliente</th><th class="text-left">IMEI</th><th class="text-left">Ação</th></tr></thead><tbody>${linhas}</tbody></table>` : ''}
-    ${r.unmatched.length ? `<p class="text-xs text-slate-500 dark:text-slate-500 mb-3">${r.unmatched.length} dispositivo(s) do GPSWOX sem veículo com esse IMEI cadastrado — edite o veículo e preencha o campo IMEI para vincular.</p>` : ''}
-    <button onclick="aplicarSyncGpswox()" class="btn-primary text-sm" ${r.vinculados === 0 ? 'disabled' : ''}>
-      <i class="fa fa-sync mr-1"></i> Aplicar vinculação (${r.vinculados})
+    ${linhasSemMatch ? `
+      <p class="text-xs text-slate-500 dark:text-slate-500 mb-1">${r.unmatched.length} dispositivo(s) do GPSWOX sem veículo com esse IMEI cadastrado — confira abaixo o IMEI que o GPSWOX informou e compare com o campo "IMEI Rastreador" do veículo (edite o veículo se precisar corrigir):</p>
+      <table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Dispositivo (GPSWOX)</th><th class="text-left">IMEI informado</th></tr></thead><tbody>${linhasSemMatch}</tbody></table>
+    ` : ''}
+    ${linhasImportar ? `
+      <p class="text-xs text-emerald-500 mb-1"><i class="fa fa-download mr-1"></i>${r.importados.length} veículo(s) novo(s) serão criados aqui a partir do GPSWOX (confira placa/cliente depois):</p>
+      <table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Nome no GPSWOX</th><th class="text-left">IMEI</th></tr></thead><tbody>${linhasImportar}</tbody></table>
+    ` : ''}
+    ${linhasEnviar ? `
+      <p class="text-xs text-indigo-400 mb-1"><i class="fa fa-upload mr-1"></i>${r.enviados.length} veículo(s) cadastrados aqui serão criados no GPSWOX:</p>
+      <table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Placa</th><th class="text-left">IMEI</th><th class="text-left">Status</th></tr></thead><tbody>${linhasEnviar}</tbody></table>
+    ` : ''}
+    <button onclick="aplicarSyncGpswox()" class="btn-primary text-sm" ${totalAcoes === 0 ? 'disabled' : ''}>
+      <i class="fa fa-sync mr-1"></i> Aplicar sincronização (${totalAcoes})
     </button>`;
 }
 
@@ -7497,7 +7505,10 @@ async function aplicarSyncGpswox() {
   box.innerHTML = '<p class="text-sm text-slate-600 dark:text-slate-400">Aplicando...</p>';
   try {
     const r = await api('/agenda/frota-gpswox-sync', { method: 'POST', body: { dry_run: false } });
-    box.innerHTML = `<p class="text-sm text-green-400"><i class="fa fa-check mr-1"></i>${r.vinculados} veículo(s) vinculado(s) ao GPS com sucesso.</p>`;
+    const falhasEnvio = (r.enviados || []).filter(e => e.erro);
+    box.innerHTML = `
+      <p class="text-sm text-green-400 mb-1"><i class="fa fa-check mr-1"></i>${r.vinculados} vinculado(s) · ${r.total_importados} importado(s) do GPSWOX · ${r.total_enviados - falhasEnvio.length} enviado(s) para o GPSWOX.</p>
+      ${falhasEnvio.length ? `<p class="text-xs text-red-400">${falhasEnvio.length} veículo(s) falharam ao enviar pro GPSWOX: ${falhasEnvio.map(e => `${e.placa || e.veiculo_id} (${e.erro})`).join('; ')}</p>` : ''}`;
     loadFrota();
   } catch (e) {
     box.innerHTML = `<p class="text-sm text-red-400">${e.message}</p>`;

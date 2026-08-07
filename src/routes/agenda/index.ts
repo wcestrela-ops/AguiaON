@@ -13,6 +13,7 @@ import {
   saveGpswoxConfig,
   isGpswoxConfigured,
   listDevices as listGpswoxDevices,
+  createDevice as createGpswoxDevice,
   getDeviceLocation,
   sendCommand as sendGpswoxCommand,
   getHistory,
@@ -1017,6 +1018,15 @@ function extractDeviceSimNumber(device: any): string | null {
 
 // POST /agenda/frota-gpswox-sync — casa dispositivos GPSWOX com veículos pelo IMEI
 // Body: { dry_run?: boolean }. Sem dry_run (ou dry_run=false), aplica as vinculações.
+//
+// Fix de produção 42 — antes só vinculava (por IMEI) dispositivos e veículos
+// que já existiam dos DOIS lados. O Carlos pediu duas mãos a mais: (1)
+// PUXAR pro AguiaON, como veículo novo, todo dispositivo do GPSWOX que não
+// tem nenhum veículo cadastrado aqui com aquele IMEI; (2) ENVIAR pro GPSWOX
+// (criar o dispositivo lá) todo veículo cadastrado aqui que já tem IMEI
+// preenchido mas nunca foi registrado na plataforma. Os três blocos rodam
+// juntos, sob o mesmo dry_run — a pré-visualização mostra os três antes de
+// aplicar, com um único botão.
 router.post('/frota-gpswox-sync', async (req, res) => {
   try {
     const eid = estabId(req);
@@ -1034,19 +1044,37 @@ router.post('/frota-gpswox-sync', async (req, res) => {
     for (const v of veiculos) {
       if (v.imei_rastreador) porImei.set(String(v.imei_rastreador).trim(), v);
     }
+    const deviceImeisVistos = new Set<string>();
 
     const matched: any[] = [];
     const unmatched: any[] = [];
+    const importados: any[] = [];
 
     for (const device of devices) {
       const imei = extractDeviceImei(device);
       const deviceId = device.id != null ? String(device.id) : null;
       const nome = device.name || device.title || (deviceId ? `Dispositivo ${deviceId}` : 'Dispositivo');
       if (!deviceId) continue;
+      if (imei) deviceImeisVistos.add(imei);
 
       const veiculo = imei ? porImei.get(imei) : null;
       if (!veiculo) {
+        // Ninguém aqui tem esse IMEI cadastrado — vira candidato a importar
+        // como veículo novo (placa desconhecida: usa o nome do dispositivo
+        // como ponto de partida, o Carlos ajusta depois se precisar).
         unmatched.push({ device_id: deviceId, imei, nome });
+        if (!dryRun) {
+          const simNumber = extractDeviceSimNumber(device);
+          const novo = await pool.query(
+            `INSERT INTO agenda_frota (establishment_id, placa, imei_rastreador, gpswox_device_id, tracker_model, tracker_synced_at, tracker_phone, status, observacoes)
+             VALUES ($1,$2,$3,$4,$5,NOW(),$6,'ativo',$7) RETURNING id, placa`,
+            [eid, nome || null, imei, deviceId, device.device_model || device.model || device.protocol || null, simNumber,
+             'Importado automaticamente do GPSWOX pela Sincronização com GPS — confira placa/cliente.']
+          );
+          importados.push({ veiculo_id: novo.rows[0].id, placa: novo.rows[0].placa, device_id: deviceId, imei, nome });
+        } else {
+          importados.push({ placa: nome, device_id: deviceId, imei, nome });
+        }
         continue;
       }
 
@@ -1068,6 +1096,33 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       }
     }
 
+    // Mão contrária: veículos cadastrados aqui, com IMEI preenchido, que não
+    // batem com NENHUM dispositivo do GPSWOX (nem por IMEI, nem já vinculado
+    // por gpswox_device_id) — esses nunca foram criados na plataforma.
+    const enviados: any[] = [];
+    for (const v of veiculos) {
+      if (!v.imei_rastreador) continue;
+      const imei = String(v.imei_rastreador).trim();
+      if (!imei || v.gpswox_device_id || deviceImeisVistos.has(imei)) continue;
+
+      if (!dryRun) {
+        try {
+          const criado = await createGpswoxDevice(eid, { name: v.placa || v.cliente_nome || `Veículo ${v.id}`, imei, plate: v.placa });
+          if (criado.id) {
+            await pool.query(
+              `UPDATE agenda_frota SET gpswox_device_id=$1, tracker_synced_at=NOW(), updated_at=NOW() WHERE id=$2`,
+              [criado.id, v.id]
+            );
+          }
+          enviados.push({ veiculo_id: v.id, placa: v.placa, imei, device_id: criado.id, erro: criado.id ? null : 'GPSWOX não retornou o id do dispositivo criado — confira manualmente no painel GPSWOX.' });
+        } catch (e: any) {
+          enviados.push({ veiculo_id: v.id, placa: v.placa, imei, device_id: null, erro: e.message });
+        }
+      } else {
+        enviados.push({ veiculo_id: v.id, placa: v.placa, imei, device_id: null, erro: null });
+      }
+    }
+
     res.json({
       dry_run: dryRun,
       total_dispositivos: devices.length,
@@ -1075,6 +1130,10 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       sem_correspondencia: unmatched.length,
       matched,
       unmatched,
+      importados,
+      total_importados: importados.length,
+      enviados,
+      total_enviados: enviados.length,
     });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
