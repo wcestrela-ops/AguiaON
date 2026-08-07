@@ -7514,6 +7514,14 @@ function renderGpswoxSyncResult(r) {
       <td class="font-mono text-xs">${e.imei || '—'}</td>
       <td>${e.erro ? `<span class="text-red-400">${e.erro}</span>` : (e.device_id ? `<span class="text-green-400">criado (id ${e.device_id})</span>` : '<span class="text-slate-500 dark:text-slate-500">a enviar</span>')}</td>
     </tr>`).join('');
+  // Fix de produção 52 — a sincronização passou a trazer também o cliente
+  // dono de cada dispositivo (casando por e-mail/telefone, ou criando novo
+  // se não achar nenhum); mostra esse 4º bloco do mesmo jeito que os outros 3.
+  const linhasClientes = (r.clientes_sincronizados || []).map(c => `
+    <tr>
+      <td>${c.cliente_nome || '—'}</td>
+      <td>${c.acao && c.acao.startsWith('vinculado') ? '<span class="text-green-400">vincular existente</span>' : '<span class="text-emerald-500">criar novo</span>'}</td>
+    </tr>`).join('');
   const totalAcoes = (r.vinculados || 0) + (r.total_importados || 0) + (r.total_enviados || 0);
   box.innerHTML = `
     <p class="text-sm text-slate-800 dark:text-slate-300 mb-2">${r.total_dispositivos} dispositivo(s) no GPSWOX · ${r.vinculados} corresponde(m) a veículos cadastrados (por IMEI) · ${r.sem_correspondencia} sem correspondência.</p>
@@ -7529,6 +7537,10 @@ function renderGpswoxSyncResult(r) {
     ${linhasEnviar ? `
       <p class="text-xs text-indigo-400 mb-1"><i class="fa fa-upload mr-1"></i>${r.enviados.length} veículo(s) cadastrados aqui serão criados no GPSWOX:</p>
       <table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Placa</th><th class="text-left">IMEI</th><th class="text-left">Status</th></tr></thead><tbody>${linhasEnviar}</tbody></table>
+    ` : ''}
+    ${linhasClientes ? `
+      <p class="text-xs text-sky-400 mb-1"><i class="fa fa-user-plus mr-1"></i>${r.clientes_sincronizados.length} cliente(s) serão vinculados/criados a partir do dono dos dispositivos no GPSWOX (casado por e-mail/telefone quando possível):</p>
+      <table class="w-full text-xs mb-3"><thead><tr><th class="text-left">Cliente (GPSWOX)</th><th class="text-left">Ação</th></tr></thead><tbody>${linhasClientes}</tbody></table>
     ` : ''}
     <button onclick="aplicarSyncGpswox()" class="btn-primary text-sm" ${totalAcoes === 0 ? 'disabled' : ''}>
       <i class="fa fa-sync mr-1"></i> Aplicar sincronização (${totalAcoes})
@@ -7547,7 +7559,7 @@ async function aplicarSyncGpswox() {
     console.log('[Sincronizar com GPS] resposta completa:', r);
     const falhasEnvio = (r.enviados || []).filter(e => e.erro);
     box.innerHTML = `
-      <p class="text-sm text-green-400 mb-1"><i class="fa fa-check mr-1"></i>${r.vinculados} vinculado(s) · ${r.total_importados} importado(s) do GPSWOX · ${r.total_enviados - falhasEnvio.length} enviado(s) para o GPSWOX.</p>
+      <p class="text-sm text-green-400 mb-1"><i class="fa fa-check mr-1"></i>${r.vinculados} vinculado(s) · ${r.total_importados} importado(s) do GPSWOX · ${r.total_enviados - falhasEnvio.length} enviado(s) para o GPSWOX · ${r.total_clientes_sincronizados || 0} cliente(s) sincronizado(s).</p>
       ${falhasEnvio.length ? `<p class="text-xs text-red-400">${falhasEnvio.length} veículo(s) falharam ao enviar pro GPSWOX: ${falhasEnvio.map(e => `${e.placa || e.veiculo_id} (${e.erro})`).join('; ')}</p>` : ''}`;
     loadFrota();
   } catch (e) {
