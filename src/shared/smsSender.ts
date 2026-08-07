@@ -10,16 +10,17 @@
  *
  * Provedores suportados:
  *  - fake          → simulado, sempre "sent" (dev/staging)
- *  - android       → celular físico com chip, agente HTTP próprio
+ *  - android       → celular físico com chip, agente HTTP próprio (formato genérico, não confirmado contra nenhum app real)
  *  - http_gateway   → URL genérica com %NUMBER%/%MESSAGE% (padrão GPSWOX/PHP)
  *  - smsmarket     → API HTTP com api_key + sender_id
+ *  - traccar_sms   → app "Traccar SMS Gateway" (celular físico com chip) — Fix de produção 56
  */
 
 import pool from './db';
 import { encrypt, decrypt } from './cryptoUtil';
 
 // ─── Tipos ─────────────────────────────────────────────────────
-export type SmsProviderType = 'fake' | 'android' | 'http_gateway' | 'smsmarket';
+export type SmsProviderType = 'fake' | 'android' | 'http_gateway' | 'smsmarket' | 'traccar_sms';
 
 export interface SmsProviderRow {
   id: string;
@@ -73,6 +74,24 @@ export const PROVIDER_TYPES: Record<SmsProviderType, { label: string; descriptio
       { key: 'base_url', label: 'URL da API', type: 'url', required: true },
       { key: 'api_key', label: 'API Key', type: 'password', secret: true, required: true },
       { key: 'sender_id', label: 'Remetente / ID', type: 'text', required: true },
+    ],
+  },
+  // Fix de produção 56 — app "Traccar SMS Gateway" (Android, grátis, do mesmo
+  // time do Traccar). Confirmado contra a doc oficial (traccar.org/http-sms-api/):
+  // funciona em 2 modos, com o MESMO formato de requisição nos dois — só muda
+  // a URL/token que o app mostra:
+  //   1. "Cloud" — URL fixa https://www.traccar.org/sms/ + TOKEN (gerado no
+  //      app depois de conectar numa conta Traccar); não precisa expor o
+  //      celular na internet, o app puxa da nuvem.
+  //   2. "Direto" — URL local do celular (ex.: http://192.168.0.10:8082) +
+  //      API key mostrada no app; só funciona se o servidor alcançar essa
+  //      URL (mesma rede, VPN, porta liberada etc.).
+  traccar_sms: {
+    label: 'Traccar SMS Gateway (app Android)',
+    description: 'App gratuito da Traccar que transforma um celular com chip em gateway de SMS (traccar.org/sms-gateway). Use a URL e o token/API key exatamente como o app mostra — modo "Cloud" (URL fixa da Traccar) ou "Direto" (URL local do celular), tanto faz.',
+    fields: [
+      { key: 'base_url', label: 'URL (Cloud ou Direta, conforme o app)', type: 'url', required: true, placeholder: 'https://www.traccar.org/sms/' },
+      { key: 'api_key', label: 'Token / API key (mostrado no app)', type: 'password', secret: true, required: true },
     ],
   },
 };
@@ -222,6 +241,23 @@ async function dispatchByProvider(row: SmsProviderRow, phone: string, message: s
       if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
       const body: any = await res.json().catch(() => ({}));
       return { ok: true, external_id: body.id || body.external_id || null };
+    }
+
+    // Fix de produção 56 — confirmado contra a doc oficial
+    // (traccar.org/http-sms-api/): a `base_url` JÁ É o endpoint completo
+    // (sem path extra tipo "/send" — nem a relay `https://www.traccar.org/sms/`
+    // do modo Cloud, nem a URL local do modo Direto, levam sufixo nenhum), o
+    // header é `Authorization: <token>` sem prefixo "Bearer", e o corpo é só
+    // `{ to, message }` (sem `device_id` — esse app não tem esse conceito).
+    case 'traccar_sms': {
+      const res = await fetch(cfg.base_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: cfg.api_key },
+        body: JSON.stringify({ to: phone, message }),
+      });
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
+      const body: any = await res.json().catch(() => ({}));
+      return { ok: true, external_id: body?.id || null };
     }
 
     default:

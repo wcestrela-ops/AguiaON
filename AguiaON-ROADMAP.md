@@ -1231,3 +1231,37 @@ A doc confirma ainda que a resposta do `sharing` é `{ data: { id, user_id, name
 - `createSharing()` calcula `expiration_date` absoluto a partir de `durationMinutes` e manda os campos corretos; parsing da resposta prioriza `data.hash`.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo em `gpswoxClient.ts` (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 56 — novo provedor de SMS: app "Traccar SMS Gateway"
+
+Carlos pediu pra integrar o "Trackar SMS" — na verdade o Traccar SMS Gateway, app Android gratuito do mesmo projeto do Traccar (rastreamento GPS open-source, traccar.org/sms-gateway), que transforma um celular com chip num gateway de SMS. Ele já estava com o app rodando/pronto do lado dele: "Como ele já está pronto, a gente faz a integração" — ou seja, era só adicionar mais uma opção dentro do gateway de SMS multi-provedor com failover que já existe (`src/shared/smsSender.ts`), no mesmo molde de `android`/`http_gateway`/`smsmarket`.
+
+Em vez de supor o formato da API, fui na documentação oficial (`traccar.org/http-sms-api/`) confirmar o contrato exato. O app funciona em 2 modos, com o **mesmo formato de requisição** nos dois — só muda a URL e o token:
+1. **Cloud**: URL fixa `https://www.traccar.org/sms/`, com um TOKEN gerado pelo app depois de vincular uma conta Traccar (o celular não precisa estar acessível pela internet — quem puxa da nuvem é o próprio app).
+2. **Direto**: URL local mostrada no app (ex.: `http://192.168.0.10:8082`), com uma API key também mostrada no app — só funciona se o servidor alcançar esse endereço (mesma rede, VPN, porta liberada etc.).
+
+Em ambos os modos: `POST <url>` (a própria URL já é o endpoint completo — sem path extra tipo `/send`), header `Authorization: <token>` (sem prefixo "Bearer"), corpo `{ "to": "<telefone>", "message": "<texto>" }`.
+
+**Implementação** (`src/shared/smsSender.ts`):
+1. `SmsProviderType` ganhou `'traccar_sms'`.
+2. Nova entrada em `PROVIDER_TYPES` com label "Traccar SMS Gateway (app Android)", descrição explicando os dois modos, e exatamente 2 campos — `base_url` (url, obrigatório) e `api_key` (senha/secreto, obrigatório, rotulado "Token / API key (mostrado no app)"). Reaproveitar o nome `api_key` foi proposital: `SECRET_FIELDS` já inclui `'api_key'`, então o campo já sai com criptografia/mascaramento de graça, sem tocar em mais nada.
+3. Novo `case 'traccar_sms':` em `dispatchByProvider()`, seguindo o contrato real à risca — **sem** sufixo `/send` na URL (diferente dos casos `android`/`smsmarket`, que apendam `/send`; aqueles eram formatos supostos de um app hipotético diferente, não o Traccar real, e ficaram intocados) e **sem** prefixo "Bearer" no header (idem):
+
+```ts
+case 'traccar_sms': {
+  const res = await fetch(cfg.base_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: cfg.api_key },
+    body: JSON.stringify({ to: phone, message }),
+  });
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${await res.text()}` };
+  const body: any = await res.json().catch(() => ({}));
+  return { ok: true, external_id: body?.id || null };
+}
+```
+
+4. Doc-comment no topo do arquivo (lista de provedores suportados) atualizado com `traccar_sms`.
+
+**Zero mudança de frontend**: tanto o `admin.html` (gateway de plataforma, SUPERADMIN) quanto o `loja.html` (gateway próprio do lojista, OWN) renderizam o dropdown de tipo de provedor e o formulário de configuração **inteiramente** a partir de `GET /admin/sms/providers/schema` (que só devolve `PROVIDER_TYPES` como JSON) — não existe HTML/JS específico de provedor hardcoded em nenhum dos dois (confirmado por busca textual: nenhum nome de provedor existente, tipo `smsmarket` ou `http_gateway`, aparece em `public/*.html`). Consequência direta dessa arquitetura já existente: bastou o catálogo novo no backend pra a opção "Traccar SMS Gateway" aparecer pronta pra uso nos dois painéis, sem tocar em uma linha de frontend.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).
