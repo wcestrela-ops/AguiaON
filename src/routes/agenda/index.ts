@@ -1085,19 +1085,19 @@ router.post('/frota-gpswox-sync', async (req, res) => {
     }
     const deviceImeisVistos = new Set<string>();
 
-    // Fix de produção 46 — criar dispositivo novo no GPSWOX (mão "enviar")
-    // exige um user_id (o cliente dono, dentro do GPSWOX — ver handoff do
-    // ag-on-track). A gente não guarda esse id por veículo/cliente hoje;
-    // como os dispositivos existentes desta conta pertencem todos ao mesmo
-    // usuário GPSWOX (confirmado no log do Fix 43 — mesma conta única), usa
-    // o user_id de qualquer dispositivo já cadastrado como referência pros
-    // novos. Sem nenhum dispositivo existente, não tem como descobrir.
+    // Fix de produção 48 — a documentação oficial confirma que `user_id` é
+    // OPCIONAL na criação de dispositivo (POST /api/add_device); o Fix 46
+    // tinha tornado isso obrigatório (bloqueando o envio inteiro sem ele)
+    // com base no handoff não-oficial do ag-on-track. Continua detectando
+    // um `gpswoxUserId` de referência quando existe (associa o dispositivo
+    // novo ao mesmo dono dos existentes, se possível), mas agora é só um
+    // bônus — não bloqueia mais o envio quando não encontrado.
     let gpswoxUserId: string | null = null;
     for (const d of devices) {
       const uid = extractDeviceGpswoxUserId(d);
       if (uid) { gpswoxUserId = uid; break; }
     }
-    console.log(`[frota-gpswox-sync] gpswoxUserId_detectado=${gpswoxUserId}`);
+    console.log(`[frota-gpswox-sync] gpswoxUserId_detectado=${gpswoxUserId} (opcional — não bloqueia mais o envio)`);
 
     const matched: any[] = [];
     const unmatched: any[] = [];
@@ -1160,19 +1160,17 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (!imei || v.gpswox_device_id || deviceImeisVistos.has(imei)) continue;
 
       if (!dryRun) {
-        if (!gpswoxUserId) {
-          enviados.push({
-            veiculo_id: v.id, placa: v.placa, imei, device_id: null,
-            erro: 'Não foi possível determinar o usuário do GPSWOX (nenhum dispositivo existente nessa conta pra usar de referência) — crie ao menos 1 dispositivo manualmente pelo painel GPSWOX primeiro, depois tente sincronizar de novo.',
-          });
-          continue;
-        }
         try {
-          const criado = await createGpswoxDevice(eid, { name: v.placa || v.cliente_nome || `Veículo ${v.id}`, imei, userId: gpswoxUserId });
-          // Fix de produção 46 — loga a resposta CRUA do GPSWOX pro
-          // edit_device (endpoint/payload corrigidos neste mesmo fix, a
-          // partir do handoff do ag-on-track).
-          console.log(`[frota-gpswox-sync] ENVIAR veiculo_id=${v.id} placa=${v.placa} imei=${imei} user_id=${gpswoxUserId} resposta_gpswox=${JSON.stringify(criado.raw).slice(0, 500)}`);
+          const criado = await createGpswoxDevice(eid, {
+            name: v.placa || v.cliente_nome || `Veículo ${v.id}`,
+            imei,
+            plateNumber: v.placa || undefined,
+            userId: gpswoxUserId || undefined,
+          });
+          // Fix de produção 48 — loga a resposta CRUA do GPSWOX pro
+          // add_device (endpoint/payload corrigidos neste fix contra a
+          // documentação oficial — user_id agora é opcional).
+          console.log(`[frota-gpswox-sync] ENVIAR veiculo_id=${v.id} placa=${v.placa} imei=${imei} user_id=${gpswoxUserId || '(nenhum)'} resposta_gpswox=${JSON.stringify(criado.raw).slice(0, 500)}`);
           if (criado.id) {
             await pool.query(
               `UPDATE agenda_frota SET gpswox_device_id=$1, tracker_synced_at=NOW(), updated_at=NOW() WHERE id=$2`,
