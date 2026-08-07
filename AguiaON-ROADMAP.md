@@ -1075,3 +1075,18 @@ Depois do Fix 50, o Carlos perguntou especificamente: se eu vincular um veículo
 - Aplicado nas 3 rotas que podem mudar o dono de um veículo já sincronizado: `vincular` (busca o `gpswox_client_id` do novo cliente), `desvincular-cliente` (limpa o dono), e `PUT /agenda/frota/:id` (cobre quem troca o cliente pela tela de edição geral em vez do botão dedicado — só dispara se o dispositivo já existia antes dessa edição e o `cliente_id` realmente mudou, pra não chamar o GPSWOX duas vezes quando o dispositivo acabou de ser criado na mesma requisição).
 
 **Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 52 — Sincronização com GPS agora também traz o cliente dono de cada dispositivo
+
+O Carlos perguntou se dava pra puxar do GPSWOX não só o veículo, mas o cliente dono dele também — casando por e-mail e telefone com quem já está cadastrado aqui (mesmo padrão do sync com o Asaas), pra ter a base de clientes completa.
+
+Confirmei contra a documentação oficial: `GET /api/admin/clients` retorna a lista paginada de clientes da conta GPSWOX (`email`, `phone_number`, `id`, sem campo de nome — o GPSWOX não guarda isso). Cada dispositivo (já lido via `get_devices`) traz `device_data.user_id`, que é o id do cliente dono dele lá — o mesmo campo que o `extractDeviceGpswoxUserId()` já extraía desde o Fix 46, só que antes só era usado como palpite genérico pro `user_id` de dispositivos NOVOS enviados daqui pra lá; agora também é usado na direção contrária.
+
+**Implementação**:
+- `gpswoxClient.ts`: nova função `listClients()` — pagina `GET /api/admin/clients` até `last_page` (teto de segurança de 50 páginas).
+- `POST /agenda/frota-gpswox-sync`: antes do loop de dispositivos, carrega os clientes locais (por `gpswox_client_id`, e-mail normalizado, telefone normalizado) e os clientes do GPSWOX numa passada só. Nova função `resolverClienteGpswox()`: pro dono de cada dispositivo, (1) se já tem cliente local com esse `gpswox_client_id`, usa ele; (2) senão, tenta casar por e-mail ou telefone com um cliente já cadastrado — se achar, só grava o `gpswox_client_id` nele; (3) senão, cria um cliente novo local com origem `gpswox_sync` (nome vira o e-mail ou telefone, já que o GPSWOX não tem nome pra passar pra gente).
+- Aplicado nos dois casos onde um veículo passa a ter dispositivo vinculado: quando é importado como veículo novo (unmatched → importados) e quando já existia aqui e bate por IMEI (matched) mas ainda não tinha cliente. **Nunca sobrescreve** um `cliente_id` que o veículo já tinha antes da sincronização.
+- `agenda_clientes_origem_check` ganhou o valor `'gpswox_sync'`.
+- Resposta da rota ganhou `clientes_sincronizados`/`total_clientes_sincronizados`, seguindo o mesmo padrão de preview em `dry_run` que já existia pra dispositivos/veículos — a UI ainda não renderiza essa seção (fica pro Carlos decidir se quer expor isso no modal do `loja.html` depois).
+
+**Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).

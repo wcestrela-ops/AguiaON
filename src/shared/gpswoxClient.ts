@@ -305,6 +305,38 @@ export async function createClient(estId: string, params: { email: string; phone
   return { id: id != null ? String(id) : null, raw };
 }
 
+export interface GpswoxClientSummary {
+  id: string;
+  email: string | null;
+  phoneNumber: string | null;
+  raw: any;
+}
+
+// Fix de produção 52 — o Carlos quer trazer pra cá os clientes já cadastrados
+// no GPSWOX (associando por e-mail/telefone com quem já existe aqui, ou
+// criando novo). Confirmado contra a documentação oficial (GET
+// /api/admin/clients): resposta paginada (Laravel paginator padrão — `data`,
+// `last_page`, etc), sem endpoint de "listar tudo de uma vez". Usa `limit`
+// alto (200) pra reduzir o número de páginas na prática, mas ainda percorre
+// `last_page` de verdade em vez de assumir que cabe numa página só — contas
+// GPSWOX grandes podem ter mais de 200 clientes.
+export async function listClients(estId: string): Promise<GpswoxClientSummary[]> {
+  const all: GpswoxClientSummary[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const data = await request(estId, 'admin/clients', { query: { limit: 200, page } });
+    const list = Array.isArray(data?.data) ? data.data : [];
+    for (const c of list) {
+      if (c?.id == null) continue;
+      all.push({ id: String(c.id), email: c.email || null, phoneNumber: c.phone_number || null, raw: c });
+    }
+    lastPage = Number(data?.last_page) || 1;
+    page++;
+  } while (page <= lastPage && page <= 50); // teto de segurança (50 páginas = até 10 mil clientes)
+  return all;
+}
+
 export async function getDeviceLocation(estId: string, deviceId: string): Promise<DeviceLocation> {
   const devices = await listDevices(estId);
   const device = devices.find((d: any) => String(d.id) === String(deviceId));

@@ -16,6 +16,7 @@ import {
   createDevice as createGpswoxDevice,
   editDevice as editGpswoxDevice,
   createClient as createGpswoxClient,
+  listClients as listGpswoxClients,
   getDeviceLocation,
   sendCommand as sendGpswoxCommand,
   getHistory,
@@ -305,8 +306,11 @@ export async function ensureTables() {
   // 'landing_modulo' no Fix de produção 12 (vale pra qualquer módulo
   // "serviço único", não só Rastreamento) — mantido na lista por segurança,
   // caso algum registro de teste já tenha usado o valor antigo.
+  // Fix de produção 52 — 'gpswox_sync' adicionado à lista: cliente trazido
+  // automaticamente do GPSWOX (dono de um dispositivo) quando não bate por
+  // e-mail/telefone com nenhum cliente já cadastrado aqui.
   await pool.query(`ALTER TABLE agenda_clientes DROP CONSTRAINT IF EXISTS agenda_clientes_origem_check`);
-  await pool.query(`ALTER TABLE agenda_clientes ADD CONSTRAINT agenda_clientes_origem_check CHECK (origem IN ('manual','asaas_sync','landing_rastreamento','landing_modulo'))`);
+  await pool.query(`ALTER TABLE agenda_clientes ADD CONSTRAINT agenda_clientes_origem_check CHECK (origem IN ('manual','asaas_sync','landing_rastreamento','landing_modulo','gpswox_sync'))`);
   // Fix de produção 9 — endereço, data de nascimento e contato de emergência
   // coletados no formulário "Contratar" da landing (routes/landings.ts), pra
   // já vir preenchido no cadastro do cliente sem precisar redigitar. Dados
@@ -1180,7 +1184,7 @@ router.post('/frota-gpswox-sync', async (req, res) => {
     // do serviço) e são o que precisamos ler pra achar a causa real.
     console.log(`[frota-gpswox-sync] eid=${eid} dry_run=${dryRun} devices_recebidos=${devices.length}`);
     const veiculos = (await pool.query(
-      `SELECT id, placa, cliente_nome, imei_rastreador, gpswox_device_id FROM agenda_frota WHERE establishment_id=$1`,
+      `SELECT id, placa, cliente_nome, cliente_id, imei_rastreador, gpswox_device_id FROM agenda_frota WHERE establishment_id=$1`,
       [eid]
     )).rows;
     console.log(`[frota-gpswox-sync] veiculos_locais=${veiculos.length} (ids: ${veiculos.map((v: any) => v.id).join(', ') || 'nenhum'})`);
@@ -1190,6 +1194,81 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (v.imei_rastreador) porImei.set(String(v.imei_rastreador).trim(), v);
     }
     const deviceImeisVistos = new Set<string>();
+
+    // Fix de produção 52 — o Carlos pediu que a sincronização também traga o
+    // CLIENTE dono de cada dispositivo, não só o veículo: casando por e-mail
+    // ou telefone com um cliente que já exista aqui (mesmo padrão do sync com
+    // o Asaas), ou criando um novo se não achar nenhum. Carrega tudo uma vez
+    // só antes do loop principal, pra não bater na API/banco por dispositivo.
+    const clientesLocais = (await pool.query(
+      `SELECT id, nome, telefone, email, gpswox_client_id FROM agenda_clientes WHERE establishment_id=$1`,
+      [eid]
+    )).rows;
+    const clientesPorGpswoxId = new Map<string, any>();
+    const clientesPorEmail = new Map<string, any>();
+    const clientesPorTelefone = new Map<string, any>();
+    for (const c of clientesLocais) {
+      if (c.gpswox_client_id) clientesPorGpswoxId.set(String(c.gpswox_client_id), c);
+      if (c.email) clientesPorEmail.set(String(c.email).trim().toLowerCase(), c);
+      if (c.telefone) clientesPorTelefone.set(String(c.telefone).replace(/\D/g, ''), c);
+    }
+    let gpswoxClientsById = new Map<string, any>();
+    try {
+      const gpswoxClients = await listGpswoxClients(eid);
+      gpswoxClientsById = new Map(gpswoxClients.map((c: any) => [c.id, c]));
+      console.log(`[frota-gpswox-sync] clientes_gpswox=${gpswoxClients.length}`);
+    } catch (e: any) {
+      console.warn(`[frota-gpswox-sync] não foi possível listar clientes do GPSWOX (${e.message}) — sincronização segue só com dispositivos.`);
+    }
+    const clientesSincronizados: any[] = [];
+
+    // Resolve (e, se `!dryRun`, cria/vincula de verdade) o cliente local
+    // correspondente ao dono `gpswoxUserId` de um dispositivo. Não sobrescreve
+    // um `cliente_id` que o veículo já tinha manualmente — só preenche quando
+    // está vazio (`clienteIdAtualDoVeiculo` é o valor ANTES dessa sincronização).
+    async function resolverClienteGpswox(gpswoxUserId: string | null, clienteIdAtualDoVeiculo: string | null | undefined): Promise<string | null> {
+      if (!gpswoxUserId) return clienteIdAtualDoVeiculo || null;
+      if (clienteIdAtualDoVeiculo) return clienteIdAtualDoVeiculo; // veículo já tem cliente — não mexe
+
+      const jaVinculado = clientesPorGpswoxId.get(gpswoxUserId);
+      if (jaVinculado) return jaVinculado.id;
+
+      const gpswoxClient = gpswoxClientsById.get(gpswoxUserId);
+      const email = gpswoxClient?.email ? String(gpswoxClient.email).trim().toLowerCase() : null;
+      const telefoneDigits = gpswoxClient?.phoneNumber ? String(gpswoxClient.phoneNumber).replace(/\D/g, '') : null;
+
+      const existentePorEmail = email ? clientesPorEmail.get(email) : null;
+      const existentePorTelefone = !existentePorEmail && telefoneDigits ? clientesPorTelefone.get(telefoneDigits) : null;
+      const existente = existentePorEmail || existentePorTelefone;
+
+      if (existente) {
+        clientesSincronizados.push({ gpswox_client_id: gpswoxUserId, cliente_id: existente.id, cliente_nome: existente.nome, acao: 'vinculado (já cadastrado, casado por e-mail/telefone)' });
+        if (!dryRun) {
+          await pool.query(`UPDATE agenda_clientes SET gpswox_client_id=$1, updated_at=NOW() WHERE id=$2`, [gpswoxUserId, existente.id]);
+          clientesPorGpswoxId.set(gpswoxUserId, existente);
+        }
+        return existente.id;
+      }
+
+      // Não achou por e-mail nem telefone — cria cliente novo a partir dos
+      // dados do GPSWOX (que não guarda nome, só e-mail/telefone).
+      if (!email && !telefoneDigits) return null; // sem nada pra identificar, não cria fantasma
+      const nomeFallback = email || gpswoxClient?.phoneNumber || `Cliente GPSWOX ${gpswoxUserId}`;
+      clientesSincronizados.push({ gpswox_client_id: gpswoxUserId, cliente_id: null, cliente_nome: nomeFallback, acao: 'criar novo (sem correspondência aqui)' });
+      if (dryRun) return null;
+
+      const novo = await pool.query(
+        `INSERT INTO agenda_clientes (establishment_id, nome, telefone, email, origem, gpswox_client_id)
+         VALUES ($1,$2,$3,$4,'gpswox_sync',$5) RETURNING *`,
+        [eid, nomeFallback, gpswoxClient?.phoneNumber || null, gpswoxClient?.email || null, gpswoxUserId]
+      );
+      const criado = novo.rows[0];
+      clientesPorGpswoxId.set(gpswoxUserId, criado);
+      if (criado.email) clientesPorEmail.set(String(criado.email).trim().toLowerCase(), criado);
+      if (criado.telefone) clientesPorTelefone.set(String(criado.telefone).replace(/\D/g, ''), criado);
+      console.log(`[frota-gpswox-sync] cliente criado a partir do GPSWOX — cliente_id=${criado.id} gpswox_client_id=${gpswoxUserId}`);
+      return criado.id;
+    }
 
     // Fix de produção 48 — a documentação oficial confirma que `user_id` é
     // OPCIONAL na criação de dispositivo (POST /api/add_device); o Fix 46
@@ -1216,6 +1295,8 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       if (!deviceId) continue;
       if (imei) deviceImeisVistos.add(imei);
 
+      const donoDoDevice = extractDeviceGpswoxUserId(device);
+
       const veiculo = imei ? porImei.get(imei) : null;
       if (!veiculo) {
         // Ninguém aqui tem esse IMEI cadastrado — vira candidato a importar
@@ -1224,15 +1305,22 @@ router.post('/frota-gpswox-sync', async (req, res) => {
         unmatched.push({ device_id: deviceId, imei, nome });
         if (!dryRun) {
           const simNumber = extractDeviceSimNumber(device);
+          // Fix de produção 52 — resolve o cliente dono ANTES do insert, pra
+          // já nascer com cliente_id/nome/telefone certos em vez de um
+          // segundo UPDATE depois.
+          const clienteId = await resolverClienteGpswox(donoDoDevice, null);
+          const cliente = clienteId ? clientesPorGpswoxId.get(donoDoDevice!) : null;
           const novo = await pool.query(
-            `INSERT INTO agenda_frota (establishment_id, placa, imei_rastreador, gpswox_device_id, tracker_model, tracker_synced_at, tracker_phone, status, observacoes)
-             VALUES ($1,$2,$3,$4,$5,NOW(),$6,'ativo',$7) RETURNING id, placa`,
+            `INSERT INTO agenda_frota (establishment_id, placa, imei_rastreador, gpswox_device_id, tracker_model, tracker_synced_at, tracker_phone, status, observacoes, cliente_id, cliente_nome, cliente_telefone)
+             VALUES ($1,$2,$3,$4,$5,NOW(),$6,'ativo',$7,$8,$9,$10) RETURNING id, placa`,
             [eid, nome || null, imei, deviceId, device.device_model || device.model || device.protocol || null, simNumber,
-             'Importado automaticamente do GPSWOX pela Sincronização com GPS — confira placa/cliente.']
+             'Importado automaticamente do GPSWOX pela Sincronização com GPS — confira placa/cliente.',
+             clienteId, cliente?.nome || null, cliente?.telefone || null]
           );
-          console.log(`[frota-gpswox-sync] IMPORTADO veiculo_id=${novo.rows[0].id} placa=${novo.rows[0].placa} eid=${eid} imei=${imei}`);
-          importados.push({ veiculo_id: novo.rows[0].id, placa: novo.rows[0].placa, device_id: deviceId, imei, nome });
+          console.log(`[frota-gpswox-sync] IMPORTADO veiculo_id=${novo.rows[0].id} placa=${novo.rows[0].placa} eid=${eid} imei=${imei} cliente_id=${clienteId || '(nenhum)'}`);
+          importados.push({ veiculo_id: novo.rows[0].id, placa: novo.rows[0].placa, device_id: deviceId, imei, nome, cliente_id: clienteId });
         } else {
+          await resolverClienteGpswox(donoDoDevice, null); // só preenche a preview de clientesSincronizados
           importados.push({ placa: nome, device_id: deviceId, imei, nome });
         }
         continue;
@@ -1243,6 +1331,20 @@ router.post('/frota-gpswox-sync', async (req, res) => {
         veiculo_id: veiculo.id, placa: veiculo.placa, cliente_nome: veiculo.cliente_nome,
         device_id: deviceId, imei, nome, acao: jaVinculado ? 'já vinculado' : 'vincular',
       });
+
+      // Fix de produção 52 — veículo já existia aqui (bateu por IMEI) mas sem
+      // cliente vinculado: tenta casar/criar o cliente dono do dispositivo,
+      // do mesmo jeito que faz pros importados como veículo novo.
+      if (!veiculo.cliente_id) {
+        const clienteId = await resolverClienteGpswox(donoDoDevice, veiculo.cliente_id);
+        if (!dryRun && clienteId) {
+          const cliente = clientesPorGpswoxId.get(donoDoDevice!);
+          await pool.query(
+            `UPDATE agenda_frota SET cliente_id=$1, cliente_nome=COALESCE(cliente_nome,$2), cliente_telefone=COALESCE(cliente_telefone,$3), updated_at=NOW() WHERE id=$4`,
+            [clienteId, cliente?.nome || null, cliente?.telefone || null, veiculo.id]
+          );
+        }
+      }
 
       if (!dryRun && !jaVinculado) {
         const simNumber = extractDeviceSimNumber(device);
@@ -1309,6 +1411,10 @@ router.post('/frota-gpswox-sync', async (req, res) => {
       total_importados: importados.length,
       enviados,
       total_enviados: enviados.length,
+      // Fix de produção 52 — resumo de clientes trazidos/casados a partir
+      // dos donos dos dispositivos no GPSWOX.
+      clientes_sincronizados: clientesSincronizados,
+      total_clientes_sincronizados: clientesSincronizados.length,
     });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
