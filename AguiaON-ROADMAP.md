@@ -1159,3 +1159,75 @@ Além disso, a doc de `send_gprs_command` só dá **um exemplo** de `type` ("eng
 - `POST /agenda/frota/:id/comando` agora chama `resolveGpswoxCommandType()` antes de enviar o comando, loga o `type` resolvido e se veio do catálogo real ou do palpite de reserva, e devolve `gpswox_command_type`/`tipo_via_catalogo` na resposta JSON — pra dar transparência/depuração caso algum modelo específico ainda não reaja.
 
 **Verificação**: `npx tsc --noEmit -p .` limpo nos arquivos tocados (mesmos erros pré-existentes de sempre em `socketio.ts`, sem relação).
+
+## Fix de produção 55 — endereço ausente na localização, histórico de trajeto e compartilhamento sempre falhando
+
+Com o Fix 54 (comandos) validado pelo Carlos em produção, ele mandou três prints do painel de frota do `loja.html`: (a) o modal "Localização do veículo" com a linha de endereço mostrando só "-"; (b) o modal "Histórico de trajeto" quebrando com o erro da API "The from date field is required. The to date field is required. The from time field is required. The to time field is required."; (c) o modal "Compartilhar localização" quebrando com "The Active field is required. The Name field is required. The Expiration date field is required.". Pediu pra corrigir os três, e que o endereço apareça como "rua, cidade, estado, país" — levantando a hipótese de precisar de "outra integração" pra geocodificação reversa. Fui direto na documentação oficial (gpswox.stoplight.io, lida ao vivo via Claude in Chrome, sem confiar em palpites de sessões anteriores) pros três endpoints envolvidos, e achei um bug real em cada um.
+
+**1. Endereço ausente na "Localização do veículo"**: `get_devices`/`get_devices_latest` simplesmente não trazem um campo de endereço legível (só lat/lng) — `device.address`/`device.last_address`, que o código checava, nunca existiram na resposta real. Não precisou de integração externa: a própria doc do GPSWOX tem um endpoint de geocodificação reversa (`GET /api/address/reverse`, categoria "Address"), com resposta confirmada `{ status, location: { address, road, house, city, state, country, ... } }`.
+
+```ts
+// antes — sempre caía no fallback, porque nenhum dos dois campos existe na resposta real
+endereco: device.address || device.last_address || 'Endereço não disponível',
+
+// depois — resolve via address/reverse (best-effort, nunca derruba a chamada) quando tem lat/lng e ainda não tem endereço
+let endereco: string | null = device.address || device.last_address || null;
+if (!endereco && Number.isFinite(lat) && Number.isFinite(lng)) {
+  const resolved = await resolveAddress(estId, lat, lng);
+  endereco = resolved?.endereco || null;
+}
+// ...
+endereco: endereco || 'Endereço não disponível',
+```
+
+**2. "Histórico de trajeto" sempre falhava** com o erro de validação de 4 campos citado acima. Causa raiz, confirmada contra a doc: o endpoint certo é `get_history_messages` — `get_history` (usado até aqui) nem existe na API oficial, era um palpite de um fix anterior. E ele não aceita um intervalo `from`/`to` combinado: exige 4 parâmetros separados na query — `from_date` (YYYY-MM-DD), `from_time` (HH:mm:ss), `to_date`, `to_time` — que batem, nome por nome, com a mensagem de erro do Carlos. A resposta também é paginada sob `messages.data[]`, com o timestamp de cada ponto em `time`/`server_time` (não `dt_tracker`/`date`/`datetime`, que também não existem no schema real).
+
+```ts
+// antes — get_history não existe na API; from/to combinado não é aceito
+const data = await request(estId, 'get_history', { query: { device_id: deviceId, from, to } });
+const list = extractGpswoxArray(data, ['items', 'messages', 'data']);
+// ...
+capturado_em: p.dt_tracker || p.date || p.datetime || null,
+
+// depois — get_history_messages com os 4 campos separados; leitura de messages.data[]
+const [fromDate, fromTime] = splitDateTime(from);
+const [toDate, toTime] = splitDateTime(to);
+const data = await request(estId, 'get_history_messages', {
+  query: { device_id: deviceId, from_date: fromDate, from_time: fromTime, to_date: toDate, to_time: toTime, limit: 500 },
+});
+const list = Array.isArray(data?.messages?.data) ? data.messages.data : extractGpswoxArray(data, ['messages', 'items', 'data']);
+// ...
+capturado_em: p.time || p.server_time || null,
+```
+
+**3. "Compartilhar localização" sempre falhava** com o erro de validação de 3 campos citado acima. Causa raiz, confirmada contra a doc do `POST /api/sharing`: o código mandava `expiration_by: 'duration'` + `expiration_duration: durationMinutes`, nenhum dos dois um campo real da API — esse bug específico (nome de campo errado) já tinha sido sinalizado como pendência conhecida no `docs/GPSWOX_API.md`, mas ficou sem correção até agora. Os campos certos: `devices[]`, `active` (obrigatório), `name` (obrigatório), `enable_expiration_date` (boolean) e `expiration_date` — string absoluta `"YYYY-MM-DD HH:mm:ss"`, confirmada pelo próprio exemplo da doc (`"2124-03-01 00:00:00"`), não uma duração relativa.
+
+```ts
+// antes — campos que não existem na API real
+body: {
+  devices: [Number(deviceId)],
+  expiration_by: 'duration',
+  expiration_duration: durationMinutes,
+  delete_after_expiration: true,
+},
+
+// depois — expiration_date absoluto calculado a partir de durationMinutes, campos conforme a doc
+const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
+const expirationDate = `${expiresAt.getUTCFullYear()}-${pad(expiresAt.getUTCMonth() + 1)}-${pad(expiresAt.getUTCDate())} ${pad(expiresAt.getUTCHours())}:${pad(expiresAt.getUTCMinutes())}:${pad(expiresAt.getUTCSeconds())}`;
+body: {
+  devices: [Number(deviceId)],
+  active: true,
+  name: `Compartilhamento ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+  enable_expiration_date: true,
+  expiration_date: expirationDate,
+},
+```
+
+A doc confirma ainda que a resposta do `sharing` é `{ data: { id, user_id, name, hash, expiration_date, active, delete_after_expiration } }` — sem `url`/`link` pronto, só um `hash`. A leitura da resposta passou a priorizar `data.hash` (mantendo os fallbacks antigos por segurança), e a função continua devolvendo o aviso "hash=... (confirme o formato do link com o painel GPSWOX)" quando não vem link direto — o formato exato da página pública de compartilhamento depende do deploy GPSWOX específico do Carlos e não está documentado, precisa ser confirmado ao vivo com o painel dele.
+
+**Implementação** (tudo em `src/shared/gpswoxClient.ts`):
+- Nova função `resolveAddress(estId, lat, lng)` — chama `address/reverse`, devolve `{ endereco, cidade, estado, pais, raw }` ou `null` em caso de falha (try/catch, nunca lança). `getDeviceLocation()` chama best-effort quando tem coordenadas válidas e ainda não tem endereço.
+- Novo helper `splitDateTime(value)` — aceita ISO ou `"YYYY-MM-DD HH:mm:ss"` e devolve `[data, hora]` em UTC. `getHistory()` reescrita pra chamar `get_history_messages` com os 4 parâmetros e ler `messages.data[]`/`time`/`server_time`.
+- `createSharing()` calcula `expiration_date` absoluto a partir de `durationMinutes` e manda os campos corretos; parsing da resposta prioriza `data.hash`.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo em `gpswoxClient.ts` (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).

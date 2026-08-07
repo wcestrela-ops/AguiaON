@@ -383,6 +383,41 @@ export async function listClientsForDevice(estId: string, imei: string): Promise
   return listClients(estId, { searchDevice: imei });
 }
 
+export interface ResolvedAddress {
+  endereco: string | null;
+  cidade: string | null;
+  estado: string | null;
+  pais: string | null;
+  raw: any;
+}
+
+// Fix de produção 55 — `get_devices`/`get_devices_latest` não trazem um
+// endereço legível (só lat/lng), então `device.address`/`device.last_address`
+// nunca existiam de verdade — por isso a "Localização do veículo" sempre
+// mostrava "-" onde devia vir rua/cidade/estado/país. A doc oficial confirma
+// um endpoint próprio de geocodificação reversa: `GET /api/address/reverse`
+// (categoria "Address"), que devolve `location.address` já formatado, mais
+// `road`/`house`/`city`/`state`/`country` separados. Best-effort: se falhar,
+// o chamador cai pro "Endereço não disponível" de sempre.
+export async function resolveAddress(estId: string, lat: number, lng: number): Promise<ResolvedAddress | null> {
+  try {
+    const data = await request(estId, 'address/reverse', { query: { lat, lng } });
+    const loc = data?.location;
+    if (!loc) return null;
+    const endereco = loc.address || [loc.road, loc.house].filter(Boolean).join(', ') || null;
+    return {
+      endereco,
+      cidade: loc.city || null,
+      estado: loc.state || null,
+      pais: loc.country || null,
+      raw: loc,
+    };
+  } catch (e: any) {
+    console.warn(`[gpswoxClient.resolveAddress] falha ao resolver endereço (lat=${lat}, lng=${lng}): ${e.message}`);
+    return null;
+  }
+}
+
 export async function getDeviceLocation(estId: string, deviceId: string): Promise<DeviceLocation> {
   const devices = await listDevices(estId);
   const device = devices.find((d: any) => String(d.id) === String(deviceId));
@@ -391,13 +426,22 @@ export async function getDeviceLocation(estId: string, deviceId: string): Promis
   const lat = parseFloat(device.lat ?? device.latitude);
   const lng = parseFloat(device.lng ?? device.longitude);
 
+  // Fix de produção 55 — geocodificação reversa best-effort: `get_devices`
+  // não traz endereço pronto, então busca via `address/reverse` sempre que
+  // tiver coordenadas válidas.
+  let endereco: string | null = device.address || device.last_address || null;
+  if (!endereco && Number.isFinite(lat) && Number.isFinite(lng)) {
+    const resolved = await resolveAddress(estId, lat, lng);
+    endereco = resolved?.endereco || null;
+  }
+
   return {
     success: true,
     device_id: device.id,
     veiculo: device.name || device.title || null,
     latitude: Number.isFinite(lat) ? lat : null,
     longitude: Number.isFinite(lng) ? lng : null,
-    endereco: device.address || device.last_address || 'Endereço não disponível',
+    endereco: endereco || 'Endereço não disponível',
     velocidade: device.speed ? `${device.speed} km/h` : '0 km/h',
     ignicao: device.engine_status ?? device.ignition ?? null,
     maps_link: Number.isFinite(lat) && Number.isFinite(lng) ? `https://maps.google.com/?q=${lat},${lng}` : null,
@@ -538,16 +582,38 @@ export interface HistoryPoint {
   maps_link: string | null;
 }
 
-/** Histórico de trajeto do dispositivo entre duas datas (formato ISO ou 'YYYY-MM-DD HH:mm:ss', conforme a API GPSWOX exigir). */
-// Fix de produção 48 — revertido pra GET com query string. O Fix 46 tinha
-// mudado pra POST com base no handoff não-oficial do ag-on-track; a
-// documentação oficial confirma que todo endpoint com prefixo `get_`
-// checado até agora (get_devices, get_geofences, edit_device_data) é GET
-// com parâmetros na query string, então esse é o padrão mais confiável até
-// confirmar `get_history` especificamente.
+// Fix de produção 55 — dois bugs reais aqui, achados direto na doc oficial
+// (a tela de "Histórico de trajeto" quebrava com "The from date field is
+// required. The to date field is required...", exatamente esses 4 nomes):
+//   1. O endpoint certo é `get_history_messages`, não `get_history` (esse
+//      nem existe na doc oficial — era um palpite).
+//   2. Ele NÃO aceita um `from`/`to` combinado — exige 4 campos separados:
+//      `from_date` (YYYY-MM-DD), `from_time` (HH:mm:ss), `to_date`, `to_time`.
+// A resposta também é paginada em `messages.data[]` (campos `time`/
+// `server_time`, não `dt_tracker`/`date`/`datetime` como estava aqui) — sem
+// endereço pronto (não geocodifica cada ponto por padrão: custaria uma
+// chamada a `address/reverse` por ponto do trajeto).
+function splitDateTime(value: string): [string, string] {
+  const d = new Date(value);
+  if (!Number.isNaN(d.getTime())) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    const time = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+    return [date, time];
+  }
+  // já veio separado tipo "YYYY-MM-DD HH:mm:ss" (fallback se não for parseável como Date)
+  const [date, time] = value.split(/[T ]/);
+  return [date || value, time || '00:00:00'];
+}
+
+/** Histórico de trajeto do dispositivo entre duas datas (aceita ISO ou 'YYYY-MM-DD HH:mm:ss'). */
 export async function getHistory(estId: string, deviceId: string, from: string, to: string): Promise<HistoryPoint[]> {
-  const data = await request(estId, 'get_history', { query: { device_id: deviceId, from, to } });
-  const list = extractGpswoxArray(data, ['items', 'messages', 'data']);
+  const [fromDate, fromTime] = splitDateTime(from);
+  const [toDate, toTime] = splitDateTime(to);
+  const data = await request(estId, 'get_history_messages', {
+    query: { device_id: deviceId, from_date: fromDate, from_time: fromTime, to_date: toDate, to_time: toTime, limit: 500 },
+  });
+  const list = Array.isArray(data?.messages?.data) ? data.messages.data : extractGpswoxArray(data, ['messages', 'items', 'data']);
 
   return list.map((p: any) => {
     const lat = parseFloat(p.lat ?? p.latitude);
@@ -555,9 +621,9 @@ export async function getHistory(estId: string, deviceId: string, from: string, 
     return {
       latitude: Number.isFinite(lat) ? lat : null,
       longitude: Number.isFinite(lng) ? lng : null,
-      velocidade: p.speed ? `${p.speed} km/h` : '0 km/h',
+      velocidade: p.speed != null ? `${p.speed} km/h` : '0 km/h',
       endereco: p.address || null,
-      capturado_em: p.dt_tracker || p.date || p.datetime || null,
+      capturado_em: p.time || p.server_time || null,
       maps_link: Number.isFinite(lat) && Number.isFinite(lng) ? `https://maps.google.com/?q=${lat},${lng}` : null,
     };
   });
@@ -568,22 +634,36 @@ export interface SharingResult {
   raw: any;
 }
 
+// Fix de produção 55 — a doc oficial (POST /api/sharing) confirma os campos
+// certos do corpo, bem diferentes do que estava aqui (por isso a tela de
+// "Compartilhar localização" quebrava com "The Active field is required.
+// The Name field is required. The Expiration date field is required." —
+// esses 3 nomes exatos). `expiration_by`/`expiration_duration` não existem
+// na API real; o certo é `active` (obrigatório), `name` (obrigatório),
+// `enable_expiration_date` (boolean) + `expiration_date` (string absoluta
+// "YYYY-MM-DD HH:mm:ss", calculada aqui a partir de `durationMinutes`).
 /** Gera um link temporário de compartilhamento de localização (API "sharing" do GPSWOX). */
 export async function createSharing(estId: string, deviceId: string, durationMinutes: number): Promise<SharingResult> {
+  const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const expirationDate = `${expiresAt.getUTCFullYear()}-${pad(expiresAt.getUTCMonth() + 1)}-${pad(expiresAt.getUTCDate())} ${pad(expiresAt.getUTCHours())}:${pad(expiresAt.getUTCMinutes())}:${pad(expiresAt.getUTCSeconds())}`;
+
   const raw = await request(estId, 'sharing', {
     method: 'POST',
     body: {
       devices: [Number(deviceId)],
-      expiration_by: 'duration',
-      expiration_duration: durationMinutes,
-      delete_after_expiration: true,
+      active: true,
+      name: `Compartilhamento ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+      enable_expiration_date: true,
+      expiration_date: expirationDate,
     },
   });
-  // O nome exato do campo de retorno varia por versão do GPSWOX — tenta os mais comuns;
-  // se só vier o hash, devolve como aviso (precisa confirmar o formato do link com uma
-  // conta GPSWOX real antes de expor isso pronto pro cliente final).
+  // O `POST /api/sharing` da doc oficial devolve só `{ data: { hash, ... } }`
+  // — sem `url`/`link` pronto. Mantém os fallbacks antigos por segurança
+  // (versões diferentes do GPSWOX podem variar), mas o caminho documentado é
+  // `data.hash`.
   const directLink = raw?.url || raw?.link || raw?.data?.url || raw?.data?.link || null;
-  const hash = raw?.hash || raw?.data?.hash || raw?.items?.hash || null;
+  const hash = raw?.data?.hash || raw?.hash || raw?.items?.hash || null;
   return { link: directLink || (hash ? `hash=${hash} (confirme o formato do link com o painel GPSWOX)` : null), raw };
 }
 
