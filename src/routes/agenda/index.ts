@@ -1207,6 +1207,26 @@ async function tentarAtualizarDonoGpswox(eid: string, gpswoxDeviceId: string | n
   }
 }
 
+// Fix de produção 70 — o Carlos percebeu que editar um veículo (placa, por
+// exemplo) na AguiaON não refletia lá no GPSWOX: o Fix 51 só sincronizava a
+// troca de DONO (cliente) no editDevice(), nunca nome/placa. `editDevice()`
+// já aceita `name`/`plateNumber` desde o Fix 51 (confirmado contra a doc
+// oficial do POST /api/edit_device) — só faltava chamar com esses campos
+// também. Mesma convenção de nome usada na criação (`tentarCriarDispositivoGpswox`
+// e `createDevice`): o "nome" do dispositivo no GPSWOX é a placa quando
+// existe, senão o nome do cliente. Best-effort, como os outros syncs desta
+// mesma família — não bloqueia a edição local se o GPSWOX falhar.
+async function tentarAtualizarDadosGpswox(eid: string, gpswoxDeviceId: string | null | undefined, params: { placa: string | null; nomeFallback: string }) {
+  if (!gpswoxDeviceId) return; // veículo sem dispositivo no GPSWOX — nada a atualizar
+  try {
+    const nome = params.placa || params.nomeFallback;
+    await editGpswoxDevice(eid, gpswoxDeviceId, { name: nome, plateNumber: params.placa || undefined });
+    console.log(`[frota] nome/placa do dispositivo GPSWOX atualizado — device_id=${gpswoxDeviceId} nome=${nome}`);
+  } catch (e: any) {
+    console.warn(`[frota] não foi possível atualizar nome/placa do dispositivo no GPSWOX (${e.message}) — edição local aplicada normalmente.`);
+  }
+}
+
 router.post('/frota', async (req, res) => {
   try {
     const eid = estabId(req);
@@ -1239,10 +1259,11 @@ router.put('/frota/:id', async (req, res) => {
 
     // Só tenta criar no GPSWOX se ainda não tinha device vinculado e agora
     // tem IMEI — evita recriar (ou duplicar) dispositivo em toda edição.
-    const atual = await pool.query(`SELECT gpswox_device_id, cliente_id FROM agenda_frota WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
+    const atual = await pool.query(`SELECT gpswox_device_id, cliente_id, placa FROM agenda_frota WHERE id=$1 AND establishment_id=$2`, [req.params.id, eid]);
     let gpswoxDeviceId: string | null = atual.rows[0]?.gpswox_device_id || null;
     const deviceJaExistia = !!gpswoxDeviceId;
     const clienteIdAntes = atual.rows[0]?.cliente_id || null;
+    const placaAntes = atual.rows[0]?.placa || null;
     if (!gpswoxDeviceId && imei_rastreador) {
       gpswoxDeviceId = await tentarCriarDispositivoGpswox(eid, {
         imei: imei_rastreador, placa: placa || null, clienteId: cliente_id, nomeFallback: dados.nome || placa || 'Veículo',
@@ -1269,6 +1290,10 @@ router.put('/frota/:id', async (req, res) => {
     // vez do botão dedicado de "vincular".
     if (deviceJaExistia && String(clienteIdAntes || '') !== String(cliente_id || '')) {
       await tentarAtualizarDonoGpswox(eid, gpswoxDeviceId, cliente_id || null);
+    }
+    // Fix de produção 70 — mesma lógica, agora pra placa (nome do dispositivo no GPSWOX).
+    if (deviceJaExistia && String(placaAntes || '') !== String(placa || '')) {
+      await tentarAtualizarDadosGpswox(eid, gpswoxDeviceId, { placa: placa || null, nomeFallback: dados.nome || 'Veículo' });
     }
 
     res.json({ success: true, veiculo: r.rows[0], gpswox_sincronizado: !!gpswoxDeviceId });
