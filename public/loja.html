@@ -405,6 +405,7 @@
         <div class="flex items-center gap-2">
           <span id="gpswox-status-badge"></span>
           <button onclick="abrirSyncGpswox()" class="btn-outline text-sm"><i class="fa fa-satellite-dish mr-1"></i> Sincronizar com GPS</button>
+          <button onclick="abrirComandosMassa()" class="btn-outline text-sm"><i class="fa fa-comment-sms mr-1"></i> Comandos SMS</button>
           <button onclick="openModal('modal-frota')" class="btn-primary text-sm"><i class="fa fa-plus mr-1"></i> Novo Veículo</button>
         </div>
       </div>
@@ -421,6 +422,7 @@
         <table>
           <thead>
             <tr>
+              <th class="w-8"><input type="checkbox" id="frota-check-todos" class="w-4 h-4 accent-[var(--accent)]" onchange="toggleFrotaSelecionarTodos(this.checked)" title="Selecionar todos"></th>
               <th>Placa</th>
               <th>Cliente</th>
               <th>Modelo</th>
@@ -3182,6 +3184,53 @@
   </div>
 </div>
 
+<!-- Modal Comandos SMS em massa (Fix de produção 62) -->
+<div id="modal-frota-comandos" class="modal-overlay">
+  <div class="modal" style="max-width:640px;">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-bold"><i class="fa fa-comment-sms mr-1"></i> Comandos SMS</h3>
+      <button onclick="closeModal('modal-frota-comandos')" class="text-slate-600 dark:text-slate-400"><i class="fa fa-times"></i></button>
+    </div>
+    <p class="text-xs text-slate-500 dark:text-slate-500 mb-3">Manda um comando SMS direto pro chip do(s) rastreador(es) selecionado(s) na lista da frota — não depende da internet do rastreador (4G), funciona mesmo sem sinal de dados. Use <code>[ID]</code> no comando pra ele ser trocado automaticamente pelo IMEI de cada veículo na hora do envio.</p>
+
+    <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+      <span id="frota-comandos-selecionados-count" class="text-xs text-slate-600 dark:text-slate-400">0 veículo(s) selecionado(s)</span>
+      <div class="flex items-center gap-2">
+        <select id="frota-comandos-modelo-select" class="input w-auto text-xs"></select>
+        <button onclick="selecionarFrotaPorModelo()" class="btn-outline text-xs">Selecionar por modelo</button>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="text-xs text-slate-600 dark:text-slate-400 block mb-1">Comando SMS</label>
+      <textarea id="frota-comandos-texto" rows="2" class="input font-mono text-xs" placeholder="Ex: RELAY,1#  ou  algo com [ID]"></textarea>
+    </div>
+
+    <div class="flex gap-2 mb-3">
+      <button onclick="enviarComandoMassa()" class="btn-primary text-sm flex-1"><i class="fa fa-paper-plane mr-1"></i> Enviar pros selecionados</button>
+    </div>
+
+    <div id="frota-comandos-resultado" class="mb-4"></div>
+
+    <div class="border-t border-slate-200 dark:border-slate-800 pt-3">
+      <h4 class="font-bold text-sm mb-2">Biblioteca de comandos</h4>
+      <p class="text-[11px] text-slate-500 dark:text-slate-500 mb-2">Clique num comando salvo pra colocar ele no campo acima (revise antes de enviar). <i class="fa fa-globe"></i> = catálogo da plataforma. Os demais são seus (clique no <i class="fa fa-trash"></i> pra excluir).</p>
+      <div id="frota-comandos-lib" class="space-y-3 max-h-64 overflow-y-auto"></div>
+    </div>
+
+    <div class="border-t border-slate-200 dark:border-slate-800 pt-3 mt-3">
+      <h4 class="font-bold text-sm mb-2">Salvar novo comando pessoal</h4>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input type="text" id="frota-comando-novo-modelo" placeholder="Modelo (ex: J16)" class="input text-xs">
+        <input type="text" id="frota-comando-novo-categoria" placeholder="Categoria (ex: Bloqueio)" class="input text-xs">
+      </div>
+      <input type="text" id="frota-comando-novo-titulo" placeholder="Título do botão" class="input text-xs mb-2">
+      <textarea id="frota-comando-novo-comando" rows="2" placeholder="Comando SMS (pode usar [ID])" class="input font-mono text-xs mb-2"></textarea>
+      <button onclick="salvarComandoPessoal()" class="btn-outline text-xs w-full"><i class="fa fa-save mr-1"></i> Salvar comando</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Lead (funil de CRM do Rastreamento) -->
 <!-- Modal Cliente (Rastreamento) -->
 <div id="modal-cliente" class="modal-overlay">
@@ -3278,6 +3327,7 @@ let activeFeatures = [];
 let servicosCache = [];
 let profissionaisCache = [];
 let frotaCache = [];
+let frotaSelecionados = new Set(); // Fix de produção 62 — veículos marcados pra comando SMS em massa
 
 // Permite que o SuperAdmin acesse a loja passando ?est=ID_DO_LOJISTA
 const queryParams = new URLSearchParams(window.location.search);
@@ -7131,8 +7181,14 @@ function preencherClienteFrota() {
 }
 
 function renderFrota(rows) {
+  // Fix de produção 62 — mantém a seleção (checkboxes, usados pro envio de
+  // comando SMS em massa) entre re-renderizações da tabela, mas descarta
+  // ids que sumiram da lista atual (filtro/busca mudou).
+  const idsAtuais = new Set(rows.map(v => v.id));
+  frotaSelecionados = new Set([...frotaSelecionados].filter(id => idsAtuais.has(id)));
   document.getElementById('tabela-frota').innerHTML = rows.map(v => `
     <tr>
+      <td><input type="checkbox" class="w-4 h-4 accent-[var(--accent)] frota-check-linha" data-id="${v.id}" ${frotaSelecionados.has(v.id) ? 'checked' : ''} onchange="toggleFrotaSelecionado('${v.id}', this.checked)"></td>
       <td class="font-mono font-bold">${v.placa || '—'}</td>
       <td>
         <div>${v.cliente_nome || '—'}</div>
@@ -7154,7 +7210,7 @@ function renderFrota(rows) {
         <button onclick="editFrota(${JSON.stringify(v).replace(/"/g,'&quot;')})" title="Editar" class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs mr-2"><i class="fa fa-pencil"></i></button>
         <button onclick="excluirVeiculo('${v.id}')" title="Excluir" class="text-red-400 hover:text-red-300 text-xs"><i class="fa fa-trash"></i></button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="6" class="text-center text-slate-500 dark:text-slate-500 py-6">Nenhum veículo</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7" class="text-center text-slate-500 dark:text-slate-500 py-6">Nenhum veículo</td></tr>';
 }
 
 // Fix de produção 32 — a Frota deixou de emitir cobrança (o Carlos confirmou
@@ -7188,6 +7244,152 @@ async function comandoFrota(id, action) {
     alert(`✅ Comando "${r.label || action}" enviado com sucesso.\n${canalMsg}`);
   } catch (e) {
     alert('❌ Erro ao enviar comando: ' + e.message);
+  }
+}
+
+// ── Fix de produção 62 — comandos SMS em massa + biblioteca ────
+// Inspirado nas telas "Meus Comandos" / "Comandos em Massa" do CODESMS que
+// o Carlos já usa: biblioteca de comandos salvos (catálogo da plataforma +
+// pessoais do lojista), agrupados por modelo de rastreador, e envio do
+// mesmo comando SMS pra vários veículos selecionados de uma vez.
+let frotaComandosLibCache = [];
+
+function toggleFrotaSelecionado(id, checked) {
+  if (checked) frotaSelecionados.add(id); else frotaSelecionados.delete(id);
+  atualizarFrotaSelecionadosCount();
+}
+
+function toggleFrotaSelecionarTodos(checked) {
+  document.querySelectorAll('.frota-check-linha').forEach(cb => {
+    cb.checked = checked;
+    if (checked) frotaSelecionados.add(cb.dataset.id); else frotaSelecionados.delete(cb.dataset.id);
+  });
+  atualizarFrotaSelecionadosCount();
+}
+
+function atualizarFrotaSelecionadosCount() {
+  const el = document.getElementById('frota-comandos-selecionados-count');
+  if (el) el.textContent = `${frotaSelecionados.size} veículo(s) selecionado(s)`;
+}
+
+// Marca de uma vez todos os veículos cujo tracker_model bate com o modelo
+// escolhido — não desmarca os que já estavam selecionados de outro modelo.
+function selecionarFrotaPorModelo() {
+  const modelo = document.getElementById('frota-comandos-modelo-select').value;
+  if (!modelo) return;
+  frotaCache.filter(v => (v.tracker_model || '') === modelo).forEach(v => frotaSelecionados.add(v.id));
+  document.querySelectorAll('.frota-check-linha').forEach(cb => {
+    if (frotaSelecionados.has(cb.dataset.id)) cb.checked = true;
+  });
+  atualizarFrotaSelecionadosCount();
+}
+
+async function abrirComandosMassa() {
+  openModal('modal-frota-comandos');
+  atualizarFrotaSelecionadosCount();
+  const modelos = [...new Set(frotaCache.map(v => v.tracker_model).filter(Boolean))].sort();
+  const sel = document.getElementById('frota-comandos-modelo-select');
+  sel.innerHTML = '<option value="">— modelo —</option>' + modelos.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  document.getElementById('frota-comandos-resultado').innerHTML = '';
+  await loadFrotaComandosLib();
+}
+
+async function loadFrotaComandosLib() {
+  const box = document.getElementById('frota-comandos-lib');
+  box.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-500">Carregando...</p>';
+  try {
+    frotaComandosLibCache = await api('/agenda/frota-comandos');
+    renderFrotaComandosLib();
+  } catch (e) {
+    box.innerHTML = `<p class="text-xs text-red-400">${e.message}</p>`;
+  }
+}
+
+function renderFrotaComandosLib() {
+  const box = document.getElementById('frota-comandos-lib');
+  if (!frotaComandosLibCache.length) {
+    box.innerHTML = '<p class="text-xs text-slate-400 dark:text-slate-600 italic">Nenhum comando salvo ainda.</p>';
+    return;
+  }
+  // Agrupa por modelo → categoria, igual à tela "Meus Comandos" do CODESMS
+  const porModelo = {};
+  frotaComandosLibCache.forEach(c => {
+    const modelo = c.tracker_model || 'Geral';
+    const cat = c.categoria || 'Geral';
+    porModelo[modelo] = porModelo[modelo] || {};
+    porModelo[modelo][cat] = porModelo[modelo][cat] || [];
+    porModelo[modelo][cat].push(c);
+  });
+  box.innerHTML = Object.keys(porModelo).sort().map(modelo => `
+    <div>
+      <div class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">${esc(modelo)}</div>
+      ${Object.keys(porModelo[modelo]).sort().map(cat => `
+        <div class="mb-2">
+          <div class="text-[10px] text-slate-500 dark:text-slate-500 mb-1">${esc(cat)}</div>
+          <div class="flex flex-wrap gap-1.5">
+            ${porModelo[modelo][cat].map(c => `
+              <span title="${esc(c.comando)}" class="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" onclick="usarComandoSalvo('${esc(c.comando).replace(/'/g, "\\'")}')">
+                ${!c.establishment_id ? '<i class="fa fa-globe text-slate-400"></i>' : ''}<span>${esc(c.titulo)}</span>
+                ${c.establishment_id ? `<i class="fa fa-trash text-red-400 hover:text-red-300" onclick="event.stopPropagation(); excluirComandoPessoal('${c.id}')"></i>` : ''}
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function usarComandoSalvo(comando) {
+  document.getElementById('frota-comandos-texto').value = comando;
+}
+
+async function salvarComandoPessoal() {
+  const tracker_model = document.getElementById('frota-comando-novo-modelo').value.trim() || 'Geral';
+  const categoria = document.getElementById('frota-comando-novo-categoria').value.trim() || 'Geral';
+  const titulo = document.getElementById('frota-comando-novo-titulo').value.trim();
+  const comando = document.getElementById('frota-comando-novo-comando').value.trim();
+  if (!titulo || !comando) return alert('Preencha título e comando.');
+  try {
+    await api('/agenda/frota-comandos', { method: 'POST', body: { tracker_model, categoria, titulo, comando } });
+    document.getElementById('frota-comando-novo-modelo').value = '';
+    document.getElementById('frota-comando-novo-categoria').value = '';
+    document.getElementById('frota-comando-novo-titulo').value = '';
+    document.getElementById('frota-comando-novo-comando').value = '';
+    await loadFrotaComandosLib();
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function excluirComandoPessoal(id) {
+  if (!confirm('Excluir este comando salvo?')) return;
+  try {
+    await api(`/agenda/frota-comandos/${id}`, { method: 'DELETE' });
+    await loadFrotaComandosLib();
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function enviarComandoMassa() {
+  const comando = document.getElementById('frota-comandos-texto').value.trim();
+  if (!comando) return alert('Digite ou escolha um comando.');
+  if (!frotaSelecionados.size) return alert('Selecione ao menos um veículo na lista da frota (checkbox à esquerda de cada linha).');
+  if (!confirm(`Confirma enviar "${comando}" via SMS pra ${frotaSelecionados.size} veículo(s)?`)) return;
+  const box = document.getElementById('frota-comandos-resultado');
+  box.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-500"><i class="fa fa-spinner fa-spin mr-1"></i> Enviando...</p>';
+  try {
+    const r = await api('/agenda/frota/comandos/enviar-massa', { method: 'POST', body: { vehicle_ids: [...frotaSelecionados], comando } });
+    box.innerHTML = `
+      <div class="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-3">
+        <p class="text-xs font-bold mb-2">${r.sucesso}/${r.total} enviados com sucesso</p>
+        <div class="max-h-40 overflow-y-auto space-y-1">
+          ${r.detalhes.map(d => `
+            <div class="text-[11px] flex justify-between gap-2 ${d.status === 'sent' ? 'text-green-500' : 'text-red-400'}">
+              <span>${esc(d.placa || d.vehicle_id)}${d.cliente_nome ? ' — ' + esc(d.cliente_nome) : ''}</span>
+              <span>${d.status === 'sent' ? '✅ enviado' : '❌ ' + esc(d.error || 'falhou')}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  } catch (e) {
+    box.innerHTML = `<p class="text-xs text-red-400">${e.message}</p>`;
   }
 }
 
