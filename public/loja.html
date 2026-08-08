@@ -7333,23 +7333,32 @@ function renderFrotaComandosLib() {
     porModelo[modelo][cat] = porModelo[modelo][cat] || [];
     porModelo[modelo][cat].push(c);
   });
+  // Fix de produção 64 — grupo por modelo agora é um <details> recolhido
+  // por padrão (o Carlos pediu: com o catálogo de 94 comandos + os
+  // próprios, ficava tudo exposto de uma vez e difícil de achar o modelo
+  // certo). Categoria dentro do modelo continua sempre visível, só o nível
+  // de modelo recolhe/expande.
   box.innerHTML = Object.keys(porModelo).sort().map(modelo => `
-    <div>
-      <div class="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">${esc(modelo)}</div>
-      ${Object.keys(porModelo[modelo]).sort().map(cat => `
-        <div class="mb-2">
-          <div class="text-[10px] text-slate-500 dark:text-slate-500 mb-1">${esc(cat)}</div>
-          <div class="flex flex-wrap gap-1.5">
-            ${porModelo[modelo][cat].map(c => `
-              <span title="${esc(c.comando)}" class="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" onclick="usarComandoSalvo('${esc(c.comando).replace(/'/g, "\\'")}')">
-                ${!c.establishment_id ? '<i class="fa fa-globe text-slate-400"></i>' : ''}<span>${esc(c.titulo)}</span>
-                ${c.establishment_id ? `<i class="fa fa-trash text-red-400 hover:text-red-300" onclick="event.stopPropagation(); excluirComandoPessoal('${c.id}')"></i>` : ''}
-              </span>
-            `).join('')}
+    <details class="border border-slate-200 dark:border-slate-800 rounded-lg">
+      <summary class="text-xs font-bold text-slate-700 dark:text-slate-300 px-2 py-1.5 cursor-pointer select-none hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+        ${esc(modelo)} <span class="text-slate-400 dark:text-slate-600 font-normal">(${Object.values(porModelo[modelo]).reduce((n, arr) => n + arr.length, 0)})</span>
+      </summary>
+      <div class="px-2 pb-2 pt-1">
+        ${Object.keys(porModelo[modelo]).sort().map(cat => `
+          <div class="mb-2">
+            <div class="text-[10px] text-slate-500 dark:text-slate-500 mb-1">${esc(cat)}</div>
+            <div class="flex flex-wrap gap-1.5">
+              ${porModelo[modelo][cat].map(c => `
+                <span title="${esc(c.comando)}" class="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" onclick="usarComandoSalvo('${esc(c.comando).replace(/'/g, "\\'")}')">
+                  ${!c.establishment_id ? '<i class="fa fa-globe text-slate-400"></i>' : ''}<span>${esc(c.titulo)}</span>
+                  ${c.establishment_id ? `<i class="fa fa-trash text-red-400 hover:text-red-300" onclick="event.stopPropagation(); excluirComandoPessoal('${c.id}')"></i>` : ''}
+                </span>
+              `).join('')}
+            </div>
           </div>
-        </div>
-      `).join('')}
-    </div>
+        `).join('')}
+      </div>
+    </details>
   `).join('');
 }
 
