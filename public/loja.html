@@ -4738,6 +4738,12 @@ async function loadSmsProviders() {
   }
 }
 
+// Fix de produção 59 — botão de "ver senha" nos campos secretos do form de
+// gateway SMS. O Carlos pediu depois de suspeitar (com razão, pra
+// descartar de vez) que o valor digitado pudesse não ser o que ele
+// achava que era — sem isso, o campo password não deixa conferir
+// visualmente antes de salvar. Reaproveita `togglePwd(id, btn)`, que já
+// existe nesse mesmo arquivo (usado no campo de token da Evolution API).
 function renderSmsProviderFields(existingConfig) {
   const type = document.getElementById('sms-provider-type').value;
   const schema = _smsProviderSchema[type];
@@ -4747,9 +4753,18 @@ function renderSmsProviderFields(existingConfig) {
   box.innerHTML = (schema?.fields || []).map(f => `
     <div>
       <label class="text-xs text-slate-600 dark:text-slate-400 block mb-1">${f.label}${f.required ? ' *' : ''}</label>
-      <input id="sms-field-${f.key}" type="${f.secret ? 'password' : (f.type === 'url' ? 'text' : f.type)}" class="input"
-        placeholder="${f.placeholder || (f.secret ? 'Deixe em branco para manter o atual' : '')}"
-        value="${!f.secret && cfg[f.key] ? String(cfg[f.key]).replace(/"/g, '&quot;') : ''}" />
+      ${f.secret ? `
+      <div class="relative">
+        <input id="sms-field-${f.key}" type="password" class="input pr-9"
+          placeholder="${f.placeholder || 'Deixe em branco para manter o atual'}" />
+        <button type="button" tabindex="-1" onclick="togglePwd('sms-field-${f.key}', this)"
+          class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+          <i class="fa fa-eye"></i>
+        </button>
+      </div>` : `
+      <input id="sms-field-${f.key}" type="${f.type === 'url' ? 'text' : f.type}" class="input"
+        placeholder="${f.placeholder || ''}"
+        value="${cfg[f.key] ? String(cfg[f.key]).replace(/"/g, '&quot;') : ''}" />`}
     </div>`).join('');
 }
 

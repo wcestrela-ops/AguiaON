@@ -4046,6 +4046,10 @@ async function loadSmsProviders() {
   }
 }
 
+// Fix de produção 59 — botão de "ver senha" nos campos secretos do form de
+// gateway SMS, mesmo motivo/mesma mudança feita em loja.html: dá pra
+// conferir visualmente o que foi digitado antes de salvar, em vez de só
+// confiar num campo password.
 function renderSmsProviderFields(existingConfig) {
   const type = document.getElementById('sms-provider-type').value;
   const schema = _smsProviderSchema[type];
@@ -4055,11 +4059,30 @@ function renderSmsProviderFields(existingConfig) {
   box.innerHTML = (schema?.fields || []).map(f => `
     <div>
       <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">${f.label}${f.required ? ' *' : ''}</label>
-      <input id="sms-field-${f.key}" type="${f.secret ? 'password' : (f.type === 'url' ? 'text' : f.type)}"
-        placeholder="${f.placeholder || (f.secret ? 'Deixe em branco para manter o atual' : '')}"
-        value="${!f.secret && cfg[f.key] ? String(cfg[f.key]).replace(/"/g, '&quot;') : ''}"
-        style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem" />
+      ${f.secret ? `
+      <div style="position:relative">
+        <input id="sms-field-${f.key}" type="password"
+          placeholder="${f.placeholder || 'Deixe em branco para manter o atual'}"
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 36px 8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
+        <button type="button" tabindex="-1" onclick="toggleSmsFieldVisibility('${f.key}')"
+          style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px">
+          <i id="sms-field-${f.key}-eye" class="fa fa-eye" style="font-size:.8rem"></i>
+        </button>
+      </div>` : `
+      <input id="sms-field-${f.key}" type="${f.type === 'url' ? 'text' : f.type}"
+        placeholder="${f.placeholder || ''}"
+        value="${cfg[f.key] ? String(cfg[f.key]).replace(/"/g, '&quot;') : ''}"
+        style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />`}
     </div>`).join('');
+}
+
+function toggleSmsFieldVisibility(key) {
+  const input = document.getElementById(`sms-field-${key}`);
+  const icon = document.getElementById(`sms-field-${key}-eye`);
+  if (!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  if (icon) { icon.classList.toggle('fa-eye', showing); icon.classList.toggle('fa-eye-slash', !showing); }
 }
 
 async function openSmsProviderModal(provider) {
