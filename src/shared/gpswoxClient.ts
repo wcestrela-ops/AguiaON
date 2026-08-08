@@ -694,6 +694,17 @@ export interface SharingResult {
 // na API real; o certo é `active` (obrigatório), `name` (obrigatório),
 // `enable_expiration_date` (boolean) + `expiration_date` (string absoluta
 // "YYYY-MM-DD HH:mm:ss", calculada aqui a partir de `durationMinutes`).
+//
+// Fix de produção 68 — GPSWOX passou a exigir mais um campo nesse mesmo
+// endpoint: "The Delete after expiration field is required." O manual
+// oficial (gpswox.com/en/user-manual/tools-sharing) confirma que existe
+// mesmo uma opção "Delete after expiration" na UI, disponível quando um
+// prazo de expiração é definido — ela apaga o link da aba "Sharings" assim
+// que expira. Seguindo o mesmo padrão de nomenclatura das mensagens de erro
+// anteriores ("Expiration date" → `expiration_date`), o campo aqui é
+// `delete_after_expiration` (boolean), enviado como `true` — já que não faz
+// sentido manter links de compartilhamento temporário (1h) acumulando na
+// conta GPSWOX depois de expirados.
 /** Gera um link temporário de compartilhamento de localização (API "sharing" do GPSWOX). */
 export async function createSharing(estId: string, deviceId: string, durationMinutes: number): Promise<SharingResult> {
   const expiresAt = new Date(Date.now() + durationMinutes * 60_000);
@@ -708,6 +719,7 @@ export async function createSharing(estId: string, deviceId: string, durationMin
       name: `Compartilhamento ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       enable_expiration_date: true,
       expiration_date: expirationDate,
+      delete_after_expiration: true,
     },
   });
   // O `POST /api/sharing` da doc oficial devolve só `{ data: { hash, ... } }`
