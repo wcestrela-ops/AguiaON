@@ -428,6 +428,7 @@
               <th>Modelo</th>
               <th>Plano</th>
               <th>Status</th>
+              <th>Sincronização</th>
               <th></th>
             </tr>
           </thead>
@@ -3329,6 +3330,7 @@ let servicosCache = [];
 let profissionaisCache = [];
 let frotaCache = [];
 let frotaSelecionados = new Set(); // Fix de produção 62 — veículos marcados pra comando SMS em massa
+let frotaDeviceStatusCache = {}; // Fix de produção 67 — { [gpswox_device_id]: { online, ultima_atualizacao } }
 
 // Permite que o SuperAdmin acesse a loja passando ?est=ID_DO_LOJISTA
 const queryParams = new URLSearchParams(window.location.search);
@@ -7154,9 +7156,10 @@ async function loadFrota() {
     frotaCache.forEach(v => { v.plano_nome = v.plano_id ? (planoPorId[v.plano_id] || null) : null; });
     filterFrota(); // aplica o filtro de status atual (esconde 'inativo' por padrão — ver Fix 32)
     loadFrotaGpswoxStatus();
+    loadFrotaDeviceStatuses();
     populateFrotaClienteSelect();
   } catch (e) {
-    document.getElementById('tabela-frota').innerHTML = `<tr><td colspan="6" class="text-red-400 p-3">${e.message}</td></tr>`;
+    document.getElementById('tabela-frota').innerHTML = `<tr><td colspan="8" class="text-red-400 p-3">${e.message}</td></tr>`;
   }
 }
 
@@ -7198,6 +7201,7 @@ function renderFrota(rows) {
       <td>${v.modelo || '—'} ${v.ano ? `(${v.ano})` : ''}</td>
       <td>${v.plano_nome || '—'}</td>
       <td><span class="badge badge-${frotaStatusColor(v.status)}">${v.status}</span></td>
+      <td class="whitespace-nowrap text-xs">${renderFrotaSyncBadge(v)}</td>
       <td class="whitespace-nowrap">
         ${v.gpswox_device_id ? `
           <button onclick="verLocalizacaoFrota('${v.id}')" title="Ver localização" class="text-blue-400 hover:text-blue-300 text-xs mr-2"><i class="fa fa-map-marker-alt"></i></button>
@@ -7214,7 +7218,7 @@ function renderFrota(rows) {
         <button onclick="editFrota(${JSON.stringify(v).replace(/"/g,'&quot;')})" title="Editar" class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs mr-2"><i class="fa fa-pencil"></i></button>
         <button onclick="excluirVeiculo('${v.id}')" title="Excluir" class="text-red-400 hover:text-red-300 text-xs"><i class="fa fa-trash"></i></button>
       </td>
-    </tr>`).join('') || '<tr><td colspan="7" class="text-center text-slate-500 dark:text-slate-500 py-6">Nenhum veículo</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="8" class="text-center text-slate-500 dark:text-slate-500 py-6">Nenhum veículo</td></tr>';
 }
 
 // Fix de produção 32 — a Frota deixou de emitir cobrança (o Carlos confirmou
@@ -7489,6 +7493,43 @@ async function loadFrotaGpswoxStatus() {
     const urlInput = document.getElementById('gpswox-url');
     if (urlInput && cfg.url) urlInput.value = cfg.url;
   } catch (e) { /* silencioso — painel pode não ter sido carregado ainda */ }
+}
+
+// Fix de produção 67 — status online/offline + última sincronização de cada
+// veículo, carregado numa chamada só (GET /agenda/frota-gpswox-status) e
+// depois re-renderiza a tabela pra preencher a coluna "Sincronização" sem
+// travar o carregamento inicial (tabela já aparece, badges chegam depois).
+async function loadFrotaDeviceStatuses() {
+  try {
+    frotaDeviceStatusCache = await api('/agenda/frota-gpswox-status');
+    filterFrota();
+  } catch (e) { /* silencioso — coluna fica em branco se o GPSWOX falhar aqui */ }
+}
+
+function formatRelativoDesde(iso) {
+  if (!iso) return null;
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'agora mesmo';
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  return `há ${d}d`;
+}
+
+function renderFrotaSyncBadge(v) {
+  if (!v.gpswox_device_id) return '<span class="text-slate-400 dark:text-slate-600">—</span>';
+  const st = frotaDeviceStatusCache[String(v.gpswox_device_id)];
+  if (!st) return '<span class="text-slate-400 dark:text-slate-600">…</span>'; // ainda carregando ou não encontrado
+  const rel = formatRelativoDesde(st.ultima_atualizacao);
+  if (st.online === true) {
+    return `<span class="text-green-500"><i class="fa fa-circle text-[8px] mr-1"></i>Online</span>${rel ? `<div class="text-slate-500 dark:text-slate-500">${rel}</div>` : ''}`;
+  }
+  if (st.online === false) {
+    return `<span class="text-red-400"><i class="fa fa-circle text-[8px] mr-1"></i>Offline</span>${rel ? `<div class="text-slate-500 dark:text-slate-500">${rel}</div>` : ''}`;
+  }
+  return '<span class="text-slate-400 dark:text-slate-600">Sem dado</span>';
 }
 
 // ── Cercas eletrônicas (geofences) ──────────────────────────
@@ -7821,11 +7862,32 @@ async function verLocalizacaoFrota(id) {
   box.innerHTML = '<p class="text-sm text-slate-600 dark:text-slate-400">Consultando GPSWOX...</p>';
   try {
     const loc = await api(`/agenda/frota/${id}/localizacao`);
+    // Fix de produção 67 — mapinha embutido (OpenStreetMap, sem precisar de
+    // chave de API) + status online/offline e última comunicação com o
+    // GPSWOX, direto no modal de localização.
+    const temCoords = loc.latitude != null && loc.longitude != null;
+    const mapaHtml = temCoords ? `
+      <div class="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 mb-3" style="height:220px;">
+        <iframe
+          src="https://www.openstreetmap.org/export/embed.html?bbox=${loc.longitude - 0.01}%2C${loc.latitude - 0.01}%2C${loc.longitude + 0.01}%2C${loc.latitude + 0.01}&layer=mapnik&marker=${loc.latitude}%2C${loc.longitude}"
+          style="width:100%;height:100%;border:0;" loading="lazy"></iframe>
+      </div>` : '';
+    const statusHtml = loc.online === true
+      ? `<span class="text-green-500"><i class="fa fa-circle text-[8px] mr-1"></i>Online</span>`
+      : loc.online === false
+        ? `<span class="text-red-400"><i class="fa fa-circle text-[8px] mr-1"></i>Offline</span>`
+        : '<span class="text-slate-400 dark:text-slate-600">Status desconhecido</span>';
+    const ultimaAtualizacaoHtml = loc.ultima_atualizacao
+      ? `Última comunicação: ${new Date(loc.ultima_atualizacao).toLocaleString('pt-BR')} (${formatRelativoDesde(loc.ultima_atualizacao)})`
+      : 'Sem horário de última comunicação disponível';
     box.innerHTML = `
       <p class="text-sm mb-1"><strong>${loc.veiculo || 'Veículo'}</strong></p>
+      ${mapaHtml}
       <p class="text-xs text-slate-600 dark:text-slate-400 mb-1">${loc.endereco}</p>
-      <p class="text-xs text-slate-600 dark:text-slate-400 mb-3">Velocidade: ${loc.velocidade}</p>
-      ${loc.maps_link ? `<a href="${loc.maps_link}" target="_blank" class="btn-primary text-sm inline-block"><i class="fa fa-map mr-1"></i>Abrir no Google Maps</a>` : '<p class="text-xs text-red-400">Sem coordenadas disponíveis.</p>'}`;
+      <p class="text-xs text-slate-600 dark:text-slate-400 mb-1">Velocidade: ${loc.velocidade}</p>
+      <p class="text-xs mb-1">${statusHtml}</p>
+      <p class="text-xs text-slate-500 dark:text-slate-500 mb-3">${ultimaAtualizacaoHtml}</p>
+      ${loc.maps_link ? `<a href="${loc.maps_link}" target="_blank" class="btn-primary text-sm inline-block"><i class="fa fa-map mr-1"></i>Abrir no Google Maps</a>` : (!temCoords ? '<p class="text-xs text-red-400">Sem coordenadas disponíveis.</p>' : '')}`;
   } catch (e) {
     box.innerHTML = `<p class="text-sm text-red-400">${e.message}</p>`;
   }
