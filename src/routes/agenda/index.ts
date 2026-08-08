@@ -495,6 +495,31 @@ export async function ensureTables() {
   await pool.query(`ALTER TABLE establishments ADD COLUMN IF NOT EXISTS setup_done BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE establishments ADD COLUMN IF NOT EXISTS cor_primaria TEXT`);
   await pool.query(`ALTER TABLE establishments ADD COLUMN IF NOT EXISTS cor_destaque TEXT`);
+
+  // Fix de produção 62 — biblioteca de comandos SMS salvos por modelo de
+  // rastreador, inspirada na tela "Meus Comandos" do CODESMS (ferramenta de
+  // terceiro que o Carlos já usa). establishment_id NULL = catálogo
+  // compartilhado da plataforma (curado pelo SUPERADMIN, todo lojista já vê
+  // pronto); establishment_id preenchido = comando pessoal daquele lojista —
+  // mesmo padrão SHARED/OWN já usado em sms_providers (Fix de produção 56).
+  // `comando` pode conter o placeholder [ID], substituído pelo
+  // imei_rastreador do veículo na hora do envio (mesma ideia da tela "Meus
+  // Comandos com ID" do CODESMS).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS frota_sms_commands (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      establishment_id  UUID REFERENCES establishments(id) ON DELETE CASCADE,
+      tracker_model     TEXT NOT NULL DEFAULT 'Geral',
+      categoria         TEXT NOT NULL DEFAULT 'Geral',
+      titulo            TEXT NOT NULL,
+      comando           TEXT NOT NULL,
+      cor               TEXT,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_est ON frota_sms_commands(establishment_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_model ON frota_sms_commands(tracker_model)`);
+
   migrated = true;
 }
 
@@ -1671,6 +1696,161 @@ async function getVeiculoComDevice(eid: string, id: string) {
   if (!r.rows.length) return null;
   return r.rows[0];
 }
+
+// ─── Fix de produção 62 — biblioteca de comandos SMS + envio em massa ───
+// Ver comentário da migração de frota_sms_commands (ensureTables) pra
+// contexto completo do catálogo compartilhado vs. pessoal do lojista.
+
+// GET /agenda/frota-comandos
+//  - LOJISTA (ou SUPERADMIN com establishment_id): catálogo compartilhado + comandos próprios
+//  - SUPERADMIN sem establishment_id: só o catálogo compartilhado (tela de gestão do admin)
+router.get('/frota-comandos', async (req, res) => {
+  try {
+    const user = req.user as TokenPayload;
+    let eid: string | null;
+    if (user.role === 'SUPERADMIN') {
+      eid = (req.query.establishment_id as string) || null;
+    } else {
+      if (!user.establishmentId) return res.status(403).json({ error: 'Sem estabelecimento no token.' });
+      eid = user.establishmentId;
+    }
+    const { rows } = eid
+      ? await pool.query(
+          `SELECT * FROM frota_sms_commands WHERE establishment_id=$1 OR establishment_id IS NULL ORDER BY tracker_model, categoria, titulo`,
+          [eid]
+        )
+      : await pool.query(
+          `SELECT * FROM frota_sms_commands WHERE establishment_id IS NULL ORDER BY tracker_model, categoria, titulo`
+        );
+    res.json(rows);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /agenda/frota-comandos — body: { tracker_model, categoria, titulo, comando, cor, shared }
+// `shared: true` só tem efeito se quem chama for SUPERADMIN (cria no catálogo
+// compartilhado, establishment_id NULL); qualquer outro caso cria como
+// comando próprio do estabelecimento de quem chamou.
+router.post('/frota-comandos', async (req, res) => {
+  try {
+    const user = req.user as TokenPayload;
+    const { tracker_model, categoria, titulo, comando, cor, shared } = req.body || {};
+    if (!titulo || !comando) return res.status(400).json({ error: 'titulo e comando são obrigatórios.' });
+
+    let establishmentId: string | null;
+    if (user.role === 'SUPERADMIN' && shared === true) {
+      establishmentId = null;
+    } else {
+      establishmentId = estabId(req);
+      if (!establishmentId) return res.status(400).json({ error: 'establishment_id obrigatório.' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando, cor)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [establishmentId, tracker_model || 'Geral', categoria || 'Geral', titulo, comando, cor || null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Confere posse: comando compartilhado (establishment_id NULL) só pode ser
+// alterado por SUPERADMIN; comando próprio só pelo dono (establishment_id bate).
+async function assertFrotaComandoAccess(req: Request, id: string) {
+  const user = req.user as TokenPayload;
+  const r = await pool.query(`SELECT * FROM frota_sms_commands WHERE id=$1`, [id]);
+  if (!r.rows.length) throw { status: 404, message: 'Comando não encontrado.' };
+  const row = r.rows[0];
+  if (row.establishment_id === null) {
+    if (user.role !== 'SUPERADMIN') throw { status: 403, message: 'Só o SUPERADMIN pode alterar comandos do catálogo compartilhado.' };
+  } else {
+    const eid = user.role === 'SUPERADMIN'
+      ? ((req.body?.establishment_id as string) || (req.query.establishment_id as string) || '')
+      : user.establishmentId;
+    if (row.establishment_id !== eid) throw { status: 404, message: 'Comando não encontrado.' };
+  }
+  return row;
+}
+
+router.put('/frota-comandos/:id', async (req, res) => {
+  try {
+    await assertFrotaComandoAccess(req, req.params.id);
+    const { tracker_model, categoria, titulo, comando, cor } = req.body || {};
+    const { rows } = await pool.query(
+      `UPDATE frota_sms_commands SET
+         tracker_model=COALESCE($1,tracker_model), categoria=COALESCE($2,categoria),
+         titulo=COALESCE($3,titulo), comando=COALESCE($4,comando), cor=COALESCE($5,cor),
+         updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [tracker_model, categoria, titulo, comando, cor, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err: any) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+router.delete('/frota-comandos/:id', async (req, res) => {
+  try {
+    await assertFrotaComandoAccess(req, req.params.id);
+    await pool.query(`DELETE FROM frota_sms_commands WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err: any) { res.status(err.status || 500).json({ error: err.message }); }
+});
+
+// POST /agenda/frota/comandos/enviar-massa — body: { vehicle_ids: string[], comando: string }
+// Manda um comando SMS bruto (pode conter [ID], trocado pelo imei_rastreador
+// de cada veículo) direto pro telefone do chip (tracker_phone) de vários
+// veículos de uma vez — equivalente ao "Comandos em Massa" do CODESMS.
+// Vai só por SMS (não tenta 4G/GPSWOX) — é justamente o caso de uso de mandar
+// rápido pra muitos de uma vez, sem esperar resposta de catálogo por device.
+router.post('/frota/comandos/enviar-massa', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const { vehicle_ids, comando } = req.body || {};
+    if (!Array.isArray(vehicle_ids) || vehicle_ids.length === 0) {
+      return res.status(400).json({ error: 'vehicle_ids deve ser uma lista não vazia.' });
+    }
+    if (!comando || typeof comando !== 'string') {
+      return res.status(400).json({ error: 'comando é obrigatório.' });
+    }
+
+    const { rows: veiculos } = await pool.query(
+      `SELECT id, placa, cliente_nome, tracker_phone, imei_rastreador FROM agenda_frota
+       WHERE establishment_id=$1 AND id = ANY($2::uuid[])`,
+      [eid, vehicle_ids]
+    );
+
+    const detalhes: Array<{ vehicle_id: string; placa?: string | null; cliente_nome?: string | null; status: string; error: string | null }> = [];
+    for (const veh of veiculos) {
+      const comandoFinal = comando.replace(/\[ID\]/g, veh.imei_rastreador || '');
+      let status = 'sent';
+      let errorMessage: string | null = null;
+      if (!veh.tracker_phone) {
+        status = 'failed';
+        errorMessage = 'Veículo sem telefone do chip cadastrado.';
+      } else {
+        try {
+          await sendSms(veh.tracker_phone, comandoFinal, { establishmentId: eid, action: 'frota.comando.massa' });
+        } catch (smsErr: any) {
+          status = 'failed';
+          errorMessage = smsErr.message;
+        }
+      }
+      await pool.query(
+        `INSERT INTO agenda_frota_commands (agenda_frota_id, establishment_id, action, status, error_message, channel, failover)
+         VALUES ($1,$2,'massa',$3,$4,'sms',false)`,
+        [veh.id, eid, status, errorMessage]
+      );
+      detalhes.push({ vehicle_id: veh.id, placa: veh.placa, cliente_nome: veh.cliente_nome, status, error: errorMessage });
+    }
+
+    const encontrados = new Set(veiculos.map((v: any) => v.id));
+    for (const vid of vehicle_ids) {
+      if (!encontrados.has(vid)) detalhes.push({ vehicle_id: vid, status: 'failed', error: 'Veículo não encontrado.' });
+    }
+
+    const sucesso = detalhes.filter(d => d.status === 'sent').length;
+    res.json({ total: detalhes.length, sucesso, falha: detalhes.length - sucesso, detalhes });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 // Mapa de comandos: tipo GPSWOX (4G, usado só como PALPITE de reserva —
 // ver Fix de produção 54) + palavras-chave pra achar o comando de verdade
