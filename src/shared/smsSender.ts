@@ -97,12 +97,17 @@ export const PROVIDER_TYPES: Record<SmsProviderType, { label: string; descriptio
   //   2. "Direto" — URL local do celular (ex.: http://192.168.0.10:8082) +
   //      API key mostrada no app; só funciona se o servidor alcançar essa
   //      URL (mesma rede, VPN, porta liberada etc.).
+  // Fix de produção 61 — Carlos configurou modo "Direto" com IP de rede local
+  // (192.168.x.x); o servidor da AguiaON roda na nuvem (EasyPanel) e não tem
+  // rota até essa rede, então toda tentativa falhava com erro de rede
+  // ("fetch failed"). Texto de ajuda do formulário (abaixo) reforçado para
+  // guiar direto pro modo "Cloud", que é o único viável nesse tipo de deploy.
   traccar_sms: {
     label: 'Traccar SMS Gateway (app Android)',
-    description: 'App gratuito da Traccar que transforma um celular com chip em gateway de SMS (traccar.org/sms-gateway). Use a URL e o token/API key exatamente como o app mostra — modo "Cloud" (URL fixa da Traccar) ou "Direto" (URL local do celular), tanto faz.',
+    description: 'App gratuito da Traccar que transforma um celular com chip em gateway de SMS (traccar.org/sms-gateway). Use o modo "Cloud" do app: URL fixa https://www.traccar.org/sms/ e o Token mostrado em "Cloud Service". NÃO use o modo "Direto" (URL local tipo 192.168.x.x) — esse IP é da sua rede de casa e o servidor da AguiaON (na nuvem) não consegue alcançá-lo, então o envio sempre falha.',
     fields: [
-      { key: 'base_url', label: 'URL (Cloud ou Direta, conforme o app)', type: 'url', required: true, placeholder: 'https://www.traccar.org/sms/' },
-      { key: 'api_key', label: 'Token / API key (mostrado no app)', type: 'password', secret: true, required: true },
+      { key: 'base_url', label: 'URL (use a do modo "Cloud": https://www.traccar.org/sms/)', type: 'url', required: true, placeholder: 'https://www.traccar.org/sms/' },
+      { key: 'api_key', label: 'Token (seção "Cloud Service" do app — não a API key do "Local Service")', type: 'password', secret: true, required: true },
     ],
   },
 };
