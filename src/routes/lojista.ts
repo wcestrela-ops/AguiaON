@@ -74,6 +74,11 @@ router.post('/agata/sync', requireAuth, requireRole('LOJISTA', 'SUPERADMIN', 'ST
     await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS msg_ready_pickup TEXT`);
     await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS msg_delivered TEXT`);
     await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS msg_cancelled TEXT`);
+    // Mesma classe de bug (coluna referenciada em src/shared/orderTimeout.ts sem migração
+    // versionada aqui) — já ocorreu com order_number, daily_code e timeout_notified_at
+    // em delivery.ts; agora aparece para pending_timeout_minutes/timeout_action.
+    await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS pending_timeout_minutes INTEGER DEFAULT 30`);
+    await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS timeout_action TEXT DEFAULT 'notify'`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_whatsapp_configs_instance ON whatsapp_configs(instance_name)`);
 
     // mp_* (OAuth do Mercado Pago por loja) — mesma classe de bug de novo:
