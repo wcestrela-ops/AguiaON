@@ -519,8 +519,141 @@ export async function ensureTables() {
     )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_est ON frota_sms_commands(establishment_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_model ON frota_sms_commands(tracker_model)`);
+  // Índice único parcial (só entre os compartilhados) pra dar suporte ao
+  // ON CONFLICT DO NOTHING do seed abaixo — roda toda vez que o processo
+  // sobe, então sem isso duplicaria as linhas a cada restart.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_frota_sms_commands_shared_unico
+      ON frota_sms_commands(tracker_model, titulo) WHERE establishment_id IS NULL
+  `);
+  await seedFrotaSmsCommandsCatalogo();
 
   migrated = true;
+}
+
+// Fix de produção 62.1 — catálogo compartilhado inicial, mandado pelo Carlos
+// (lista de comandos que ele já usa e valida no CODESMS, por modelo de
+// rastreador). ON CONFLICT DO NOTHING: roda a cada boot mas só insere na
+// primeira vez — depois disso o SUPERADMIN pode editar/excluir livremente
+// pelo painel (public/admin.html) sem o seed sobrescrever a edição.
+// Comando '' (vazio) em 4 linhas do grupo J16/J14/EC33/GT06 é proposital —
+// o Carlos pediu pra deixar em branco porque o mesmo comando SMS aparecia
+// repetido em duas funções diferentes na lista original (BATERIA EXT /
+// HODÔMETRO EM KM ambos SZCS#GT06IEXVOL=2; "Bloqueio imediato - Qualquer
+// velocidade" / "ATIVAR HODÔMETRO" ambos SZCS#SOURCE_OFF_TYPE=1) e ele
+// prefere conferir a fonte antes de preencher o valor certo de cada um.
+async function seedFrotaSmsCommandsCatalogo(): Promise<void> {
+  const seed: Array<[string, string, string, string]> = [
+    // ── BWS3G ──
+    ['BWS3G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF'],
+    ['BWS3G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON'],
+    ['BWS3G', 'BLOQUEIO', 'LED OFF', 'LEDOFF'],
+    ['BWS3G', 'BLOQUEIO', 'LED ON', 'LEDON'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON'],
+    ['BWS3G', 'GERAIS', 'FACTORY', 'RST'],
+    ['BWS3G', 'GERAIS', 'REG', 'REG000000#'],
+    ['BWS3G', 'GERAIS', 'RESTART', 'RESTART'],
+    ['BWS3G', 'GERAIS', 'TIMEZONE', 'TZW0'],
+    ['BWS3G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05'],
+    // ── BWS4G ──
+    ['BWS4G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF'],
+    ['BWS4G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON'],
+    ['BWS4G', 'BLOQUEIO', 'LED OFF', 'LEDOFF'],
+    ['BWS4G', 'BLOQUEIO', 'LED ON', 'LEDON'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON'],
+    ['BWS4G', 'GERAIS', 'FACTORY', 'RST'],
+    ['BWS4G', 'GERAIS', 'REG', 'REG000000#'],
+    ['BWS4G', 'GERAIS', 'RESTART', 'RESTART'],
+    ['BWS4G', 'GERAIS', 'TIMEZONE', 'TZW0'],
+    ['BWS4G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05'],
+    // ── COBAN ──
+    ['COBAN', 'BLOQUEIO', 'BLOQUEAR', 'stop123456'],
+    ['COBAN', 'BLOQUEIO', 'BLOQUEIO RÁPIDO', 'quickstop123456'],
+    ['COBAN', 'BLOQUEIO', 'DESBLOQUEAR', 'resume123456'],
+    ['COBAN', 'BLOQUEIO', 'DESBLOQUEIO RÁPIDO', 'noquickstop123456'],
+    ['COBAN', 'CONEXÃO', 'GPRS ON', 'gprs123456'],
+    ['COBAN', 'CONEXÃO', 'PROTOCOLO TCP', 'gprs123456,0,0'],
+    ['COBAN', 'CONEXÃO', 'PROTOCOLO UDP', 'gprs123456,1,1'],
+    ['COBAN', 'GERAIS', 'BEGIN', 'begin123456'],
+    ['COBAN', 'GERAIS', 'CLEAN', 'clear123456'],
+    ['COBAN', 'GERAIS', 'RESET', 'reset123456'],
+    ['COBAN', 'GERAIS', 'TIMEZONE', 'time zone123456 0'],
+    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456'],
+    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456'],
+    // ── GV (Queclink GV50) ──
+    ['GV', 'BLOQUEIO', 'BLOQUEAR', 'AT+GTOUT=gv50,1,0,0,0,0,0,,,,3,,,,,,,FFFF$'],
+    ['GV', 'BLOQUEIO', 'DESBLOQUEAR', 'AT+GTOUT=gv50,0,0,0,0,0,0,,,,3,,,,,,,FFFF$'],
+    ['GV', 'GERAIS', 'CLEAN', 'AT+GTRTO=gv50,D,,3,,,,FFFF$'],
+    ['GV', 'GERAIS', 'FACTORY', 'AT+GTRTO=gv50m,04,,0,,,,FFFF$'],
+    ['GV', 'GERAIS', 'RESET', 'AT+GTRTO=gv50,3,,3,,,,FFFF$'],
+    ['GV', 'GERAIS', 'TIMEZONE', 'AT+GTTMA=gv50,+,0,0,0,,,,,,FFFF$'],
+    ['GV', 'MODO DE TRABALHO', 'DEEP SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,1,,,,,,,,,,,,,,FFFF$'],
+    ['GV', 'MODO DE TRABALHO', 'LOW SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,2,,,,,,,,,,,,,,FFFF$'],
+    ['GV', 'MODO DE TRABALHO', 'SLEEP OFF', 'AT+GTCFG=gv50,gv50,gv50,,,,,,0,,,,,,,,,,,,,,FFFF$'],
+    // ── J16/J14/EC33/GT06 ──
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 15-30', 'SZCS#ANGLEVALUE=15-30'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 35-2', 'SZCS#ANGLEVALUE=35-002'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-15', 'SZCS#ANGLEVALUE=08-015'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-30', 'SZCS#ANGLEVALUE=08-030'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BATERIA EXT', ''],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BLOQUEAR', 'RELAY,1#'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Bloqueio imediato - Qualquer velocidade', ''],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Desativar Bloqueio imediato', 'SZCS#SOURCE_OFF_TYPE=0'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'DESBLOQUEAR', 'RELAY,0#'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED DESLIGADO', 'SZCS#LED_ENABLE=0'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED LIGADO', 'SZCS#LED_ENABLE=1'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALARM VIBR.', 'SENALM,ON,0#'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALERTA IGN', 'ACCALM,ON,0#'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS OFF PARADO', 'SZCS#GPS_DISSLP=0'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS ON PARADO', 'SZCS#GPS_DISSLP=1'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN FÍSICA', 'SZCS#ACCLINE=1'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN VIRTUAL', 'SZCS#ACCLINE=0'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'FACTORY', 'FACTORY#'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'FORMAT', 'FORMAT#'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'HORA CERTA', 'GMT,W,0,0#'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'LOCK IP', 'SETIPLOCK=1'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'RESET', 'RESET#'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'UNLOCK IP', 'SETIPLOCK=0'],
+    ['J16/J14/EC33/GT06', 'GPS', 'GPS ATIVO', 'SENDS,0#'],
+    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 180SEG', 'SZCS#GPS_RST_TIME=180'],
+    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 300SEG', 'SZCS#GPS_RST_TIME=300'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'ATIVAR HODÔMETRO', ''],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'HODÔMETRO EM KM', ''],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'INICIAR HODÔMETRO', 'MILEAGE,ON#'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP OFF', 'SZCS#BLIND_EN=0'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP ON', 'SZCS#BLIND_EN=1'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'REDE AUTO', 'signal,0#'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 2G', 'signal,2#'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 4G', 'signal,1#'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SEM SLEEP', 'SZCS#SLPDISCONNECT=0'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP 100%', 'SZCS#SLPDISCONNECT=2'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP C/SMS', 'SZCS#SLPDISCONNECT=1'],
+    // ── T905 ──
+    ['T905', 'ALARMES', 'ALARME OFF', 'noshock123456'],
+    ['T905', 'ALARMES', 'ALARME ON', 'shock123456'],
+    ['T905', 'ALARMES', 'ALERTA BATERIA OFF', 'lowbatsms123456 off'],
+    ['T905', 'ALARMES', 'ALERTA BATERIA ON', 'lowbatsms123456 on'],
+    ['T905', 'GERAIS', 'BEGIN', 'begin123456'],
+    ['T905', 'GERAIS', 'RESET', 'reset123456'],
+    ['T905', 'GERAIS', 'TIMEZONE', 'time zone123456 0'],
+    ['T905', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456'],
+    ['T905', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456'],
+  ];
+
+  for (const [tracker_model, categoria, titulo, comando] of seed) {
+    await pool.query(
+      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando)
+       VALUES (NULL, $1, $2, $3, $4)
+       ON CONFLICT (tracker_model, titulo) WHERE establishment_id IS NULL DO NOTHING`,
+      [tracker_model, categoria, titulo, comando]
+    );
+  }
 }
 
 // Middleware de auto-migração
