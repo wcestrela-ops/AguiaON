@@ -1348,3 +1348,20 @@ Ainda dentro do mesmo fio do SMSMarket (Fix 55/56/57 nesta mesma seção), depoi
 - Em ambos os arquivos, o campo de segredo continua começando em branco ao editar um provedor já existente (nunca pré-preenchido com o valor mascarado "****" vindo do backend) — esse comportamento de segurança já existente foi mantido sem alteração (evita que o placeholder mascarado seja salvo de volta como se fosse o segredo real).
 
 **Verificação**: `tsc` não se aplica a `.html`. Os dois arquivos foram verificados com um script Node que extrai e faz parse (`new Function()`) de cada bloco `<script>` inline — todos passaram sem erro de sintaxe em ambos os arquivos.
+
+## Fix de produção 60 — `column wc.pending_timeout_minutes does not exist` no job de timeout de pedidos
+
+O Carlos colou mais um trecho de log de produção mostrando o mesmo padrão de erro de sempre, repetindo a cada 60 segundos: `[orderTimeout] runCheck error: column wc.pending_timeout_minutes does not exist`.
+
+**Causa raiz**: exatamente a mesma classe de bug dos Fix 28 (coluna `order_number`), Fix 33 (coluna `daily_code`) e Fix 58 (coluna `timeout_notified_at`) — uma coluna referenciada em código que nunca teve migração versionada. Dessa vez em `src/shared/orderTimeout.ts`, na query SQL principal do job (por volta da linha 37-38): `COALESCE(wc.pending_timeout_minutes, 30) AS timeout_minutes` e `COALESCE(wc.timeout_action, 'notify') AS timeout_action`, vindas de um `LEFT JOIN whatsapp_configs wc ON wc.establishment_id = o.establishment_id`. Esse job roda a cada 60 segundos pra TODOS os estabelecimentos, independente de delivery/WhatsApp estarem configurados ou não, por isso vinha falhando repetidamente no log de produção.
+
+**Implementação**: duas linhas `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` adicionadas na IIFE de migração idempotente já existente da tabela `whatsapp_configs`, em `src/routes/lojista.ts`, logo depois da migração da coluna `msg_cancelled` (por volta da linha 76):
+
+```ts
+await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS pending_timeout_minutes INTEGER DEFAULT 30`);
+await pool.query(`ALTER TABLE whatsapp_configs ADD COLUMN IF NOT EXISTS timeout_action TEXT DEFAULT 'notify'`);
+```
+
+**Verificação**: `npx tsc --noEmit -p .` limpo (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação). Commit `ef30dbb`.
+
+Essa já é a 4ª ocorrência do mesmo padrão — "coluna referenciada por um job de fundo mas nunca migrada" (`order_number`, `daily_code`, `timeout_notified_at`, agora `pending_timeout_minutes`/`timeout_action`). Uma correção mais sistemática (auditar todas as colunas referenciadas em `orderTimeout.ts`, e em outros jobs de fundo transversais parecidos, contra os arquivos de migração) provavelmente evitaria uma 5ª ocorrência — mas isso fica fora do escopo deste fix.
