@@ -726,9 +726,23 @@ export async function createSharing(estId: string, deviceId: string, durationMin
   // — sem `url`/`link` pronto. Mantém os fallbacks antigos por segurança
   // (versões diferentes do GPSWOX podem variar), mas o caminho documentado é
   // `data.hash`.
+  //
+  // Fix de produção 69 — o Carlos confirmou no painel dele o formato real do
+  // link público: `{url_base_do_gpswox}/sharing/{hash}` (ex.:
+  // `https://gps.ag-on.com/sharing/b78a342e...`). Antes disso, sem um
+  // `url`/`link` pronto na resposta da API, o código só devolvia
+  // `hash=... (confirme o formato...)`, que não é um link clicável. Agora,
+  // quando só o hash vem na resposta, o link é montado direto usando a mesma
+  // `cfg.url` (a URL base do GPSWOX já configurada em Integrações → GPSWOX
+  // para essa empresa) — dispensa qualquer fallback manual.
   const directLink = raw?.url || raw?.link || raw?.data?.url || raw?.data?.link || null;
   const hash = raw?.data?.hash || raw?.hash || raw?.items?.hash || null;
-  return { link: directLink || (hash ? `hash=${hash} (confirme o formato do link com o painel GPSWOX)` : null), raw };
+  let link = directLink;
+  if (!link && hash) {
+    const cfg = await getGpswoxConfig(estId);
+    link = cfg.url ? `${cfg.url}/sharing/${hash}` : `hash=${hash} (confirme o formato do link com o painel GPSWOX)`;
+  }
+  return { link, raw };
 }
 
 export interface Geofence {
