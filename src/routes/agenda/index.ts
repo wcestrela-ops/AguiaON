@@ -30,6 +30,7 @@ import {
   extractDeviceImei,
   extractDeviceSimNumber,
   extractDeviceGpswoxUserId,
+  listDeviceStatuses,
 } from '../../shared/gpswoxClient';
 // generateFrotaPix: só era usado por POST /frota/:id/cobrar, desativada no
 // Fix de produção 32 (cobrança por veículo foi removida) — import mantido
@@ -1132,6 +1133,18 @@ router.get('/frota', async (req, res) => {
     if (status) { q += ` AND status=$${p.length+1}`; p.push(status); }
     q += ` ORDER BY cliente_nome, placa`;
     res.json((await pool.query(q, p)).rows);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /agenda/frota-gpswox-status — Fix de produção 67: status
+// online/offline + última sincronização de TODOS os veículos com
+// dispositivo GPSWOX vinculado, numa chamada só (evita 1 request por linha
+// da tabela). Chave do retorno = gpswox_device_id.
+router.get('/frota-gpswox-status', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const statuses = await listDeviceStatuses(eid);
+    res.json(statuses);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

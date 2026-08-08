@@ -44,6 +44,9 @@ export interface DeviceLocation {
   maps_link: string | null;
   fonte: string;
   capturado_em: string;
+  // Fix de produção 67
+  ultima_atualizacao: string | null;
+  online: boolean | null;
 }
 
 // ─── Migração idempotente (mesmo padrão do smsSender.ts) ────────
@@ -260,6 +263,34 @@ export function extractDeviceSimNumber(device: any): string | null {
   return raw ? String(raw).replace(/\D/g, '') || null : null;
 }
 
+// Fix de produção 67 — Carlos pediu pra mostrar, no painel de Frota e no
+// modal de localização, a última vez que o dispositivo se comunicou com o
+// GPSWOX e se está online/offline. A doc oficial do get_devices não tem uma
+// página confirmada com o schema exato desse campo (tentei achar de novo,
+// o workspace do Stoplight que usamos nas fixes anteriores está retornando
+// "Project not found" agora) — então, mesmo padrão de tentativa multi-campo
+// já usado em extractDeviceImei/extractDeviceSimNumber acima: tenta os
+// nomes mais prováveis (baseado em como outras plataformas de rastreamento
+// costumam nomear isso) e cai pra null se nenhum bater. O log em
+// listDevices() já mostra as chaves de nível superior do dispositivo — se
+// isso vier errado, o próximo log de produção mostra o nome certo do campo
+// pra corrigir (mesmo processo que resolveu imei/sim_number nos Fix 46-48).
+export function extractDeviceLastUpdate(device: any): Date | null {
+  const raw =
+    device?.time ?? device?.gps_time ?? device?.server_time ?? device?.loc_valid_from ??
+    device?.last_valid_gps_time ?? device?.device_data?.time ?? device?.updated_at ?? null;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Online = teve posição reportada nos últimos 15 minutos (limiar comum em plataformas de rastreamento; sem campo explícito "online" confirmado na doc). */
+const ONLINE_THRESHOLD_MINUTES = 15;
+export function isDeviceOnline(lastUpdate: Date | null): boolean | null {
+  if (!lastUpdate) return null;
+  return (Date.now() - lastUpdate.getTime()) <= ONLINE_THRESHOLD_MINUTES * 60 * 1000;
+}
+
 // Fix de produção 53 — o campo real, confirmado contra a resposta de exemplo
 // da doc oficial (get_devices_latest), é `device_data.pivot.user_id` — um
 // nível mais fundo do que o Fix 46 tinha assumido (`device_data.user_id`
@@ -435,6 +466,8 @@ export async function getDeviceLocation(estId: string, deviceId: string): Promis
     endereco = resolved?.endereco || null;
   }
 
+  const lastUpdate = extractDeviceLastUpdate(device);
+
   return {
     success: true,
     device_id: device.id,
@@ -447,7 +480,26 @@ export async function getDeviceLocation(estId: string, deviceId: string): Promis
     maps_link: Number.isFinite(lat) && Number.isFinite(lng) ? `https://maps.google.com/?q=${lat},${lng}` : null,
     fonte: 'api_oficial',
     capturado_em: new Date().toISOString(),
+    ultima_atualizacao: lastUpdate ? lastUpdate.toISOString() : null,
+    online: isDeviceOnline(lastUpdate),
   };
+}
+
+// Fix de produção 67 — versão em lote de extractDeviceLastUpdate/isDeviceOnline
+// pra alimentar a tabela de Frota inteira com 1 chamada só ao GPSWOX (em vez
+// de 1 chamada de localização por veículo). Chave = device.id (string), pra
+// bater com agenda_frota.gpswox_device_id.
+export async function listDeviceStatuses(estId: string): Promise<Record<string, { online: boolean | null; ultima_atualizacao: string | null }>> {
+  const devices = await listDevices(estId);
+  const out: Record<string, { online: boolean | null; ultima_atualizacao: string | null }> = {};
+  for (const device of devices) {
+    const lastUpdate = extractDeviceLastUpdate(device);
+    out[String(device.id)] = {
+      online: isDeviceOnline(lastUpdate),
+      ultima_atualizacao: lastUpdate ? lastUpdate.toISOString() : null,
+    };
+  }
+  return out;
 }
 
 // ─── Fase 8 — comandos, histórico, compartilhamento, cercas ────
