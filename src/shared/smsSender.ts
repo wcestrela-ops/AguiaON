@@ -185,6 +185,15 @@ export function normalizePhone(phone: string): string | null {
   return digits || null;
 }
 
+// Fix de produção 57.3 — mostra só tamanho + primeiro/último caractere,
+// nunca o valor inteiro, pra dar pra conferir nos logs do servidor se a
+// credencial realmente usada bate com o que foi digitado, sem expor senha.
+function maskCredential(value: string): string {
+  if (!value) return '(vazio)';
+  if (value.length <= 2) return `${value[0]}* (len=${value.length})`;
+  return `${value[0]}***${value[value.length - 1]} (len=${value.length})`;
+}
+
 function applyGatewayTemplate(template: string, phone: string, message: string): string {
   return template
     .replace(/%NUMBER%/g, encodeURIComponent(phone))
@@ -258,7 +267,15 @@ async function dispatchByProvider(row: SmsProviderRow, phone: string, message: s
       const localNumber = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
       // Fix de produção 57.2 — trim() pra não deixar espaço/quebra de linha
       // colado por engano virar "usuário/senha inválido" falso.
-      const auth = Buffer.from(`${String(cfg.sender_id).trim()}:${String(cfg.api_key).trim()}`).toString('base64');
+      const user = String(cfg.sender_id).trim();
+      const pass = String(cfg.api_key).trim();
+      const auth = Buffer.from(`${user}:${pass}`).toString('base64');
+      // Fix de produção 57.3 — o Carlos continuou recebendo "User or
+      // password is invalid" mesmo com IP liberado e sem espaço em branco.
+      // Loga (só no console do servidor, nunca na resposta HTTP) um
+      // resumo NÃO sensível do que está sendo mandado de verdade — pra dar
+      // pra conferir contra o que foi digitado, sem expor a senha.
+      console.log(`[sms/smsmarket] enviando com usuário=${maskCredential(user)} senha=${maskCredential(pass)}`);
       const params = new URLSearchParams({
         type: '0',
         country_code: '55',
@@ -272,6 +289,7 @@ async function dispatchByProvider(row: SmsProviderRow, phone: string, message: s
       });
       const body: any = await res.json().catch(() => null);
       if (!res.ok || !body?.success) {
+        console.log(`[sms/smsmarket] falhou: HTTP ${res.status} responseCode=${body?.responseCode} responseDescription=${body?.responseDescription}`);
         return { ok: false, error: body?.responseDescription || `HTTP ${res.status}` };
       }
       return { ok: true, external_id: body.id || null };
@@ -479,12 +497,18 @@ export async function testProviderConnection(id: string) {
       // Fix de produção 57.2 — copiar/colar credenciais frequentemente traz
       // espaço ou quebra de linha escondida no fim; `trim()` evita um
       // "usuário/senha inválido" falso por causa disso.
-      const auth = Buffer.from(`${String(cfg.sender_id).trim()}:${String(cfg.api_key).trim()}`).toString('base64');
+      const user = String(cfg.sender_id).trim();
+      const pass = String(cfg.api_key).trim();
+      const auth = Buffer.from(`${user}:${pass}`).toString('base64');
+      // Fix de produção 57.3 — mesmo diagnóstico não sensível do envio,
+      // pro botão "Testar" também (é o caminho mais rápido de reproduzir).
+      console.log(`[sms/smsmarket] testando com usuário=${maskCredential(user)} senha=${maskCredential(pass)}`);
       const res = await fetch('https://api.smsmarket.com.br/webservice-rest/balance', {
         headers: { Authorization: `Basic ${auth}` },
       });
       const body: any = await res.json().catch(() => null);
       if (!res.ok || !body?.success) {
+        console.log(`[sms/smsmarket] teste falhou: HTTP ${res.status} responseCode=${body?.responseCode} responseDescription=${body?.responseDescription}`);
         throw new Error(body?.responseDescription || `HTTP ${res.status}`);
       }
       await pool.query(`UPDATE sms_providers SET status='connected', updated_at=NOW() WHERE id=$1`, [id]);
