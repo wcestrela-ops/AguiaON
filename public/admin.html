@@ -1109,6 +1109,33 @@
                     </section>
 
                     <section class="bg-white/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-10 rounded-[3rem] space-y-8">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-cyan-400 text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3"><i class="fa-solid fa-microchip text-lg"></i> Comandos SMS de Rastreadores (catálogo compartilhado)</h4>
+                            <button onclick="openFrotaComandoModal()" class="text-[9px] font-black text-cyan-400 hover:text-cyan-300 uppercase tracking-widest bg-cyan-500/10 px-3 py-1.5 rounded"><i class="fa fa-plus mr-1"></i>Novo Comando</button>
+                        </div>
+                        <div class="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-4 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                            <p>Biblioteca de comandos SMS por modelo de rastreador (ex: J16, GT06) — fica visível pra <strong class="text-slate-800 dark:text-slate-300">todos os lojistas</strong> de Rastreamento na tela de Frota deles, ao lado do gateway de SMS acima. Cada lojista também pode salvar os próprios comandos (visíveis só pra ele); o que for cadastrado aqui entra como base pronta pra todo mundo, igual ao catálogo do CODESMS.</p>
+                            <p>Use <code>[ID]</code> dentro do comando pra ele ser trocado automaticamente pelo IMEI do veículo na hora do envio (ex: <code>PRG;[ID];10;00#</code>).</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead>
+                                    <tr class="text-left text-slate-500 dark:text-slate-500 uppercase text-[9px] tracking-widest border-b border-slate-200 dark:border-slate-800">
+                                        <th class="pb-2">Modelo</th>
+                                        <th class="pb-2">Categoria</th>
+                                        <th class="pb-2">Título</th>
+                                        <th class="pb-2">Comando</th>
+                                        <th class="pb-2"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="frota-comandos-admin-table">
+                                    <tr><td colspan="5" class="text-slate-400 dark:text-slate-600 py-3">Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="bg-white/40 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-10 rounded-[3rem] space-y-8">
                         <h4 class="text-red-400 text-xs font-black uppercase tracking-[0.3em] flex items-center gap-3"><i class="fa-solid fa-shield-alt text-lg"></i> Segurança (SuperAdmin)</h4>
                         
                         <div class="space-y-6">
@@ -1540,7 +1567,7 @@
             if (id === 'dash')          loadDashboard();
             if (id === 'lojistas')      loadLojistas();
             if (id === 'segmentos')     { loadSegments(); loadLandings(); }
-            if (id === 'settings' || id === 'agata') { loadSettings(); loadSmsProviders(); setTimeout(previewIcon, 50); }
+            if (id === 'settings' || id === 'agata') { loadSettings(); loadSmsProviders(); loadFrotaComandosAdmin(); setTimeout(previewIcon, 50); }
             if (id === 'modules')       loadModules();
             if (id === 'announcements') loadAnnouncements();
             if (id === 'usuarios')      loadUsers();
@@ -4005,9 +4032,150 @@ document.getElementById('modal-edit-user').addEventListener('click', function(e)
   </div>
 </div>
 
+<!-- ── MODAL COMANDO SMS COMPARTILHADO DE RASTREADOR (Fix de produção 62) ── -->
+<div id="modal-frota-comando" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:16px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;padding:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h3 id="frota-comando-modal-title" style="color:#e2e8f0;font-weight:800;font-size:1rem">Novo Comando</h3>
+      <button onclick="closeFrotaComandoModal()" style="color:#64748b;background:none;border:none;cursor:pointer;font-size:1.2rem"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div id="frota-comando-error" style="display:none;background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:12px"></div>
+
+    <input type="hidden" id="frota-comando-id" />
+
+    <div style="display:grid;gap:14px">
+      <div>
+        <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Modelo do rastreador (ex: J16, GT06, ST300)</label>
+        <input id="frota-comando-modelo" type="text" placeholder="Geral"
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Categoria (ex: Bloqueio, Configuração)</label>
+        <input id="frota-comando-categoria" type="text" placeholder="Geral"
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Título do botão</label>
+        <input id="frota-comando-titulo" type="text" placeholder="ex: Bloquear motor"
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
+      </div>
+      <div>
+        <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Comando SMS (pode usar [ID] pro IMEI do veículo)</label>
+        <textarea id="frota-comando-texto" rows="3" placeholder="ex: RELAY,1#"
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box;font-family:monospace"></textarea>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button onclick="closeFrotaComandoModal()"
+        style="flex:1;background:transparent;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:10px;cursor:pointer;font-weight:700">
+        Cancelar
+      </button>
+      <button onclick="saveFrotaComando()" id="btn-save-frota-comando"
+        style="flex:1;background:#0891b2;border:none;color:#fff;border-radius:8px;padding:10px;cursor:pointer;font-weight:700">
+        <i class="fa-solid fa-check mr-1"></i>Salvar
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 let _smsProviderSchema = {};
 let _smsProviders = [];
+
+// ── Fix de produção 62 — catálogo compartilhado de comandos SMS de rastreador ──
+async function loadFrotaComandosAdmin() {
+  const tbody = document.getElementById('frota-comandos-admin-table');
+  if (!tbody) return;
+  try {
+    const res = await fetch('/agenda/frota-comandos', { headers: adminHeaders() });
+    const rows = await res.json();
+    tbody.innerHTML = rows.length ? rows.map(c => `
+      <tr style="border-bottom:1px solid #1e293b">
+        <td class="py-2">${c.tracker_model}</td>
+        <td class="py-2">${c.categoria}</td>
+        <td class="py-2">${c.titulo}</td>
+        <td class="py-2" style="font-family:monospace;color:#94a3b8">${c.comando.length > 40 ? c.comando.slice(0, 40) + '…' : c.comando}</td>
+        <td class="py-2 whitespace-nowrap">
+          <button onclick='openFrotaComandoModal(${JSON.stringify(c)})' title="Editar" style="color:#94a3b8;background:none;border:none;cursor:pointer;margin-right:8px"><i class="fa fa-pencil"></i></button>
+          <button onclick="deleteFrotaComandoAdmin('${c.id}')" title="Excluir" style="color:#f87171;background:none;border:none;cursor:pointer"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:#64748b;padding:12px 0">Nenhum comando compartilhado cadastrado ainda.</td></tr>';
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" style="color:#f87171;padding:12px 0">${e.message}</td></tr>`;
+  }
+}
+
+function openFrotaComandoModal(cmd) {
+  document.getElementById('frota-comando-error').style.display = 'none';
+  document.getElementById('frota-comando-id').value = cmd?.id || '';
+  document.getElementById('frota-comando-modal-title').textContent = cmd ? 'Editar Comando' : 'Novo Comando';
+  document.getElementById('frota-comando-modelo').value = cmd?.tracker_model || '';
+  document.getElementById('frota-comando-categoria').value = cmd?.categoria || '';
+  document.getElementById('frota-comando-titulo').value = cmd?.titulo || '';
+  document.getElementById('frota-comando-texto').value = cmd?.comando || '';
+  document.getElementById('modal-frota-comando').style.display = 'flex';
+}
+
+function closeFrotaComandoModal() {
+  document.getElementById('modal-frota-comando').style.display = 'none';
+}
+
+async function saveFrotaComando() {
+  const id = document.getElementById('frota-comando-id').value;
+  const errEl = document.getElementById('frota-comando-error');
+  errEl.style.display = 'none';
+
+  const titulo = document.getElementById('frota-comando-titulo').value.trim();
+  const comando = document.getElementById('frota-comando-texto').value.trim();
+  if (!titulo || !comando) {
+    errEl.textContent = 'Preencha título e comando.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const body = {
+    tracker_model: document.getElementById('frota-comando-modelo').value.trim() || 'Geral',
+    categoria: document.getElementById('frota-comando-categoria').value.trim() || 'Geral',
+    titulo, comando,
+    shared: true, // catálogo compartilhado — só tem efeito de verdade se quem chama for SUPERADMIN (checado no backend)
+  };
+
+  const btn = document.getElementById('btn-save-frota-comando');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Salvando...';
+
+  try {
+    const res = await fetch(id ? `/agenda/frota-comandos/${id}` : '/agenda/frota-comandos', {
+      method: id ? 'PUT' : 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Erro ao salvar.';
+      errEl.style.display = 'block';
+    } else {
+      closeFrotaComandoModal();
+      loadFrotaComandosAdmin();
+    }
+  } catch (e) {
+    errEl.textContent = 'Erro de conexão: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>Salvar';
+  }
+}
+
+async function deleteFrotaComandoAdmin(id) {
+  if (!confirm('Excluir este comando do catálogo compartilhado?')) return;
+  try {
+    await fetch(`/agenda/frota-comandos/${id}`, { method: 'DELETE', headers: adminHeaders() });
+    loadFrotaComandosAdmin();
+  } catch (e) { alert('Erro ao excluir: ' + e.message); }
+}
 
 async function loadSmsSchema() {
   if (Object.keys(_smsProviderSchema).length) return;
