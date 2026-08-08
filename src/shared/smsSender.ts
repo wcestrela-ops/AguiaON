@@ -256,7 +256,9 @@ async function dispatchByProvider(row: SmsProviderRow, phone: string, message: s
     case 'smsmarket': {
       const digits = phone.replace(/\D/g, '');
       const localNumber = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
-      const auth = Buffer.from(`${cfg.sender_id}:${cfg.api_key}`).toString('base64');
+      // Fix de produção 57.2 — trim() pra não deixar espaço/quebra de linha
+      // colado por engano virar "usuário/senha inválido" falso.
+      const auth = Buffer.from(`${String(cfg.sender_id).trim()}:${String(cfg.api_key).trim()}`).toString('base64');
       const params = new URLSearchParams({
         type: '0',
         country_code: '55',
@@ -474,7 +476,10 @@ export async function testProviderConnection(id: string) {
     // só validar se os campos foram preenchidos, como os outros provedores
     // (que não têm um jeito barato de testar sem gerar SMS de verdade).
     if (row.provider === 'smsmarket') {
-      const auth = Buffer.from(`${cfg.sender_id}:${cfg.api_key}`).toString('base64');
+      // Fix de produção 57.2 — copiar/colar credenciais frequentemente traz
+      // espaço ou quebra de linha escondida no fim; `trim()` evita um
+      // "usuário/senha inválido" falso por causa disso.
+      const auth = Buffer.from(`${String(cfg.sender_id).trim()}:${String(cfg.api_key).trim()}`).toString('base64');
       const res = await fetch('https://api.smsmarket.com.br/webservice-rest/balance', {
         headers: { Authorization: `Basic ${auth}` },
       });
