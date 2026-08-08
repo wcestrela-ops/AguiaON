@@ -1992,7 +1992,11 @@ router.post('/frota/comandos/enviar-massa', async (req, res) => {
 const FROTA_COMMAND_MAP: Record<string, { gpswoxType: string; keywords: string[]; smsCode: string; label: string }> = {
   bloquear:    { gpswoxType: 'engineStop',     keywords: ['enginestop', 'engine_stop', 'stop', 'bloque', 'block'],        smsCode: 'RELAY,1#', label: 'Bloquear motor' },
   desbloquear: { gpswoxType: 'engineResume',   keywords: ['engineresume', 'engine_resume', 'resume', 'desbloque', 'unblock'], smsCode: 'RELAY,0#', label: 'Desbloquear motor' },
-  atualizar:   { gpswoxType: 'positionSingle', keywords: ['position', 'locate', 'localiz', 'update'],                      smsCode: 'WHERE#',  label: 'Atualizar localização' },
+  // Fix de produção 65 — Carlos pediu pra trocar o fallback SMS de "atualizar"
+  // de WHERE# pra RESET# (nos rastreadores que ele usa, RESET# é o que de
+  // fato força o dispositivo a reconectar e mandar posição atualizada; WHERE#
+  // não estava sendo reconhecido).
+  atualizar:   { gpswoxType: 'positionSingle', keywords: ['position', 'locate', 'localiz', 'update'],                      smsCode: 'RESET#',  label: 'Atualizar localização' },
 };
 
 // POST /agenda/frota/:id/comando — body: { action: 'bloquear' | 'desbloquear' | 'atualizar' }
