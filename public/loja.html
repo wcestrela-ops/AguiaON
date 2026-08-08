@@ -3124,6 +3124,12 @@
         </div>
       </div>
       <div>
+        <label class="text-xs text-slate-600 dark:text-slate-400 block mb-1">Subir rastreador para plataforma</label>
+        <button type="button" onclick="toggleSubirRastreadorBotoes()" class="btn-outline text-xs w-full text-left"><i class="fa fa-tower-broadcast mr-1"></i> Enviar comando de configuração por SMS</button>
+        <div id="frota-subir-rastreador-botoes" class="hidden mt-1.5 space-y-1"></div>
+        <span class="help-text">Manda por SMS, pro "Telefone do chip" abaixo, o comando que configura o rastreador (APN/servidor) pra reportar direto pra esta plataforma. Preencha o telefone do chip antes de clicar.</span>
+      </div>
+      <div>
         <label class="text-xs text-slate-600 dark:text-slate-400 block mb-1">Telefone do chip (SIM do rastreador)</label>
         <input type="text" id="frota-tracker-phone" class="input" placeholder="DDI+DDD+número, ex: 5511999990000" />
         <span class="help-text">Só usado como reserva: se o comando de bloquear/desbloquear/atualizar falhar pela internet do rastreador (4G), o sistema manda por SMS direto pra esse número. A sincronização com GPS preenche automaticamente quando o GPSWOX informa o número do chip.</span>
@@ -7373,6 +7379,54 @@ function renderFrotaComandosLib() {
 
 function usarComandoSalvo(comando) {
   document.getElementById('frota-comandos-texto').value = comando;
+}
+
+// ── "Subir rastreador para plataforma" (Fix 71) — botão no formulário de
+// Adicionar/Editar veículo, logo abaixo do IMEI. Reaproveita o mesmo grupo
+// da biblioteca de comandos SMS (tracker_model = "Subir rastreador para
+// plataforma", curado pelo SUPERADMIN em Configurações — hoje com J16
+// Voxter e J16 Algar, mas dá pra adicionar mais operadoras por lá sem
+// precisar mexer em código). Manda direto pro telefone do chip digitado no
+// formulário, sem precisar do veículo já salvo (endpoint
+// /frota/comando-direto, criado pra esse caso).
+const GRUPO_SUBIR_RASTREADOR = 'Subir rastreador para plataforma';
+
+async function toggleSubirRastreadorBotoes() {
+  const box = document.getElementById('frota-subir-rastreador-botoes');
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="text-xs text-slate-500 dark:text-slate-500">Carregando...</p>';
+  try {
+    if (!frotaComandosLibCache.length) frotaComandosLibCache = await api('/agenda/frota-comandos');
+    const comandos = frotaComandosLibCache.filter(c => c.tracker_model === GRUPO_SUBIR_RASTREADOR);
+    if (!comandos.length) {
+      box.innerHTML = '<p class="text-xs text-slate-400 dark:text-slate-600 italic">Nenhum comando cadastrado nesse grupo ainda.</p>';
+      return;
+    }
+    box.innerHTML = comandos.map(c => `
+      <button type="button" onclick="enviarComandoSubirRastreador('${c.id}')" class="btn-outline text-xs w-full text-left">
+        <i class="fa fa-paper-plane mr-1"></i> ${esc(c.titulo)}
+        ${c.descricao ? `<div class="text-[10px] font-normal text-slate-500 dark:text-slate-500 mt-0.5">${esc(c.descricao)}</div>` : ''}
+      </button>
+    `).join('');
+  } catch (e) {
+    box.innerHTML = `<p class="text-xs text-red-400">${e.message}</p>`;
+  }
+}
+
+async function enviarComandoSubirRastreador(comandoId) {
+  const tracker_phone = document.getElementById('frota-tracker-phone').value.trim();
+  if (!tracker_phone) return alert('Preencha o "Telefone do chip (SIM do rastreador)" antes de enviar.');
+  const c = frotaComandosLibCache.find(x => x.id === comandoId);
+  if (!c) return alert('Comando não encontrado.');
+  if (!confirm(`Enviar por SMS pra ${tracker_phone}:\n\n${c.comando}`)) return;
+  try {
+    const imei = document.getElementById('frota-imei').value.trim();
+    await api('/agenda/frota/comando-direto', { method: 'POST', body: { tracker_phone, comando: c.comando, imei } });
+    alert('Comando enviado por SMS!');
+  } catch (e) {
+    alert('Erro ao enviar: ' + e.message);
+  }
 }
 
 async function salvarComandoPessoal() {

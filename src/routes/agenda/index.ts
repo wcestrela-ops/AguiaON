@@ -676,6 +676,12 @@ async function seedFrotaSmsCommandsCatalogo(): Promise<void> {
     ['T905', 'GERAIS', 'TIMEZONE', 'time zone123456 0', 'Define o fuso horário do rastreador.'],
     ['T905', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456', 'Coloca o rastreador em modo de chamada de voz (atende automaticamente).'],
     ['T905', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456', 'Volta o rastreador pro modo padrão de rastreamento.'],
+    // ── Subir rastreador para plataforma (Fix 71) — comandos de configuração
+    // de APN/servidor por operadora, usados no botão de mesmo nome no
+    // formulário de "Adicionar novo veículo", logo abaixo do IMEI. Configura
+    // o rastreador J16 pra reportar direto pro servidor da AguiaON.
+    ['Subir rastreador para plataforma', 'Voxter', 'J16 Voxter', 'SZCS#FREQ=30#PULSE=7200#SERVIP=dns.ag-on.com#SERVPORT=6023#APN=voxter.br#USERPPP=voxter#PWPPP=voxter', 'Configura o rastreador J16 com chip Voxter pra reportar pro servidor da plataforma (dns.ag-on.com:6023), com APN voxter.br.'],
+    ['Subir rastreador para plataforma', 'Algar', 'J16 Algar', 'SZCS#FREQ=30#PULSE=7200#SERVIP=187.77.243.53#SERVPORT=6023#APN=ss.algar.br#USERPPP=algarr#PWPPP=algar', 'Configura o rastreador J16 com chip Algar pra reportar pro servidor da plataforma (187.77.243.53:6023), com APN ss.algar.br.'],
   ];
 
   for (const [tracker_model, categoria, titulo, comando, descricao] of seed) {
@@ -2053,6 +2059,29 @@ router.post('/frota/comandos/enviar-massa', async (req, res) => {
 
     const sucesso = detalhes.filter(d => d.status === 'sent').length;
     res.json({ total: detalhes.length, sucesso, falha: detalhes.length - sucesso, detalhes });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /agenda/frota/comando-direto — body: { tracker_phone, comando, imei? }
+// Fix de produção 71 — manda um comando SMS bruto direto pra um número de
+// telefone, SEM precisar de um veículo já salvo (`vehicle_ids`, como o
+// endpoint de envio em massa exige). Criado pro botão "Subir rastreador
+// para plataforma" no formulário de "Adicionar novo veículo": o instalador
+// quer configurar o rastreador (APN/servidor) ANTES de ainda ter salvo o
+// cadastro do veículo, só com o telefone do chip já digitado no formulário.
+// Substitui [ID] pelo imei se ele vier no corpo (nenhum dos comandos atuais
+// desse grupo usa, mas mantém o mesmo padrão do envio em massa por
+// consistência, caso algum comando futuro precise). Não loga em
+// agenda_frota_commands porque não existe agenda_frota_id ainda.
+router.post('/frota/comando-direto', async (req, res) => {
+  try {
+    const eid = estabId(req);
+    const { tracker_phone, comando, imei } = req.body || {};
+    if (!tracker_phone) return res.status(400).json({ error: 'tracker_phone é obrigatório.' });
+    if (!comando || typeof comando !== 'string') return res.status(400).json({ error: 'comando é obrigatório.' });
+    const comandoFinal = comando.replace(/\[ID\]/g, imei || '');
+    await sendSms(tracker_phone, comandoFinal, { establishmentId: eid, action: 'frota.comando.direto' });
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
