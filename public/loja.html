@@ -7200,12 +7200,15 @@ function renderFrota(rows) {
       <td class="whitespace-nowrap">
         ${v.gpswox_device_id ? `
           <button onclick="verLocalizacaoFrota('${v.id}')" title="Ver localização" class="text-blue-400 hover:text-blue-300 text-xs mr-2"><i class="fa fa-map-marker-alt"></i></button>
+        ` : `<span class="text-slate-400 dark:text-slate-600 text-xs mr-2" title="Sem GPS vinculado"><i class="fa fa-map-marker-alt"></i></span>`}
+        <button onclick="enviarSmsUnico('${v.id}')" title="Enviar comando SMS pro rastreador" class="text-amber-400 hover:text-amber-300 text-xs mr-2"><i class="fa fa-comment-sms"></i></button>
+        ${v.gpswox_device_id ? `
           <button onclick="comandoFrota('${v.id}','bloquear')" title="Bloquear motor" class="text-red-400 hover:text-red-300 text-xs mr-2"><i class="fa fa-lock"></i></button>
           <button onclick="comandoFrota('${v.id}','desbloquear')" title="Desbloquear motor" class="text-green-400 hover:text-green-300 text-xs mr-2"><i class="fa fa-lock-open"></i></button>
           <button onclick="comandoFrota('${v.id}','atualizar')" title="Atualizar localização (via rastreador)" class="text-cyan-400 hover:text-cyan-300 text-xs mr-2"><i class="fa fa-rotate"></i></button>
           <button onclick="historicoFrota('${v.id}')" title="Histórico de trajeto" class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs mr-2"><i class="fa fa-route"></i></button>
           <button onclick="compartilharFrota('${v.id}')" title="Compartilhar localização" class="text-indigo-400 hover:text-indigo-300 text-xs mr-2"><i class="fa fa-share-alt"></i></button>
-        ` : `<span class="text-slate-400 dark:text-slate-600 text-xs mr-2" title="Sem GPS vinculado"><i class="fa fa-map-marker-alt"></i></span>`}
+        ` : ``}
         <button onclick="notasFrota('${v.id}','${(v.cliente_nome||v.placa||'').replace(/'/g,"\\'")}')" title="Notas / histórico de contato" class="text-purple-400 hover:text-purple-300 text-xs mr-2"><i class="fa fa-note-sticky"></i></button>
         <button onclick="editFrota(${JSON.stringify(v).replace(/"/g,'&quot;')})" title="Editar" class="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs mr-2"><i class="fa fa-pencil"></i></button>
         <button onclick="excluirVeiculo('${v.id}')" title="Excluir" class="text-red-400 hover:text-red-300 text-xs"><i class="fa fa-trash"></i></button>
@@ -7282,6 +7285,16 @@ function selecionarFrotaPorModelo() {
     if (frotaSelecionados.has(cb.dataset.id)) cb.checked = true;
   });
   atualizarFrotaSelecionadosCount();
+}
+
+// Ícone de envio rápido de SMS direto na linha do veículo (perto do de
+// localização) — reaproveita o mesmo modal/fluxo de envio em massa, só que
+// pré-selecionando um único veículo, sem precisar marcar o checkbox e abrir
+// o botão "Comandos SMS" do cabeçalho separadamente.
+function enviarSmsUnico(id) {
+  frotaSelecionados = new Set([id]);
+  document.querySelectorAll('.frota-check-linha').forEach(cb => { cb.checked = cb.dataset.id === id; });
+  abrirComandosMassa();
 }
 
 async function abrirComandosMassa() {
