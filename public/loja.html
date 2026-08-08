@@ -3225,6 +3225,7 @@
         <input type="text" id="frota-comando-novo-categoria" placeholder="Categoria (ex: Bloqueio)" class="input text-xs">
       </div>
       <input type="text" id="frota-comando-novo-titulo" placeholder="Título do botão" class="input text-xs mb-2">
+      <input type="text" id="frota-comando-novo-descricao" placeholder="Descrição (o que esse comando faz)" class="input text-xs mb-2">
       <textarea id="frota-comando-novo-comando" rows="2" placeholder="Comando SMS (pode usar [ID])" class="input font-mono text-xs mb-2"></textarea>
       <button onclick="salvarComandoPessoal()" class="btn-outline text-xs w-full"><i class="fa fa-save mr-1"></i> Salvar comando</button>
     </div>
@@ -7347,12 +7348,16 @@ function renderFrotaComandosLib() {
         ${Object.keys(porModelo[modelo]).sort().map(cat => `
           <div class="mb-2">
             <div class="text-[10px] text-slate-500 dark:text-slate-500 mb-1">${esc(cat)}</div>
-            <div class="flex flex-wrap gap-1.5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               ${porModelo[modelo][cat].map(c => `
-                <span title="${esc(c.comando)}" class="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer" onclick="usarComandoSalvo('${esc(c.comando).replace(/'/g, "\\'")}')">
-                  ${!c.establishment_id ? '<i class="fa fa-globe text-slate-400"></i>' : ''}<span>${esc(c.titulo)}</span>
-                  ${c.establishment_id ? `<i class="fa fa-trash text-red-400 hover:text-red-300" onclick="event.stopPropagation(); excluirComandoPessoal('${c.id}')"></i>` : ''}
-                </span>
+                <div class="rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer px-2 py-1.5" onclick="usarComandoSalvo('${esc(c.comando).replace(/'/g, "\\'")}')">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold">${!c.establishment_id ? '<i class="fa fa-globe text-slate-400 mr-1"></i>' : ''}${esc(c.titulo)}</span>
+                    ${c.establishment_id ? `<i class="fa fa-trash text-red-400 hover:text-red-300" onclick="event.stopPropagation(); excluirComandoPessoal('${c.id}')"></i>` : ''}
+                  </div>
+                  ${c.descricao ? `<div class="text-[10px] text-slate-500 dark:text-slate-500 mt-0.5">${esc(c.descricao)}</div>` : ''}
+                  <div class="text-[10px] font-mono text-slate-400 dark:text-slate-600 mt-0.5">${c.comando ? esc(c.comando) : '(comando vazio — editar no admin)'}</div>
+                </div>
               `).join('')}
             </div>
           </div>
@@ -7370,13 +7375,15 @@ async function salvarComandoPessoal() {
   const tracker_model = document.getElementById('frota-comando-novo-modelo').value.trim() || 'Geral';
   const categoria = document.getElementById('frota-comando-novo-categoria').value.trim() || 'Geral';
   const titulo = document.getElementById('frota-comando-novo-titulo').value.trim();
+  const descricao = document.getElementById('frota-comando-novo-descricao').value.trim();
   const comando = document.getElementById('frota-comando-novo-comando').value.trim();
   if (!titulo || !comando) return alert('Preencha título e comando.');
   try {
-    await api('/agenda/frota-comandos', { method: 'POST', body: { tracker_model, categoria, titulo, comando } });
+    await api('/agenda/frota-comandos', { method: 'POST', body: { tracker_model, categoria, titulo, descricao, comando } });
     document.getElementById('frota-comando-novo-modelo').value = '';
     document.getElementById('frota-comando-novo-categoria').value = '';
     document.getElementById('frota-comando-novo-titulo').value = '';
+    document.getElementById('frota-comando-novo-descricao').value = '';
     document.getElementById('frota-comando-novo-comando').value = '';
     await loadFrotaComandosLib();
   } catch (e) { alert('❌ ' + e.message); }

@@ -1124,12 +1124,13 @@
                                         <th class="pb-2">Modelo</th>
                                         <th class="pb-2">Categoria</th>
                                         <th class="pb-2">Título</th>
+                                        <th class="pb-2">Descrição</th>
                                         <th class="pb-2">Comando</th>
                                         <th class="pb-2"></th>
                                     </tr>
                                 </thead>
                                 <tbody id="frota-comandos-admin-table">
-                                    <tr><td colspan="5" class="text-slate-400 dark:text-slate-600 py-3">Carregando...</td></tr>
+                                    <tr><td colspan="6" class="text-slate-400 dark:text-slate-600 py-3">Carregando...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -4061,6 +4062,11 @@ document.getElementById('modal-edit-user').addEventListener('click', function(e)
           style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
       </div>
       <div>
+        <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Descrição (o que esse comando faz — pra não se perderem no meio de tantos)</label>
+        <input id="frota-comando-descricao" type="text" placeholder="ex: Corta o motor/combustível do veículo remotamente."
+          style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box" />
+      </div>
+      <div>
         <label style="color:#94a3b8;font-size:.75rem;font-weight:600;display:block;margin-bottom:4px">Comando SMS (pode usar [ID] pro IMEI do veículo)</label>
         <textarea id="frota-comando-texto" rows="3" placeholder="ex: RELAY,1#"
           style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:8px 12px;width:100%;font-size:.9rem;box-sizing:border-box;font-family:monospace"></textarea>
@@ -4096,14 +4102,15 @@ async function loadFrotaComandosAdmin() {
         <td class="py-2">${c.tracker_model}</td>
         <td class="py-2">${c.categoria}</td>
         <td class="py-2">${c.titulo}</td>
-        <td class="py-2" style="font-family:monospace;color:#94a3b8">${c.comando.length > 40 ? c.comando.slice(0, 40) + '…' : c.comando}</td>
+        <td class="py-2" style="color:#94a3b8">${c.descricao ? (c.descricao.length > 60 ? c.descricao.slice(0, 60) + '…' : c.descricao) : '—'}</td>
+        <td class="py-2" style="font-family:monospace;color:#94a3b8">${c.comando ? (c.comando.length > 40 ? c.comando.slice(0, 40) + '…' : c.comando) : '(vazio)'}</td>
         <td class="py-2 whitespace-nowrap">
           <button onclick='openFrotaComandoModal(${JSON.stringify(c)})' title="Editar" style="color:#94a3b8;background:none;border:none;cursor:pointer;margin-right:8px"><i class="fa fa-pencil"></i></button>
           <button onclick="deleteFrotaComandoAdmin('${c.id}')" title="Excluir" style="color:#f87171;background:none;border:none;cursor:pointer"><i class="fa fa-trash"></i></button>
         </td>
-      </tr>`).join('') : '<tr><td colspan="5" style="color:#64748b;padding:12px 0">Nenhum comando compartilhado cadastrado ainda.</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="6" style="color:#64748b;padding:12px 0">Nenhum comando compartilhado cadastrado ainda.</td></tr>';
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" style="color:#f87171;padding:12px 0">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="color:#f87171;padding:12px 0">${e.message}</td></tr>`;
   }
 }
 
@@ -4114,6 +4121,7 @@ function openFrotaComandoModal(cmd) {
   document.getElementById('frota-comando-modelo').value = cmd?.tracker_model || '';
   document.getElementById('frota-comando-categoria').value = cmd?.categoria || '';
   document.getElementById('frota-comando-titulo').value = cmd?.titulo || '';
+  document.getElementById('frota-comando-descricao').value = cmd?.descricao || '';
   document.getElementById('frota-comando-texto').value = cmd?.comando || '';
   document.getElementById('modal-frota-comando').style.display = 'flex';
 }
@@ -4138,6 +4146,7 @@ async function saveFrotaComando() {
   const body = {
     tracker_model: document.getElementById('frota-comando-modelo').value.trim() || 'Geral',
     categoria: document.getElementById('frota-comando-categoria').value.trim() || 'Geral',
+    descricao: document.getElementById('frota-comando-descricao').value.trim(),
     titulo, comando,
     shared: true, // catálogo compartilhado — só tem efeito de verdade se quem chama for SUPERADMIN (checado no backend)
   };

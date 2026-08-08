@@ -517,6 +517,11 @@ export async function ensureTables() {
       created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
+  // Fix de produção 66 — Carlos pediu uma descrição por comando ("pra não se
+  // perderem"), já que o catálogo cresceu rápido (94 comandos no Fix 62.1 +
+  // mais uma leva do J16 nesse fix). Nullable pra não quebrar linhas antigas;
+  // o seed abaixo faz o backfill.
+  await pool.query(`ALTER TABLE frota_sms_commands ADD COLUMN IF NOT EXISTS descricao TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_est ON frota_sms_commands(establishment_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_frota_sms_commands_model ON frota_sms_commands(tracker_model)`);
   // Índice único parcial (só entre os compartilhados) pra dar suporte ao
@@ -543,115 +548,142 @@ export async function ensureTables() {
 // velocidade" / "ATIVAR HODÔMETRO" ambos SZCS#SOURCE_OFF_TYPE=1) e ele
 // prefere conferir a fonte antes de preencher o valor certo de cada um.
 async function seedFrotaSmsCommandsCatalogo(): Promise<void> {
-  const seed: Array<[string, string, string, string]> = [
+  // [modelo, categoria, título, comando, descrição]
+  const seed: Array<[string, string, string, string, string]> = [
     // ── BWS3G ──
-    ['BWS3G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF'],
-    ['BWS3G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON'],
-    ['BWS3G', 'BLOQUEIO', 'LED OFF', 'LEDOFF'],
-    ['BWS3G', 'BLOQUEIO', 'LED ON', 'LEDON'],
-    ['BWS3G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1'],
-    ['BWS3G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0'],
-    ['BWS3G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF'],
-    ['BWS3G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON'],
-    ['BWS3G', 'GERAIS', 'FACTORY', 'RST'],
-    ['BWS3G', 'GERAIS', 'REG', 'REG000000#'],
-    ['BWS3G', 'GERAIS', 'RESTART', 'RESTART'],
-    ['BWS3G', 'GERAIS', 'TIMEZONE', 'TZW0'],
-    ['BWS3G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05'],
+    ['BWS3G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF', 'Corta o motor/combustível do veículo remotamente.'],
+    ['BWS3G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON', 'Libera o motor/combustível do veículo.'],
+    ['BWS3G', 'BLOQUEIO', 'LED OFF', 'LEDOFF', 'Desliga o LED indicador do rastreador (deixa ele discreto).'],
+    ['BWS3G', 'BLOQUEIO', 'LED ON', 'LEDON', 'Liga o LED indicador do rastreador.'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1', 'Ativa o recebimento de comandos por SMS.'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0', 'Desativa o recebimento de comandos por SMS.'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF', 'Usa o fio de ignição físico pra detectar se o veículo está ligado.'],
+    ['BWS3G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON', 'Detecta ignição por movimento/acelerômetro, sem depender do fio físico.'],
+    ['BWS3G', 'GERAIS', 'FACTORY', 'RST', 'Restaura o rastreador pras configurações de fábrica.'],
+    ['BWS3G', 'GERAIS', 'REG', 'REG000000#', 'Comando de registro/senha padrão do equipamento.'],
+    ['BWS3G', 'GERAIS', 'RESTART', 'RESTART', 'Reinicia o rastreador.'],
+    ['BWS3G', 'GERAIS', 'TIMEZONE', 'TZW0', 'Define o fuso horário do rastreador.'],
+    ['BWS3G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05', 'Ativa o modo de economia de energia após 5 minutos parado.'],
     // ── BWS4G ──
-    ['BWS4G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF'],
-    ['BWS4G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON'],
-    ['BWS4G', 'BLOQUEIO', 'LED OFF', 'LEDOFF'],
-    ['BWS4G', 'BLOQUEIO', 'LED ON', 'LEDON'],
-    ['BWS4G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1'],
-    ['BWS4G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0'],
-    ['BWS4G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF'],
-    ['BWS4G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON'],
-    ['BWS4G', 'GERAIS', 'FACTORY', 'RST'],
-    ['BWS4G', 'GERAIS', 'REG', 'REG000000#'],
-    ['BWS4G', 'GERAIS', 'RESTART', 'RESTART'],
-    ['BWS4G', 'GERAIS', 'TIMEZONE', 'TZW0'],
-    ['BWS4G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05'],
+    ['BWS4G', 'BLOQUEIO', 'BLOQUEAR', 'ENGOFF', 'Corta o motor/combustível do veículo remotamente.'],
+    ['BWS4G', 'BLOQUEIO', 'DESBLOQUEAR', 'ENGON', 'Libera o motor/combustível do veículo.'],
+    ['BWS4G', 'BLOQUEIO', 'LED OFF', 'LEDOFF', 'Desliga o LED indicador do rastreador (deixa ele discreto).'],
+    ['BWS4G', 'BLOQUEIO', 'LED ON', 'LEDON', 'Liga o LED indicador do rastreador.'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'ATIVAR SMS', 'SMS1', 'Ativa o recebimento de comandos por SMS.'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'DESATIVAR SMS', 'SMS0', 'Desativa o recebimento de comandos por SMS.'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'IGN FÍSICA', 'IVOFF', 'Usa o fio de ignição físico pra detectar se o veículo está ligado.'],
+    ['BWS4G', 'CONFIGURAÇÃO', 'IGN VIRTUAL', 'IVON', 'Detecta ignição por movimento/acelerômetro, sem depender do fio físico.'],
+    ['BWS4G', 'GERAIS', 'FACTORY', 'RST', 'Restaura o rastreador pras configurações de fábrica.'],
+    ['BWS4G', 'GERAIS', 'REG', 'REG000000#', 'Comando de registro/senha padrão do equipamento.'],
+    ['BWS4G', 'GERAIS', 'RESTART', 'RESTART', 'Reinicia o rastreador.'],
+    ['BWS4G', 'GERAIS', 'TIMEZONE', 'TZW0', 'Define o fuso horário do rastreador.'],
+    ['BWS4G', 'MODO DE TRABALHO', 'SLEEP 5 MIN', 'SLEEP05', 'Ativa o modo de economia de energia após 5 minutos parado.'],
     // ── COBAN ──
-    ['COBAN', 'BLOQUEIO', 'BLOQUEAR', 'stop123456'],
-    ['COBAN', 'BLOQUEIO', 'BLOQUEIO RÁPIDO', 'quickstop123456'],
-    ['COBAN', 'BLOQUEIO', 'DESBLOQUEAR', 'resume123456'],
-    ['COBAN', 'BLOQUEIO', 'DESBLOQUEIO RÁPIDO', 'noquickstop123456'],
-    ['COBAN', 'CONEXÃO', 'GPRS ON', 'gprs123456'],
-    ['COBAN', 'CONEXÃO', 'PROTOCOLO TCP', 'gprs123456,0,0'],
-    ['COBAN', 'CONEXÃO', 'PROTOCOLO UDP', 'gprs123456,1,1'],
-    ['COBAN', 'GERAIS', 'BEGIN', 'begin123456'],
-    ['COBAN', 'GERAIS', 'CLEAN', 'clear123456'],
-    ['COBAN', 'GERAIS', 'RESET', 'reset123456'],
-    ['COBAN', 'GERAIS', 'TIMEZONE', 'time zone123456 0'],
-    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456'],
-    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456'],
+    ['COBAN', 'BLOQUEIO', 'BLOQUEAR', 'stop123456', 'Corta o motor/combustível (senha padrão 123456).'],
+    ['COBAN', 'BLOQUEIO', 'BLOQUEIO RÁPIDO', 'quickstop123456', 'Bloqueia o veículo imediatamente, sem esperar ele parar.'],
+    ['COBAN', 'BLOQUEIO', 'DESBLOQUEAR', 'resume123456', 'Libera o motor/combustível (senha padrão 123456).'],
+    ['COBAN', 'BLOQUEIO', 'DESBLOQUEIO RÁPIDO', 'noquickstop123456', 'Desbloqueia o veículo imediatamente.'],
+    ['COBAN', 'CONEXÃO', 'GPRS ON', 'gprs123456', 'Ativa a conexão de dados (GPRS) do rastreador.'],
+    ['COBAN', 'CONEXÃO', 'PROTOCOLO TCP', 'gprs123456,0,0', 'Define a conexão com o servidor via protocolo TCP.'],
+    ['COBAN', 'CONEXÃO', 'PROTOCOLO UDP', 'gprs123456,1,1', 'Define a conexão com o servidor via protocolo UDP.'],
+    ['COBAN', 'GERAIS', 'BEGIN', 'begin123456', 'Inicia a comunicação do rastreador com a plataforma.'],
+    ['COBAN', 'GERAIS', 'CLEAN', 'clear123456', 'Limpa as configurações salvas no rastreador.'],
+    ['COBAN', 'GERAIS', 'RESET', 'reset123456', 'Reinicia o rastreador.'],
+    ['COBAN', 'GERAIS', 'TIMEZONE', 'time zone123456 0', 'Define o fuso horário do rastreador.'],
+    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456', 'Coloca o rastreador em modo de chamada de voz (atende automaticamente).'],
+    ['COBAN', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456', 'Volta o rastreador pro modo padrão de rastreamento (sem chamada de voz).'],
     // ── GV (Queclink GV50) ──
-    ['GV', 'BLOQUEIO', 'BLOQUEAR', 'AT+GTOUT=gv50,1,0,0,0,0,0,,,,3,,,,,,,FFFF$'],
-    ['GV', 'BLOQUEIO', 'DESBLOQUEAR', 'AT+GTOUT=gv50,0,0,0,0,0,0,,,,3,,,,,,,FFFF$'],
-    ['GV', 'GERAIS', 'CLEAN', 'AT+GTRTO=gv50,D,,3,,,,FFFF$'],
-    ['GV', 'GERAIS', 'FACTORY', 'AT+GTRTO=gv50m,04,,0,,,,FFFF$'],
-    ['GV', 'GERAIS', 'RESET', 'AT+GTRTO=gv50,3,,3,,,,FFFF$'],
-    ['GV', 'GERAIS', 'TIMEZONE', 'AT+GTTMA=gv50,+,0,0,0,,,,,,FFFF$'],
-    ['GV', 'MODO DE TRABALHO', 'DEEP SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,1,,,,,,,,,,,,,,FFFF$'],
-    ['GV', 'MODO DE TRABALHO', 'LOW SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,2,,,,,,,,,,,,,,FFFF$'],
-    ['GV', 'MODO DE TRABALHO', 'SLEEP OFF', 'AT+GTCFG=gv50,gv50,gv50,,,,,,0,,,,,,,,,,,,,,FFFF$'],
+    ['GV', 'BLOQUEIO', 'BLOQUEAR', 'AT+GTOUT=gv50,1,0,0,0,0,0,,,,3,,,,,,,FFFF$', 'Corta o motor/combustível através da saída digital (relé).'],
+    ['GV', 'BLOQUEIO', 'DESBLOQUEAR', 'AT+GTOUT=gv50,0,0,0,0,0,0,,,,3,,,,,,,FFFF$', 'Libera o motor/combustível através da saída digital (relé).'],
+    ['GV', 'GERAIS', 'CLEAN', 'AT+GTRTO=gv50,D,,3,,,,FFFF$', 'Limpa os dados salvos no rastreador.'],
+    ['GV', 'GERAIS', 'FACTORY', 'AT+GTRTO=gv50m,04,,0,,,,FFFF$', 'Restaura o rastreador pras configurações de fábrica.'],
+    ['GV', 'GERAIS', 'RESET', 'AT+GTRTO=gv50,3,,3,,,,FFFF$', 'Reinicia o rastreador.'],
+    ['GV', 'GERAIS', 'TIMEZONE', 'AT+GTTMA=gv50,+,0,0,0,,,,,,FFFF$', 'Define o fuso horário do rastreador.'],
+    ['GV', 'MODO DE TRABALHO', 'DEEP SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,1,,,,,,,,,,,,,,FFFF$', 'Ativa o modo de economia máxima de energia (sinal mais espaçado).'],
+    ['GV', 'MODO DE TRABALHO', 'LOW SLEEP', 'AT+GTCFG=gv50,gv50,gv50,,,,,,2,,,,,,,,,,,,,,FFFF$', 'Ativa modo de economia de energia intermediário.'],
+    ['GV', 'MODO DE TRABALHO', 'SLEEP OFF', 'AT+GTCFG=gv50,gv50,gv50,,,,,,0,,,,,,,,,,,,,,FFFF$', 'Desativa o modo de economia de energia (rastreador sempre ativo).'],
     // ── J16/J14/EC33/GT06 ──
-    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 15-30', 'SZCS#ANGLEVALUE=15-30'],
-    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 35-2', 'SZCS#ANGLEVALUE=35-002'],
-    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-15', 'SZCS#ANGLEVALUE=08-015'],
-    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-30', 'SZCS#ANGLEVALUE=08-030'],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BATERIA EXT', ''],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BLOQUEAR', 'RELAY,1#'],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Bloqueio imediato - Qualquer velocidade', ''],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Desativar Bloqueio imediato', 'SZCS#SOURCE_OFF_TYPE=0'],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'DESBLOQUEAR', 'RELAY,0#'],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED DESLIGADO', 'SZCS#LED_ENABLE=0'],
-    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED LIGADO', 'SZCS#LED_ENABLE=1'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALARM VIBR.', 'SENALM,ON,0#'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALERTA IGN', 'ACCALM,ON,0#'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS OFF PARADO', 'SZCS#GPS_DISSLP=0'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS ON PARADO', 'SZCS#GPS_DISSLP=1'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN FÍSICA', 'SZCS#ACCLINE=1'],
-    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN VIRTUAL', 'SZCS#ACCLINE=0'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'FACTORY', 'FACTORY#'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'FORMAT', 'FORMAT#'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'HORA CERTA', 'GMT,W,0,0#'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'LOCK IP', 'SETIPLOCK=1'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'RESET', 'RESET#'],
-    ['J16/J14/EC33/GT06', 'GERAIS', 'UNLOCK IP', 'SETIPLOCK=0'],
-    ['J16/J14/EC33/GT06', 'GPS', 'GPS ATIVO', 'SENDS,0#'],
-    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 180SEG', 'SZCS#GPS_RST_TIME=180'],
-    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 300SEG', 'SZCS#GPS_RST_TIME=300'],
-    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'ATIVAR HODÔMETRO', ''],
-    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'HODÔMETRO EM KM', ''],
-    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'INICIAR HODÔMETRO', 'MILEAGE,ON#'],
-    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP OFF', 'SZCS#BLIND_EN=0'],
-    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP ON', 'SZCS#BLIND_EN=1'],
-    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'REDE AUTO', 'signal,0#'],
-    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 2G', 'signal,2#'],
-    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 4G', 'signal,1#'],
-    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SEM SLEEP', 'SZCS#SLPDISCONNECT=0'],
-    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP 100%', 'SZCS#SLPDISCONNECT=2'],
-    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP C/SMS', 'SZCS#SLPDISCONNECT=1'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 15-30', 'SZCS#ANGLEVALUE=15-30', 'Define intervalo de 15s e ângulo de 30° pra enviar posição.'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 35-2', 'SZCS#ANGLEVALUE=35-002', 'Define intervalo de 35s e ângulo de 2° pra enviar posição.'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-15', 'SZCS#ANGLEVALUE=08-015', 'Define intervalo de 8s e ângulo de 15° pra enviar posição.'],
+    ['J16/J14/EC33/GT06', 'ÂNGULO', 'ÂNGULO 8-30', 'SZCS#ANGLEVALUE=08-030', 'Define intervalo de 8s e ângulo de 30° pra enviar posição.'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BATERIA EXT', '', 'Ativa a leitura de voltagem da bateria externa do veículo (comando pendente — Carlos vai preencher).'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'BLOQUEAR', 'RELAY,1#', 'Corta o motor/combustível do veículo.'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Bloqueio imediato - Qualquer velocidade', '', 'Bloqueia o veículo mesmo em movimento, independente da velocidade (comando pendente — Carlos vai preencher).'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'Desativar Bloqueio imediato', 'SZCS#SOURCE_OFF_TYPE=0', 'Só permite bloquear quando o veículo estiver com velocidade abaixo de 20km/h (mais seguro).'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'DESBLOQUEAR', 'RELAY,0#', 'Libera o motor/combustível do veículo.'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED DESLIGADO', 'SZCS#LED_ENABLE=0', 'Desliga o LED indicador do rastreador.'],
+    ['J16/J14/EC33/GT06', 'BLOQUEIO', 'LED LIGADO', 'SZCS#LED_ENABLE=1', 'Liga o LED indicador do rastreador.'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALARM VIBR.', 'SENALM,ON,0#', 'Ativa alerta de vibração/movimento — avisa quando o veículo é mexido com a ignição desligada.'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'ALERTA IGN', 'ACCALM,ON,0#', 'Deixa o aviso de ignição ligada/desligada mais rápido.'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS OFF PARADO', 'SZCS#GPS_DISSLP=0', 'Desliga o GPS quando o veículo está parado, economiza bateria.'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'GPS ON PARADO', 'SZCS#GPS_DISSLP=1', 'Mantém o GPS sempre ligado, mesmo parado (mais preciso, gasta mais bateria).'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN FÍSICA', 'SZCS#ACCLINE=1', 'Usa o fio de ignição físico pra saber se o veículo está ligado.'],
+    ['J16/J14/EC33/GT06', 'COMANDOS TÉCNICOS', 'IGN VIRTUAL', 'SZCS#ACCLINE=0', 'Detecta ignição por movimento, sem depender do fio físico.'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'FACTORY', 'FACTORY#', 'Restaura o rastreador pras configurações de fábrica (apaga tudo).'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'FORMAT', 'FORMAT#', 'Formata a memória do rastreador.'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'HORA CERTA', 'GMT,W,0,0#', 'Ajusta o rastreador pra usar automaticamente o horário do servidor.'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'LOCK IP', 'SETIPLOCK=1', 'Trava o rastreador no IP/servidor configurado, impede trocar remotamente.'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'RESET', 'RESET#', 'Reinicia o rastreador.'],
+    ['J16/J14/EC33/GT06', 'GERAIS', 'UNLOCK IP', 'SETIPLOCK=0', 'Libera o rastreador pra trocar de IP/servidor.'],
+    ['J16/J14/EC33/GT06', 'GPS', 'GPS ATIVO', 'SENDS,0#', 'Mantém o GPS sempre ativo.'],
+    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 180SEG', 'SZCS#GPS_RST_TIME=180', 'Se o GPS ficar 180 segundos sem sinal, reinicia o módulo pra tentar recuperar.'],
+    ['J16/J14/EC33/GT06', 'GPS', 'REINICIAR GPS SEM SINAL EM 300SEG', 'SZCS#GPS_RST_TIME=300', 'Se o GPS ficar 300 segundos sem sinal, reinicia o módulo pra tentar recuperar.'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'ATIVAR HODÔMETRO', '', 'Ativa o cálculo de quilometragem rodada pelo rastreador (comando pendente — Carlos vai preencher).'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'HODÔMETRO EM KM', '', 'Define a unidade do hodômetro como quilômetros (comando pendente — Carlos vai preencher).'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'INICIAR HODÔMETRO', 'MILEAGE,ON#', 'Liga o hodômetro do rastreador.'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP OFF', 'SZCS#BLIND_EN=0', 'Desativa o armazenamento de posições quando o rastreador fica sem sinal.'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'BACKUP ON', 'SZCS#BLIND_EN=1', 'Ativa o armazenamento de posições quando o rastreador fica sem sinal (envia depois que volta o sinal).'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'REDE AUTO', 'signal,0#', 'Deixa o rastreador escolher automaticamente entre 2G e 4G.'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 2G', 'signal,2#', 'Força o rastreador a usar só rede 2G.'],
+    ['J16/J14/EC33/GT06', 'MODO DE REDE', 'SOMENTE 4G', 'signal,1#', 'Força o rastreador a usar só rede 4G.'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SEM SLEEP', 'SZCS#SLPDISCONNECT=0', 'Rastreador nunca entra em modo de economia de energia.'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP 100%', 'SZCS#SLPDISCONNECT=2', 'Ativa o modo de economia máxima de energia.'],
+    ['J16/J14/EC33/GT06', 'MODO DE TRABALHO', 'SLEEP C/SMS', 'SZCS#SLPDISCONNECT=1', 'Entra em economia de energia mas continua recebendo comandos por SMS.'],
+    // ── J16/J14/EC33/GT06 — leva extra (Fix 66, de j16.smartgps.com.br) ──
+    ['J16/J14/EC33/GT06', 'SERVIDOR', 'Configurar servidor (DNS)', 'SERVER,1,DNS,PORTA,0#', 'Configura o servidor usando um endereço DNS — substitua DNS e PORTA pelos dados da sua plataforma antes de enviar.'],
+    ['J16/J14/EC33/GT06', 'SERVIDOR', 'Configurar servidor (IP)', 'SERVER,0,IP,PORTA,0#', 'Configura o servidor usando IP direto — substitua IP e PORTA pelos dados da sua plataforma antes de enviar.'],
+    ['J16/J14/EC33/GT06', 'SERVIDOR', 'Consultar servidor atual', 'SERVER#', 'Consulta qual servidor e porta está configurado no rastreador.'],
+    ['J16/J14/EC33/GT06', 'REDE', 'Verificar sinal', 'SIGNAL,1#', 'Consulta a qualidade do sinal de rede do rastreador.'],
+    ['J16/J14/EC33/GT06', 'REDE', 'Ligar GPRS', 'GPRSON,1#', 'Liga a conexão de dados (GPRS) manualmente.'],
+    ['J16/J14/EC33/GT06', 'REDE', 'Desligar GPRS', 'GPRSON,0#', 'Desliga a conexão de dados (GPRS) manualmente.'],
+    ['J16/J14/EC33/GT06', 'VELOCIDADE', 'Alerta de velocidade 50km/h', 'SPEED,ON,3,50,0#', 'Avisa quando o veículo ultrapassa 50 km/h.'],
+    ['J16/J14/EC33/GT06', 'VELOCIDADE', 'Alerta de aceleração brusca', 'SPDADD,ON,10,2#', 'Avisa quando o veículo acelera 10km/h ou mais em 2 segundos.'],
+    ['J16/J14/EC33/GT06', 'VELOCIDADE', 'Alerta de frenagem brusca', 'SPDSUBB,ON,10,2#', 'Avisa quando o veículo freia 10km/h ou mais em 2 segundos.'],
+    ['J16/J14/EC33/GT06', 'ALARMES', 'Alerta de corte de energia', 'POWERALM,ON,0,5,120#', 'Avisa quando a bateria do rastreador é desconectada — bom pra antifurto.'],
+    ['J16/J14/EC33/GT06', 'ALARMES', 'Detector de bloqueador de sinal ON', 'JAMMER,ON,0#', 'Ativa o aviso de quando algum aparelho está bloqueando o sinal do rastreador (jammer).'],
+    ['J16/J14/EC33/GT06', 'ALARMES', 'Detector de bloqueador de sinal OFF', 'JAMMER,OFF#', 'Desativa o aviso de bloqueador de sinal.'],
+    ['J16/J14/EC33/GT06', 'ALARMES', 'Alerta de movimento', 'MOVING,ON,250,0#', 'Avisa quando o veículo se move.'],
+    ['J16/J14/EC33/GT06', 'TELEFONE', 'Cadastrar número SOS', 'SOS,A,NUMERO#', 'Cadastra um número que recebe alerta de SOS do rastreador — troque NUMERO pelo telefone desejado antes de enviar.'],
+    ['J16/J14/EC33/GT06', 'TELEFONE', 'Cadastrar número da central', 'CENTER,A,NUMERO#', 'Cadastra o número da central de monitoramento — troque NUMERO pelo telefone desejado antes de enviar.'],
+    ['J16/J14/EC33/GT06', 'CONSULTAS', 'Consultar localização', 'WHERE#', 'Pede a posição atual — o rastreador responde por SMS com coordenadas, velocidade e data.'],
+    ['J16/J14/EC33/GT06', 'CONSULTAS', 'Consultar status geral', 'STATUS#', 'Consulta o status geral do equipamento.'],
+    ['J16/J14/EC33/GT06', 'CONSULTAS', 'Consultar configurações', 'PARAM#', 'Consulta todas as configurações atuais do rastreador.'],
+    ['J16/J14/EC33/GT06', 'CONSULTAS', 'Verificar estado do bloqueio', 'RELAY#', 'Consulta se o veículo está bloqueado ou liberado no momento.'],
+    ['J16/J14/EC33/GT06', 'CONSULTAS', 'Consultar versão do firmware', 'VERSION#', 'Consulta a versão do firmware instalado no rastreador.'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'Definir valor do odômetro', 'MILEAGE,1000#', 'Define a quilometragem atual do odômetro — troque 1000 pelo valor desejado.'],
+    ['J16/J14/EC33/GT06', 'HODÔMETRO', 'Zerar odômetro', 'MILEAGE=0#', 'Zera a quilometragem registrada no odômetro.'],
+    ['J16/J14/EC33/GT06', 'RFID', 'Habilitar RFID/iButton', 'RFID,ENABLE,1#', 'Ativa a função de leitor de cartão/chaveiro (iButton) do rastreador.'],
+    ['J16/J14/EC33/GT06', 'RFID', 'Ativar envio do cartão pra plataforma', 'SZCS#RFIDRECEN=1', 'Faz o rastreador enviar pra plataforma o número do cartão/iButton usado — necessário pra identificar o motorista.'],
     // ── T905 ──
-    ['T905', 'ALARMES', 'ALARME OFF', 'noshock123456'],
-    ['T905', 'ALARMES', 'ALARME ON', 'shock123456'],
-    ['T905', 'ALARMES', 'ALERTA BATERIA OFF', 'lowbatsms123456 off'],
-    ['T905', 'ALARMES', 'ALERTA BATERIA ON', 'lowbatsms123456 on'],
-    ['T905', 'GERAIS', 'BEGIN', 'begin123456'],
-    ['T905', 'GERAIS', 'RESET', 'reset123456'],
-    ['T905', 'GERAIS', 'TIMEZONE', 'time zone123456 0'],
-    ['T905', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456'],
-    ['T905', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456'],
+    ['T905', 'ALARMES', 'ALARME OFF', 'noshock123456', 'Desativa o alarme de vibração/choque.'],
+    ['T905', 'ALARMES', 'ALARME ON', 'shock123456', 'Ativa o alarme de vibração/choque.'],
+    ['T905', 'ALARMES', 'ALERTA BATERIA OFF', 'lowbatsms123456 off', 'Desativa o aviso de bateria fraca.'],
+    ['T905', 'ALARMES', 'ALERTA BATERIA ON', 'lowbatsms123456 on', 'Ativa o aviso de bateria fraca.'],
+    ['T905', 'GERAIS', 'BEGIN', 'begin123456', 'Inicia a comunicação do rastreador com a plataforma.'],
+    ['T905', 'GERAIS', 'RESET', 'reset123456', 'Reinicia o rastreador.'],
+    ['T905', 'GERAIS', 'TIMEZONE', 'time zone123456 0', 'Define o fuso horário do rastreador.'],
+    ['T905', 'MODO DE OPERAÇÃO', 'MODO LIGAÇÃO', 'monitor123456', 'Coloca o rastreador em modo de chamada de voz (atende automaticamente).'],
+    ['T905', 'MODO DE OPERAÇÃO', 'MODO TRACKER', 'tracker123456', 'Volta o rastreador pro modo padrão de rastreamento.'],
   ];
 
-  for (const [tracker_model, categoria, titulo, comando] of seed) {
+  for (const [tracker_model, categoria, titulo, comando, descricao] of seed) {
     await pool.query(
-      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando)
-       VALUES (NULL, $1, $2, $3, $4)
-       ON CONFLICT (tracker_model, titulo) WHERE establishment_id IS NULL DO NOTHING`,
-      [tracker_model, categoria, titulo, comando]
+      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando, descricao)
+       VALUES (NULL, $1, $2, $3, $4, $5)
+       ON CONFLICT (tracker_model, titulo) WHERE establishment_id IS NULL
+       DO UPDATE SET descricao = EXCLUDED.descricao WHERE frota_sms_commands.descricao IS NULL`,
+      [tracker_model, categoria, titulo, comando, descricao]
     );
   }
 }
@@ -1866,7 +1898,7 @@ router.get('/frota-comandos', async (req, res) => {
 router.post('/frota-comandos', async (req, res) => {
   try {
     const user = req.user as TokenPayload;
-    const { tracker_model, categoria, titulo, comando, cor, shared } = req.body || {};
+    const { tracker_model, categoria, titulo, comando, cor, shared, descricao } = req.body || {};
     if (!titulo || !comando) return res.status(400).json({ error: 'titulo e comando são obrigatórios.' });
 
     let establishmentId: string | null;
@@ -1878,9 +1910,9 @@ router.post('/frota-comandos', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando, cor)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [establishmentId, tracker_model || 'Geral', categoria || 'Geral', titulo, comando, cor || null]
+      `INSERT INTO frota_sms_commands (establishment_id, tracker_model, categoria, titulo, comando, cor, descricao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [establishmentId, tracker_model || 'Geral', categoria || 'Geral', titulo, comando, cor || null, descricao || null]
     );
     res.status(201).json(rows[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -1907,14 +1939,15 @@ async function assertFrotaComandoAccess(req: Request, id: string) {
 router.put('/frota-comandos/:id', async (req, res) => {
   try {
     await assertFrotaComandoAccess(req, req.params.id);
-    const { tracker_model, categoria, titulo, comando, cor } = req.body || {};
+    const { tracker_model, categoria, titulo, comando, cor, descricao } = req.body || {};
     const { rows } = await pool.query(
       `UPDATE frota_sms_commands SET
          tracker_model=COALESCE($1,tracker_model), categoria=COALESCE($2,categoria),
          titulo=COALESCE($3,titulo), comando=COALESCE($4,comando), cor=COALESCE($5,cor),
+         descricao=COALESCE($6,descricao),
          updated_at=NOW()
-       WHERE id=$6 RETURNING *`,
-      [tracker_model, categoria, titulo, comando, cor, req.params.id]
+       WHERE id=$7 RETURNING *`,
+      [tracker_model, categoria, titulo, comando, cor, descricao, req.params.id]
     );
     res.json(rows[0]);
   } catch (err: any) { res.status(err.status || 500).json({ error: err.message }); }
