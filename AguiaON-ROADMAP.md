@@ -1319,3 +1319,19 @@ return { ok: true, external_id: body.id || null };
 **Confirmação pós-fix**: o Carlos mandou o link da documentação oficial de verdade (`dashboard.smsmarket.com.br/api_smsmarket_documentacao.php` — hospedada no próprio domínio de login, mais confiável que a Apiary usada acima) e disse que já tinha colocado credenciais reais, mas continuava dando erro. Lendo essa doc: endpoint, Basic Auth, form-urlencoded, campos e detecção de sucesso batem exatamente com o que foi implementado acima — nada a corrigir no código. Mas achei o motivo mais provável do erro dele: **contas novas da SMSMarket saem com a API BLOQUEADA por padrão**. É preciso entrar no dashboard em `Perfil > Webhook / API > Controle de acesso` e liberar o IP do servidor (ou marcar "Permitir livre acesso"). Sem isso, toda chamada retorna `responseCode=091` ("API access denied for this IP", HTTP 403) — e isso teria acontecido mesmo com credencial perfeita. Também vale lembrar: o commit desse fix (`d21bc8a`) ainda não tinha sido enviado/deployado quando o Carlos testou, então o erro que ele viu foi quase certamente do código ANTIGO (que estava errado em tudo) — precisa testar de novo depois do `git push` + deploy, com o IP liberado no painel da SMSMarket.
 
 Outros `responseCode` úteis pra diagnosticar erro de acesso (todos documentados): `010` = usuário/senha inválidos (HTTP 401), `080` = saldo insuficiente/vencido (HTTP 402), `090` = conta bloqueada (HTTP 403), `091` = IP não autorizado (HTTP 403). Como o Fix 57 agora propaga `responseDescription` como mensagem de erro (em vez de só "HTTP 200"), o próximo teste real já deve mostrar qual desses é o problema, se ainda houver algum.
+
+## Fix de produção 58 — `column o.timeout_notified_at does not exist` no job de timeout de pedidos
+
+Enquanto debugava o problema de SMS com o Carlos (Fix 57), ele colou um trecho de log do servidor em produção pra ajudar a diagnosticar o SMS, e nesse mesmo log apareceu, repetindo a cada 60 segundos: `[orderTimeout] runCheck error: column o.timeout_notified_at does not exist`. Sinalizei como um segundo problema à parte do SMS e ele pediu pra corrigir também ("corrija").
+
+**Causa raiz**: `src/shared/orderTimeout.ts` — o job de fundo que roda a cada 60s em TODOS os estabelecimentos, checando pedidos de delivery pendentes que estouraram o prazo — lê e grava a coluna `o.timeout_notified_at` na tabela `delivery_orders`, usada pra não renotificar o lojista mais de uma vez por hora sobre o mesmo pedido travado. Essa coluna nunca teve migração versionada em lugar nenhum do projeto — exatamente a mesma classe de bug de dois fixes anteriores neste mesmo arquivo: o **Fix 28** (coluna `order_number`) e o **Fix 33** (coluna `daily_code`), ambos também colunas usadas por esse mesmo job `orderTimeout.ts`, descobertos pelo mesmíssimo padrão de erro "column does not exist" em log de produção, em instalações onde o módulo de Delivery em si nunca foi configurado ativamente mas o job de fundo roda de qualquer forma, pra qualquer estabelecimento.
+
+**Implementação**: mais uma linha no bloco de migração idempotente já existente no topo de `delivery.ts` (a IIFE que roda `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` na inicialização), logo depois da linha do `daily_code`:
+
+```ts
+await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS timeout_notified_at TIMESTAMPTZ`);
+```
+
+Com um comentário explicando que é a mesma classe de bug recorrente dos Fixes 28/33.
+
+**Verificação**: `npx tsc --noEmit -p .` limpo (mesmos 3 erros pré-existentes de sempre em `socketio.ts`, sem relação).

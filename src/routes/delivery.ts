@@ -60,6 +60,13 @@ const router = Router();
     // exist`, vindo do mesmo job orderTimeout.ts (roda pra qualquer
     // estabelecimento, mesmo sem Delivery configurado).
     await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS daily_code TEXT`);
+    // Fix de produção 58 — mesma classe de bug de novo: `timeout_notified_at`
+    // (usado em orderTimeout.ts pra não renotificar o lojista toda hora,
+    // só a cada 1h) também nunca teve migração versionada em lugar nenhum.
+    // Log de produção confirmado: `column o.timeout_notified_at does not
+    // exist`, o job rodando a cada 60s e falhando silenciosamente (nunca
+    // derrubava o processo, só nunca notificava ninguém de pedido parado).
+    await pool.query(`ALTER TABLE delivery_orders ADD COLUMN IF NOT EXISTS timeout_notified_at TIMESTAMPTZ`);
 
     // user_addresses nunca tinha CREATE TABLE em lugar nenhum do projeto — só
     // era usada (SELECT/INSERT/UPDATE) em delivery.ts e client.ts, assumindo
